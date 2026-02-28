@@ -1,0 +1,39 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+go.sum
+vendor/
+
+# Data directories
+data/
+*.db
+*.bolt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-data/
+
+# Node modules (dev server)
+node_modules/
+
+# Test
+coverage.out
+*.test
+
+# Build
+dist/

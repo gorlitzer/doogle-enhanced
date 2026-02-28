@@ -1,0 +1,46 @@
+// Doogle v2 — API client
+
+const BASE = '';
+
+async function fetchJSON(url) {
+  const resp = await fetch(BASE + url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+async function postJSON(url, body) {
+  const resp = await fetch(BASE + url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+export const api = {
+  search(q, page = 1, size = 10) {
+    return fetchJSON(`/api/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`);
+  },
+  status() {
+    return fetchJSON('/api/status');
+  },
+  addSeed(url) {
+    return postJSON('/api/crawl', { url });
+  },
+  crawlerStatus() {
+    return fetchJSON('/api/admin/crawler');
+  },
+  indexerStats() {
+    return fetchJSON('/api/admin/indexer');
+  },
+  peers() {
+    return fetchJSON('/api/admin/peers');
+  },
+  documents(offset = 0, limit = 20) {
+    return fetchJSON(`/api/admin/documents?offset=${offset}&limit=${limit}`);
+  },
+  document(id) {
+    return fetchJSON(`/api/admin/documents/${encodeURIComponent(id)}`);
+  },
+};

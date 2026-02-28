@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doogle — P2P Search</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Top navigation bar -->
+  <nav class="navbar">
+    <a class="logo" href="#/">DOOGLE</a>
+    <div class="nav-links">
+      <a href="#/search">Search</a>
+      <a href="#/admin">Admin</a>
+      <a href="#/docs">Docs</a>
+    </div>
+    <div class="node-badge">
+      <span class="dot"></span>
+      <span id="node-badge-text">Connecting...</span>
+    </div>
+  </nav>
+
+  <!-- App layout: sidebar + main content -->
+  <div class="app-layout">
+    <!-- Admin sidebar (hidden on search/docs pages) -->
+    <aside class="sidebar" id="sidebar" style="display:none">
+      <div class="section-label">Node</div>
+      <a href="#/admin">Overview</a>
+      <div class="section-label">Services</div>
+      <a href="#/admin/crawler">Crawler</a>
+      <a href="#/admin/indexer">Indexer</a>
+      <div class="section-label">Network</div>
+      <a href="#/admin/network">P2P Network</a>
+    </aside>
+
+    <!-- Main content area -->
+    <main class="main-content full-width" id="main-content">
+      <div class="loading">Loading...</div>
+    </main>
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
