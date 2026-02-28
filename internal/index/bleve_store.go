@@ -74,15 +74,12 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 	textField := bleve.NewTextFieldMapping()
 	textField.Analyzer = analyzerName
 
-	// Boosted title field: 3x weight over content
+	// Title and description use the same mapping — boosting is applied at query time
 	titleField := bleve.NewTextFieldMapping()
 	titleField.Analyzer = analyzerName
-	titleField.Boost = 3.0
 
-	// Boosted description field: 1.5x weight
 	descField := bleve.NewTextFieldMapping()
 	descField.Analyzer = analyzerName
-	descField.Boost = 1.5
 
 	// Keyword fields (not analyzed, stored as-is)
 	keywordField := bleve.NewKeywordFieldMapping()
@@ -149,10 +146,20 @@ func (bs *BleveStore) Index(doc *IndexDocument) error {
 
 // Search performs a BM25 search with boosted title matching.
 func (bs *BleveStore) Search(query string, offset, limit int) ([]SearchHit, int, error) {
-	// Use a DisjunctionQuery to search across fields with different boosts.
-	// The field boosts are already set in the mapping (title=3x, description=1.5x).
-	// QueryStringQuery uses those boosts automatically.
-	q := bleve.NewQueryStringQuery(query)
+	// Query-time field boosting: title 3x, description 1.5x, content 1x
+	titleQ := bleve.NewMatchQuery(query)
+	titleQ.SetField("title")
+	titleQ.SetBoost(3.0)
+
+	descQ := bleve.NewMatchQuery(query)
+	descQ.SetField("description")
+	descQ.SetBoost(1.5)
+
+	contentQ := bleve.NewMatchQuery(query)
+	contentQ.SetField("content")
+	contentQ.SetBoost(1.0)
+
+	q := bleve.NewDisjunctionQuery(titleQ, descQ, contentQ)
 
 	searchReq := bleve.NewSearchRequestOptions(q, limit, offset, false)
 	searchReq.Fields = []string{"*"}
