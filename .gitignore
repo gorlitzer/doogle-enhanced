@@ -6,7 +6,6 @@ bin/
 *.dylib
 
 # Go
-go.sum
 vendor/
 
 # Data directories
