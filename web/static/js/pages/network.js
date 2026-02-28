@@ -1,0 +1,234 @@
+// Doogle v2 — P2P Network with interactive graph visualization
+import { api } from '../api.js';
+import { NetworkGraph, cardSkeleton, escapeHtml } from '../components.js';
+
+let graph = null;
+
+export function renderNetwork(container) {
+  container.innerHTML = `
+    <div class="page-header">
+      <h2>P2P Network</h2>
+      <p>Peer connections, DHT routing, and network visualization</p>
+    </div>
+    <div id="network-content">${cardSkeleton(4)}</div>
+  `;
+  loadNetwork();
+  window._pageInterval = setInterval(loadNetwork, 8000);
+}
+
+async function loadNetwork() {
+  try {
+    const [status, peers] = await Promise.all([
+      api.status(),
+      api.peers().catch(() => []),
+    ]);
+
+    const peerList = Array.isArray(peers) && peers.length > 0 ? peers : (status.peer_list || []).map(id => ({ peer_id: id, addrs: [] }));
+
+    const content = document.getElementById('network-content');
+    if (!content) return;
+
+    content.innerHTML = `
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">This Node</div>
+          <div class="card-value" style="font-size:0.85em;word-break:break-all;font-family:monospace">${status.peer_id.slice(0, 16)}...</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Connected Peers</div>
+          <div class="card-value">${status.connected_peers}</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Network Health</div>
+          <div class="card-value">
+            <span class="badge badge-${status.connected_peers >= 3 ? 'green' : status.connected_peers >= 1 ? 'amber' : 'red'}">
+              ${status.connected_peers >= 3 ? 'Healthy' : status.connected_peers >= 1 ? 'Degraded' : 'Isolated'}
+            </span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">Shared Docs</div>
+          <div class="card-value">${status.indexed_docs.toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Network Topology</h3>
+        <div class="graph-container" style="position:relative">
+          <canvas id="network-graph"></canvas>
+          <div class="graph-controls">
+            <button id="graph-reset">Reset</button>
+          </div>
+          <div class="graph-legend">
+            <span><span class="dot" style="background:var(--accent)"></span> This node</span>
+            <span><span class="dot" style="background:var(--green)"></span> Connected peer</span>
+            <span><span class="dot" style="background:var(--border-light)"></span> Connection</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>P2P Protocols</h3>
+        <div class="card-grid">
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-accent">/doogle/search/1.0.0</span></div>
+            <div class="card-sub" style="margin-top:4px">Distributed query fan-out. Search queries are sent to peers and results are merged and re-ranked locally.</div>
+          </div>
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-blue">/doogle/crawl/1.0.0</span></div>
+            <div class="card-sub" style="margin-top:4px">Crawl task delegation. Nodes can offload URLs to the appropriate shard owner based on consistent hashing.</div>
+          </div>
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-purple">/doogle/index/1.0.0</span></div>
+            <div class="card-sub" style="margin-top:4px">Document forwarding. Crawled documents are sent to the shard owner for indexing in their local Bleve store.</div>
+          </div>
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-green">GossipSub: doogle/url-frontier</span></div>
+            <div class="card-sub" style="margin-top:4px">Pub/sub broadcast of discovered URLs. All nodes hear about new URLs and claim those in their hash range.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Peer Discovery</h3>
+        <div class="card-grid">
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-green">mDNS</span> Local Network</div>
+            <div class="card-sub" style="margin-top:4px">Automatically finds peers on the same LAN. Service name: <code>doogle-p2p</code>. Zero configuration needed.</div>
+          </div>
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-blue">Kademlia DHT</span> Internet-Wide</div>
+            <div class="card-sub" style="margin-top:4px">Distributed hash table for peer routing across the internet. Bootstrap from known peers using --bootstrap flag.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Connected Peers (${peerList.length})</h3>
+        ${peerList.length === 0
+          ? '<div class="empty-state"><p>No peers connected. Use <code>--bootstrap /ip4/HOST/tcp/PORT/p2p/PEER_ID</code> to join an existing network.</p></div>'
+          : `
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Peer ID</th>
+                    <th>Addresses</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${peerList.map(p => {
+                    const id = typeof p === 'string' ? p : p.peer_id;
+                    const addrs = typeof p === 'string' ? [] : (p.addrs || []);
+                    return `
+                      <tr>
+                        <td class="mono" style="font-size:0.8em">${escapeHtml(id).slice(0, 24)}...</td>
+                        <td class="mono" style="font-size:0.75em;color:var(--text-muted)">${addrs.length > 0 ? addrs.map(a => escapeHtml(a)).join('<br>') : '—'}</td>
+                        <td><span class="badge badge-green">connected</span></td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `
+        }
+      </div>
+
+      <div class="section">
+        <h3>Listen Addresses</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Multiaddr</th></tr></thead>
+            <tbody>
+              ${(status.addrs || []).map(a => `<tr><td class="mono" style="font-size:0.85em">${escapeHtml(a)}</td></tr>`).join('')
+                || '<tr><td>No addresses</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    // Build and render network graph
+    buildGraph(status, peerList);
+
+    document.getElementById('graph-reset')?.addEventListener('click', () => {
+      if (graph) { graph.stop(); graph = null; }
+      buildGraph(status, peerList);
+    });
+
+  } catch (err) {
+    const content = document.getElementById('network-content');
+    if (content) {
+      content.innerHTML = `<div class="empty-state"><p>Failed to load network data: ${err.message}</p></div>`;
+    }
+  }
+}
+
+function buildGraph(status, peerList) {
+  // Stop previous graph
+  if (graph) graph.stop();
+
+  graph = new NetworkGraph('network-graph', { height: 350 });
+
+  const nodes = [];
+  const edges = [];
+
+  // This node (center, larger)
+  nodes.push({
+    id: status.peer_id,
+    label: 'You',
+    tooltip: status.peer_id.slice(0, 24) + '...',
+    type: 'self',
+    color: getCSS('--accent'),
+    radius: 20,
+  });
+
+  // Connected peers
+  peerList.forEach((p, i) => {
+    const id = typeof p === 'string' ? p : p.peer_id;
+    nodes.push({
+      id: id,
+      label: `Peer ${i + 1}`,
+      tooltip: id.slice(0, 20) + '...',
+      type: 'peer',
+      color: getCSS('--green'),
+      radius: 14,
+    });
+    edges.push({
+      from: status.peer_id,
+      to: id,
+      color: 'rgba(16,185,129,0.4)',
+      width: 2,
+    });
+  });
+
+  // If no peers, add ghost nodes for visual appeal
+  if (peerList.length === 0) {
+    for (let i = 0; i < 3; i++) {
+      const id = `ghost-${i}`;
+      nodes.push({
+        id,
+        label: '?',
+        tooltip: 'Undiscovered peer',
+        type: 'ghost',
+        color: getCSS('--border'),
+        radius: 10,
+      });
+      edges.push({
+        from: status.peer_id,
+        to: id,
+        color: 'rgba(100,100,120,0.2)',
+        width: 1,
+        dashed: true,
+      });
+    }
+  }
+
+  graph.setData(nodes, edges);
+}
+
+function getCSS(prop) {
+  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim() || '#888';
+}

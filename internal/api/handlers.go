@@ -1,0 +1,178 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/doogle/doogle-v2/internal/index"
+	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/internal/search"
+)
+
+// Deps holds handler dependencies.
+type Deps struct {
+	Search       *search.DistributedSearch
+	StatusFn     func() *models.NodeStatus
+	CrawlSeed    func(url string)
+	CrawlerInfo  func() *models.CrawlerInfo
+	IndexerStats func() *models.IndexerInfo
+	PeersInfo    func() []models.PeerInfo
+	IndexStore   index.Store
+}
+
+// SearchHandler handles GET /api/search?q=...&page=...&size=...
+func SearchHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("q")
+		if query == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing query parameter 'q'"})
+			return
+		}
+
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		if page < 1 {
+			page = 1
+		}
+		size, _ := strconv.Atoi(r.URL.Query().Get("size"))
+		if size < 1 {
+			size = 10
+		}
+
+		req := &models.SearchRequest{
+			Query:    query,
+			Page:     page,
+			PageSize: size,
+		}
+
+		resp, err := deps.Search.Search(context.Background(), req)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// StatusHandler handles GET /api/status
+func StatusHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		status := deps.StatusFn()
+		writeJSON(w, http.StatusOK, status)
+	}
+}
+
+// CrawlHandler handles POST /api/crawl with JSON body {"url": "..."}
+func CrawlHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			URL string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url' in request body"})
+			return
+		}
+
+		deps.CrawlSeed(body.URL)
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued", "url": body.URL})
+	}
+}
+
+// CrawlerInfoHandler handles GET /api/admin/crawler
+func CrawlerInfoHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.CrawlerInfo == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.CrawlerInfo())
+	}
+}
+
+// IndexerStatsHandler handles GET /api/admin/indexer
+func IndexerStatsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.IndexerStats == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.IndexerStats())
+	}
+}
+
+// PeersHandler handles GET /api/admin/peers
+func PeersHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.PeersInfo == nil {
+			writeJSON(w, http.StatusOK, []interface{}{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.PeersInfo())
+	}
+}
+
+// DocumentsHandler handles GET /api/admin/documents?offset=0&limit=20
+func DocumentsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.IndexStore == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"documents": []interface{}{}, "total": 0})
+			return
+		}
+
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		if limit < 1 || limit > 100 {
+			limit = 20
+		}
+		if offset < 0 {
+			offset = 0
+		}
+
+		docs, total, err := deps.IndexStore.ListRecent(offset, limit)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"documents": docs,
+			"total":     total,
+			"offset":    offset,
+			"limit":     limit,
+		})
+	}
+}
+
+// DocumentDetailHandler handles GET /api/admin/documents/{id}
+func DocumentDetailHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.IndexStore == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "index not available"})
+			return
+		}
+
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing document id"})
+			return
+		}
+
+		doc, err := deps.IndexStore.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, doc)
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
