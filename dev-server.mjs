@@ -5,15 +5,15 @@
  * Features:
  *   - Serves static files from web/static/ with live reload
  *   - Proxies /api/* requests to the Go backend (Docker or native)
- *   - Watches for file changes and injects reload script
+ *   - Watches for file changes and triggers browser reload via SSE
  *
  * Usage:
- *   node dev-server.mjs                    # frontend only (API calls will 502)
- *   node dev-server.mjs --api http://localhost:8080  # proxy API to running backend
+ *   node dev-server.mjs                                # frontend only (API calls will 502)
+ *   node dev-server.mjs --api http://localhost:8080     # proxy API to running backend
  *
  * Or via Makefile:
- *   make dev-fe                            # frontend only
- *   make dev                               # full stack (Docker backend + frontend hot reload)
+ *   make dev-fe       # frontend only
+ *   make dev          # full stack (Docker backend + frontend hot reload)
  */
 
 import http from 'node:http';
@@ -39,19 +39,32 @@ const MIME = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
 };
 
 function getMime(filePath) {
   return MIME[path.extname(filePath)] || 'application/octet-stream';
 }
 
-// Inject live-reload script into HTML responses
+// Inject live-reload script into HTML responses.
+// Uses a reconnecting EventSource — only reloads when the server
+// explicitly sends a "reload" event, never on connection error.
 const RELOAD_SNIPPET = `
 <script>
 (function(){
-  const es = new EventSource('/__reload');
-  es.onmessage = () => location.reload();
-  es.onerror = () => setTimeout(() => location.reload(), 1000);
+  var es;
+  function connect() {
+    es = new EventSource('/__reload');
+    es.addEventListener('reload', function() {
+      location.reload();
+    });
+    es.onerror = function() {
+      es.close();
+      setTimeout(connect, 2000);
+    };
+  }
+  connect();
 })();
 </script>
 `;
@@ -87,10 +100,11 @@ async function proxyRequest(req, res) {
 
 // Serve static files
 function serveStatic(req, res) {
-  let filePath = path.join(STATIC_DIR, req.url === '/' ? 'index.html' : req.url);
+  const urlPath = req.url.split('?')[0]; // strip query params
+  let filePath = path.join(STATIC_DIR, urlPath === '/' ? 'index.html' : urlPath);
 
   // SPA fallback: if file doesn't exist, serve index.html
-  if (!fs.existsSync(filePath)) {
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
     filePath = path.join(STATIC_DIR, 'index.html');
   }
 
@@ -102,7 +116,10 @@ function serveStatic(req, res) {
       content = injectReload(content.toString());
     }
 
-    res.writeHead(200, { 'Content-Type': mime });
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': 'no-cache',
+    });
     res.end(content);
   } catch {
     res.writeHead(404);
@@ -117,14 +134,14 @@ function handleReloadSSE(req, res) {
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
   });
-  res.write('data: connected\n\n');
+  res.write(':ok\n\n');
   clients.add(res);
   req.on('close', () => clients.delete(res));
 }
 
 function notifyReload() {
   for (const client of clients) {
-    client.write('data: reload\n\n');
+    client.write('event: reload\ndata: reload\n\n');
   }
 }
 
@@ -133,20 +150,18 @@ let debounceTimer = null;
 function watchFiles(dir) {
   watch(dir, { recursive: true }, (event, filename) => {
     if (!filename) return;
-    // Skip hidden files and node_modules
     if (filename.startsWith('.') || filename.includes('node_modules')) return;
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      console.log(`  \x1b[33m[reload]\x1b[0m ${filename} changed`);
+      console.log(`  \x1b[33m[reload]\x1b[0m ${filename}`);
       notifyReload();
-    }, 100);
+    }, 150);
   });
 }
 
 // Server
 const server = http.createServer((req, res) => {
-  // CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
@@ -157,34 +172,30 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // SSE for live reload
   if (req.url === '/__reload') {
     handleReloadSSE(req, res);
     return;
   }
 
-  // Proxy API requests
   if (req.url.startsWith('/api/')) {
     proxyRequest(req, res);
     return;
   }
 
-  // Serve static files
   serveStatic(req, res);
 });
 
 server.listen(PORT, () => {
-  console.log('');
-  console.log('  \x1b[36m╔══════════════════════════════════════════╗\x1b[0m');
-  console.log('  \x1b[36m║\x1b[0m  \x1b[1mDoogle v2 — Dev Server\x1b[0m                  \x1b[36m║\x1b[0m');
-  console.log('  \x1b[36m╠══════════════════════════════════════════╣\x1b[0m');
-  console.log(`  \x1b[36m║\x1b[0m  Frontend:  \x1b[32mhttp://localhost:${PORT}\x1b[0m        \x1b[36m║\x1b[0m`);
-  console.log(`  \x1b[36m║\x1b[0m  API proxy: \x1b[33m${API_TARGET}\x1b[0m  \x1b[36m║\x1b[0m`);
-  console.log('  \x1b[36m║\x1b[0m  Hot reload: \x1b[32menabled\x1b[0m                     \x1b[36m║\x1b[0m');
-  console.log('  \x1b[36m╚══════════════════════════════════════════╝\x1b[0m');
-  console.log('');
-  console.log('  Watching web/static/ for changes...');
-  console.log('');
+  console.log(`
+  Doogle v2 — Dev Server
+  ──────────────────────────
+  Frontend:    http://localhost:${PORT}
+  API proxy:   ${API_TARGET}
+  Hot reload:  enabled
+  Static dir:  ${STATIC_DIR}
+  ──────────────────────────
+  Watching for changes...
+`);
 });
 
 watchFiles(STATIC_DIR);
