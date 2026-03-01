@@ -36,6 +36,7 @@ coverage.out
 
 # Build
 dist/
+web/embed_hash.go
 
 # Local Go install (make setup)
 .go/
