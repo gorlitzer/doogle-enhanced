@@ -57,14 +57,18 @@ function render() {
   const sidebar = document.getElementById('sidebar');
 
   if (match.layout === 'admin') {
-    sidebar.style.display = 'block';
+    sidebar.classList.add('sidebar-visible');
     main.classList.remove('full-width');
   } else {
-    sidebar.style.display = 'none';
+    sidebar.classList.remove('sidebar-visible');
     main.classList.add('full-width');
   }
 
   setActiveNav();
+
+  // Close mobile nav on route change
+  const navLinks = document.querySelector('.nav-links');
+  if (navLinks) navLinks.classList.remove('open');
 
   // Clear any existing intervals from previous page
   if (window._pageInterval) {
@@ -121,6 +125,15 @@ window.addEventListener('DOMContentLoaded', () => {
   createThemePicker();
   initBgAnimation();
   initLogoAnimation();
+  // Hamburger menu toggle
+  const navToggle = document.getElementById('nav-toggle');
+  const navLinks = document.querySelector('.nav-links');
+  if (navToggle && navLinks) {
+    navToggle.addEventListener('click', () => {
+      navLinks.classList.toggle('open');
+    });
+  }
+
   render();
   startStatusPolling();
 
