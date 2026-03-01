@@ -19,7 +19,7 @@ func TestLoadConfig_NodeName(t *testing.T) {
 
 	yaml := `node_name: "Test Node"
 p2p:
-  port: 4001
+  port: 7001
 `
 	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestLoadConfig_NodeNameEmpty(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 
 	yaml := `p2p:
-  port: 4001
+  port: 7001
 `
 	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -74,8 +74,8 @@ func TestLoadConfig_PreservesDefaults(t *testing.T) {
 		t.Errorf("NodeName: got %q", cfg.NodeName)
 	}
 	// Defaults should still be applied for unset fields
-	if cfg.P2P.Port != 4001 {
-		t.Errorf("P2P.Port: expected 4001, got %d", cfg.P2P.Port)
+	if cfg.P2P.Port != 7001 {
+		t.Errorf("P2P.Port: expected 7001, got %d", cfg.P2P.Port)
 	}
 	if cfg.Crawler.Workers != 4 {
 		t.Errorf("Crawler.Workers: expected 4, got %d", cfg.Crawler.Workers)

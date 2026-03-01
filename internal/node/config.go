@@ -74,11 +74,11 @@ type SearchConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		P2P: P2PConfig{
-			Port: 4001,
+			Port: 7001,
 			MDNS: true,
 		},
 		API: APIConfig{
-			Port: 8080,
+			Port: 7002,
 			Bind: "127.0.0.1",
 		},
 		Crawler: CrawlerConfig{

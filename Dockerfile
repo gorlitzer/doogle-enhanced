@@ -23,9 +23,9 @@ RUN mkdir -p /data
 VOLUME /data
 
 # P2P port (libp2p)
-EXPOSE 4001
+EXPOSE 7001
 # HTTP API
-EXPOSE 8080
+EXPOSE 7002
 
 ENTRYPOINT ["tini", "--"]
-CMD ["doogle", "--data-dir", "/data", "--port", "4001", "--api-port", "8080", "--headless"]
+CMD ["doogle", "--data-dir", "/data", "--port", "7001", "--api-port", "7002", "--headless"]

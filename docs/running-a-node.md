@@ -23,7 +23,7 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 
 - **Go 1.22+** (for building from source)
 - **OS:** Linux, macOS, or Windows
-- **Ports:** One port for libp2p (default `4001` TCP+UDP), one for the HTTP API (default `8080`)
+- **Ports:** One port for libp2p (default `7001` TCP+UDP), one for the HTTP API (default `7002`)
 - **Disk:** ~100MB minimum; grows with the number of indexed pages
 - **RAM:** ~128MB minimum; scales with crawl worker count and index size
 
@@ -59,8 +59,8 @@ The binary is at `bin/doogle`.
 ```
 
 This starts a node with default settings:
-- libp2p on port `4001` (TCP + QUIC)
-- HTTP API on port `8080`
+- libp2p on port `7001` (TCP + QUIC)
+- HTTP API on port `7002`
 - Data stored in `./data/doogle/`
 - mDNS enabled (finds peers on your local network automatically)
 - No seed URLs (the node waits for peers or manual crawl requests)
@@ -103,14 +103,14 @@ To join an existing network, you need the **multiaddr** of at least one running 
 
 ```
 libp2p host started: 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
-  listening on: /ip4/192.168.1.100/tcp/4001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
-  listening on: /ip4/192.168.1.100/udp/4001/quic-v1/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+  listening on: /ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+  listening on: /ip4/192.168.1.100/udp/7001/quic-v1/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
 ```
 
 Connect to it:
 
 ```bash
-./bin/doogle --bootstrap /ip4/192.168.1.100/tcp/4001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+./bin/doogle --bootstrap /ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
 ```
 
 ### Using mDNS (Local Network)
@@ -119,10 +119,10 @@ If both nodes are on the same LAN, they find each other automatically via mDNS. 
 
 ```bash
 # Terminal 1
-./bin/doogle --api-port 8080 --data-dir ./data/node1
+./bin/doogle --api-port 7002 --data-dir ./data/node1
 
 # Terminal 2
-./bin/doogle --port 4002 --api-port 8081 --data-dir ./data/node2
+./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2
 ```
 
 You'll see:
@@ -137,16 +137,16 @@ For development and testing, run multiple nodes on one machine:
 
 ```bash
 # Node 1 — bootstrap node
-./bin/doogle --port 4001 --api-port 8080 --data-dir ./data/node1 \
+./bin/doogle --port 7001 --api-port 7002 --data-dir ./data/node1 \
   --seed "https://example.com"
 
 # Node 2 — connects to node 1
-./bin/doogle --port 4002 --api-port 8081 --data-dir ./data/node2 \
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID_OF_NODE_1>
+./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2 \
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID_OF_NODE_1>
 
 # Node 3 — connects to node 1
-./bin/doogle --port 4003 --api-port 8082 --data-dir ./data/node3 \
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID_OF_NODE_1>
+./bin/doogle --port 7005 --api-port 7006 --data-dir ./data/node3 \
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID_OF_NODE_1>
 ```
 
 Each node needs a unique `--port`, `--api-port`, and `--data-dir`.
@@ -154,8 +154,8 @@ Each node needs a unique `--port`, `--api-port`, and `--data-dir`.
 Or use the Makefile with ARGS:
 
 ```bash
-make run                                           # node 1: port 4001, API 8080
-make run ARGS='--port 4002 --api-port 8081 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/4001'   # node 2
+make run                                           # node 1: port 7001, API 7002
+make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/7001'   # node 2
 ```
 
 ---
@@ -167,8 +167,8 @@ make run ARGS='--port 4002 --api-port 8081 --data-dir ./data/node2 --bootstrap /
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--config` | — | Path to YAML config file |
-| `--port` | `4001` | libp2p listen port (TCP and QUIC) |
-| `--api-port` | `8080` | HTTP API and web UI port |
+| `--port` | `7001` | libp2p listen port (TCP and QUIC) |
+| `--api-port` | `7002` | HTTP API and web UI port |
 | `--data-dir` | `./data/doogle` | Where to store all persistent data |
 | `--bootstrap` | — | Multiaddr of a bootstrap peer |
 | `--seed` | — | Comma-separated seed URLs to crawl |
@@ -191,14 +191,14 @@ Create a YAML config for persistent settings:
 # my-config.yaml
 
 p2p:
-  port: 4001
+  port: 7001
   bootstrap_peers:
-    - /ip4/203.0.113.10/tcp/4001/p2p/12D3KooWAbc...
-    - /ip4/198.51.100.5/tcp/4001/p2p/12D3KooWDef...
+    - /ip4/203.0.113.10/tcp/7001/p2p/12D3KooWAbc...
+    - /ip4/198.51.100.5/tcp/7001/p2p/12D3KooWDef...
   mdns: true
 
 api:
-  port: 8080
+  port: 7002
   bind: "0.0.0.0"
 
 crawler:
@@ -241,7 +241,7 @@ CLI flags can still override individual settings:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `port` | int | `4001` | libp2p listen port |
+| `port` | int | `7001` | libp2p listen port |
 | `bootstrap_peers` | []string | `[]` | Multiaddr list of known peers |
 | `mdns` | bool | `true` | Enable mDNS LAN discovery |
 
@@ -249,7 +249,7 @@ CLI flags can still override individual settings:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `port` | int | `8080` | HTTP API port |
+| `port` | int | `7002` | HTTP API port |
 | `bind` | string | `"0.0.0.0"` | Bind address |
 
 #### `crawler`
@@ -339,7 +339,7 @@ With mDNS enabled, nodes on the same network find each other automatically:
 ### Status Endpoint
 
 ```bash
-curl http://localhost:8080/api/status
+curl http://localhost:7002/api/status
 ```
 
 Response:
@@ -348,8 +348,8 @@ Response:
 {
   "peer_id": "12D3KooWPjce...",
   "addrs": [
-    "/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWPjce...",
-    "/ip4/192.168.1.100/udp/4001/quic-v1/p2p/12D3KooWPjce..."
+    "/ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjce...",
+    "/ip4/192.168.1.100/udp/7001/quic-v1/p2p/12D3KooWPjce..."
   ],
   "connected_peers": 3,
   "peer_list": ["12D3KooWAbc...", "12D3KooWDef...", "12D3KooWGhi..."],
@@ -363,7 +363,7 @@ Response:
 
 ### Web UI
 
-Open `http://localhost:8080` in a browser. The bottom status bar shows real-time node info (refreshed every 10 seconds):
+Open `http://localhost:7002` in a browser. The bottom status bar shows real-time node info (refreshed every 10 seconds):
 
 - Peer ID
 - Number of indexed documents
@@ -377,12 +377,12 @@ The node logs to stdout. Key log lines:
 ```
 node: peer ID = 12D3KooWPjce...                    # Identity
 libp2p host started: 12D3KooWPjce...               # P2P ready
-  listening on: /ip4/.../tcp/4001/p2p/...           # Multiaddr
+  listening on: /ip4/.../tcp/7001/p2p/...           # Multiaddr
 mDNS: discovered peer 12D3KooWAbc...               # Peer found
 crawler: starting 4 workers                         # Crawl begin
 worker 0: crawled https://example.com (depth=0)     # Crawl success
 indexer: indexed https://example.com (quality=0.75) # Indexed
-api: listening on 0.0.0.0:8080                      # API ready
+api: listening on 0.0.0.0:7002                      # API ready
 ```
 
 ---
@@ -438,7 +438,7 @@ You can search from the command line without opening the web UI:
 ./bin/doogle search --json "distributed systems" | jq '.results[].title'
 
 # Search a remote node
-./bin/doogle search --api http://192.168.1.100:8080 "privacy"
+./bin/doogle search --api http://192.168.1.100:7002 "privacy"
 
 # Pagination
 ./bin/doogle search --page 1 --size 5 "web development"

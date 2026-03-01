@@ -12,9 +12,9 @@ help:
 	@echo ""
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
 	@echo "    make build              Compile binary to bin/"
-	@echo "    make run                Build + launch node (API on :8080)"
+	@echo "    make run                Build + launch node (API on :7002)"
 	@echo "    make run ARGS='...'     Pass extra flags to the binary"
-	@echo "    make dev                Docker detached on :8080 (stop with: make stop)"
+	@echo "    make dev                Docker detached on :7002 (stop with: make stop)"
 	@echo "    make stop               Stop docker containers"
 	@echo "    make test               Run all tests"
 	@echo "    make clean              Remove binary and node data"
@@ -84,7 +84,7 @@ test:
 dev:
 	docker compose up --build -d
 	@sleep 2
-	@echo "Running detached on :8080 — stop with: make stop"
+	@echo "Running detached on :7002 — stop with: make stop"
 
 stop:
 	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
