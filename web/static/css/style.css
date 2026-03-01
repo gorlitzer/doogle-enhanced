@@ -132,7 +132,10 @@ a:hover { text-decoration: underline; }
   -webkit-text-fill-color: unset !important;
   background-clip: unset !important;
 }
-.navbar .nav-links { display: flex; gap: 6px; flex: 1; justify-content: center; }
+.navbar .nav-links {
+  display: flex; gap: 6px; align-items: center;
+  flex: 1; justify-content: center;
+}
 .navbar .nav-links a {
   padding: 8px 20px;
   border-radius: var(--radius-sm);
@@ -676,8 +679,8 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   .navbar .logo { margin-right: auto; }
   .navbar .node-badge { display: none; }
 
-  /* Theme picker: compact, next to hamburger */
-  .theme-picker { margin: 0 0 0 8px; }
+  /* Theme picker: compact on mobile */
+  .theme-picker { margin: 0 0 0 auto; }
 
   /* Sidebar → horizontal scroll strip on mobile */
   .app-layout { flex-direction: column; }
@@ -2283,8 +2286,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
    =============================================== */
 .theme-picker {
   position: relative;
-  margin-left: 12px;
-  margin-right: 12px;
+  margin-left: 8px;
 }
 .theme-picker-btn {
   display: flex; align-items: center; justify-content: center;
@@ -2314,10 +2316,6 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 .theme-picker-swatch {
   width: 14px; height: 14px; border-radius: 50%;
   flex-shrink: 0; border: 2px solid var(--border);
-}
-
-@media (max-width: 768px) {
-  .theme-picker { margin-left: 8px; margin-right: 8px; }
 }
 
 /* ===============================================
@@ -3520,12 +3518,13 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
    =============================================== */
 .home-page {
   position: relative;
-  width: 100%;
-  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  margin: -24px -24px 0;   /* cancel .main-content padding (top + sides) */
+  width: calc(100% + 48px);
 }
 
 #home-canvas {
@@ -3618,6 +3617,10 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 
 /* Responsive */
 @media (max-width: 768px) {
+  .home-page {
+    margin: -16px -16px 0;
+    width: calc(100% + 32px);
+  }
   .home-title {
     font-size: 3em;
     letter-spacing: 6px;
@@ -3628,5 +3631,11 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   .home-cta {
     padding: 12px 28px;
     font-size: 0.95em;
+  }
+}
+@media (max-width: 480px) {
+  .home-page {
+    margin: -12px -12px 0;
+    width: calc(100% + 24px);
   }
 }

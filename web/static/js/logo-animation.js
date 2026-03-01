@@ -4,6 +4,7 @@
 //   crt      — glitch: random offset flickers + scan distortion
 //   modern   — block build: letters assemble from stacking blocks
 //   light    — ink write: letters appear with quill-pen stroke
+//   storm    — electric crackle: letters jolt with lightning flashes
 //   pride    — rainbow shimmer: cycling per-letter rainbow colors
 
 const LETTERS = 'DOOGLE';
@@ -59,6 +60,7 @@ function applyThemeAnim(el, text, state, theme) {
   switch (theme) {
     case 'dracula': draculaDrip(el, text, state); break;
     case 'crt':     crtGlitch(el, text, state); break;
+    case 'storm':   stormCrackle(el, text, state); break;
     case 'modern':  blockBuild(el, text, state); break;
     case 'light':   inkWrite(el, text, state); break;
     case 'pride':   rainbowShimmer(el, text, state); break;
@@ -347,6 +349,107 @@ function inkWrite(el, text, state) {
   }
 
   state.interval = setInterval(reink, 3800);
+}
+
+// ─────────────────────────────────────────────────
+// Storm: Electric Crackle — letters drop in like rain, periodic lightning jolt
+// ─────────────────────────────────────────────────
+function stormCrackle(el, text, state) {
+  const letters = wrapLetters(el, text);
+  el.classList.add('logo-anim-storm');
+  el.style.overflow = 'visible';
+
+  let breathPhase = 0;
+
+  // Ambient: subtle cool pulsing glow
+  function breathe() {
+    breathPhase += 0.015;
+    const glow = Math.sin(breathPhase) * 3 + 3;
+    letters.forEach(l => {
+      if (l.dataset.jolting) return;
+      l.style.textShadow = `0 0 ${glow}px rgba(126,184,218,${0.06 + Math.sin(breathPhase) * 0.03})`;
+    });
+    state.animFrame = requestAnimationFrame(breathe);
+  }
+
+  // Entrance: letters fall from above like raindrops
+  letters.forEach((l, i) => {
+    l.style.opacity = '0';
+    l.style.transform = `translateY(-${16 + Math.random() * 10}px)`;
+    setTimeout(() => {
+      l.style.transition = 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease-out';
+      l.style.transform = 'translateY(0)';
+      l.style.opacity = '1';
+      l.style.color = '#ffffff';
+      l.style.textShadow = '0 0 12px rgba(126,184,218,0.6)';
+      setTimeout(() => {
+        l.style.transition = 'color 0.5s ease-out, text-shadow 0.6s ease-out';
+        l.style.color = '';
+        l.style.textShadow = '';
+        setTimeout(() => { l.style.transition = ''; }, 600);
+      }, 200);
+    }, 60 + i * 90);
+  });
+
+  // Lightning jolt: random letter flashes bright white with electric crackle
+  function jolt() {
+    const idx = Math.floor(Math.random() * letters.length);
+    const letter = letters[idx];
+    if (letter.dataset.jolting) return;
+    letter.dataset.jolting = '1';
+
+    // Flash white with electric glow
+    letter.style.transition = 'color 0.05s, text-shadow 0.05s, transform 0.05s';
+    letter.style.color = '#ffffff';
+    letter.style.textShadow = '0 0 16px rgba(126,184,218,0.9), 0 0 30px rgba(126,184,218,0.4), -1px 0 rgba(160,200,255,0.5), 1px 0 rgba(160,200,255,0.5)';
+    const jx = (Math.random() - 0.5) * 4;
+    letter.style.transform = `translateX(${jx}px)`;
+
+    // Quick double-flash
+    setTimeout(() => {
+      letter.style.opacity = '0.5';
+      setTimeout(() => {
+        letter.style.opacity = '1';
+        letter.style.textShadow = '0 0 20px rgba(126,184,218,0.7)';
+      }, 40);
+    }, 60);
+
+    // Settle
+    setTimeout(() => {
+      letter.style.transition = 'color 0.6s ease-out, text-shadow 0.8s ease-out, transform 0.4s ease-out, opacity 0.3s';
+      letter.style.color = '';
+      letter.style.textShadow = '';
+      letter.style.transform = '';
+      letter.style.opacity = '1';
+      setTimeout(() => {
+        letter.style.transition = '';
+        delete letter.dataset.jolting;
+      }, 800);
+    }, 200);
+
+    // Chain to neighbor sometimes
+    if (Math.random() > 0.5) {
+      const ni = (idx + (Math.random() > 0.5 ? 1 : -1) + letters.length) % letters.length;
+      const nb = letters[ni];
+      if (!nb.dataset.jolting) {
+        setTimeout(() => {
+          nb.dataset.jolting = '1';
+          nb.style.transition = 'color 0.05s, text-shadow 0.05s';
+          nb.style.color = '#ffffff';
+          nb.style.textShadow = '0 0 14px rgba(126,184,218,0.7)';
+          setTimeout(() => {
+            nb.style.transition = 'color 0.5s ease-out, text-shadow 0.6s ease-out';
+            nb.style.color = '';
+            nb.style.textShadow = '';
+            setTimeout(() => { nb.style.transition = ''; delete nb.dataset.jolting; }, 600);
+          }, 120);
+        }, 80);
+      }
+    }
+  }
+
+  setTimeout(() => breathe(), 700);
+  state.interval = setInterval(jolt, 2500);
 }
 
 // ─────────────────────────────────────────────────

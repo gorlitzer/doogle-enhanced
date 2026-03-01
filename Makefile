@@ -87,8 +87,8 @@ dev:
 	@echo "Running detached on :8080 — stop with: make stop"
 
 stop:
-	@-pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null
-	@-docker compose down 2>/dev/null
+	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
+	@docker compose down 2>/dev/null || true
 	@echo "Stopped."
 
 clean:

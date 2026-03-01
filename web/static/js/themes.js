@@ -167,6 +167,53 @@ export const themes = {
     '--accent-gradient':  'none',
   },
 
+  storm: {
+    name: 'Storm',
+    // Backgrounds — deep slate blue
+    '--bg-primary':    '#0b0e14',
+    '--bg-secondary':  '#111620',
+    '--bg-card':       '#151c28',
+    '--bg-input':      '#1a2230',
+    '--bg-hover':      '#1f2838',
+    '--border':        '#2a3548',
+    '--border-light':  '#3a4a60',
+    // Text
+    '--text-primary':  '#d8e0ec',
+    '--text-secondary':'#8898b0',
+    '--text-muted':    '#5a6a80',
+    // Accent — steel blue
+    '--accent':        '#7eb8da',
+    '--accent-hover':  '#9ecaea',
+    '--accent-dim':    'rgba(126,184,218,0.15)',
+    // Palette
+    '--green':         '#34d399',
+    '--green-dim':     'rgba(52,211,153,0.15)',
+    '--red':           '#f87171',
+    '--red-dim':       'rgba(248,113,113,0.15)',
+    '--amber':         '#fbbf24',
+    '--amber-dim':     'rgba(251,191,36,0.15)',
+    '--blue':          '#60a5fa',
+    '--blue-dim':      'rgba(96,165,250,0.15)',
+    '--purple':        '#a78bfa',
+    '--purple-dim':    'rgba(167,139,250,0.15)',
+    // Radius
+    '--radius':        '0px',
+    '--radius-sm':     '4px',
+    // Canvas
+    '--canvas-text':        '#d8e0ec',
+    '--canvas-text-bold':   '#ffffff',
+    '--canvas-tooltip-bg':  'rgba(0,0,0,0.85)',
+    '--canvas-node-border': 'rgba(255,255,255,0.15)',
+    '--canvas-node-border-hover': '#ffffff',
+    // Fonts
+    '--font-body': "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+    '--font-mono': "'SF Mono', Monaco, 'Cascadia Code', monospace",
+    // Effects
+    '--crt-scanline':    'none',
+    '--crt-glow':        '0',
+    '--accent-gradient':  'none',
+  },
+
   pride: {
     name: 'Pride',
     '--bg-primary':    '#0f0f18',
