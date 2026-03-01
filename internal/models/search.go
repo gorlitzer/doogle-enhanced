@@ -1,6 +1,19 @@
 package models
 
-import "time"
+import (
+	"time"
+)
+
+// ParsedQuery represents a structured, analyzed search query.
+type ParsedQuery struct {
+	Raw          string              // original query string
+	Terms        []string            // cleaned, stop-words removed
+	Phrases      []string            // from "quoted strings"
+	SiteDomain   string              // from site:example.com
+	Synonyms     map[string][]string // term → expansions
+	UseFuzzy     bool                // true for short queries (≤3 terms)
+	CleanedQuery string              // fallback plain string
+}
 
 // SearchRequest represents a search query.
 type SearchRequest struct {
@@ -30,6 +43,7 @@ type SearchResult struct {
 	PeerID       string  `json:"peer_id,omitempty"`
 
 	// Scoring signals (used by ranker, exposed for transparency)
+	PageRankScore     float64   `json:"pagerank_score,omitempty"`
 	EEATScore         float64   `json:"eeat_score,omitempty"`
 	QualityScore      float64   `json:"quality_score,omitempty"`
 	SpamScore         float64   `json:"spam_score,omitempty"`
@@ -68,6 +82,7 @@ type CrawlerInfo struct {
 	TotalFailed   int64  `json:"total_failed"`
 	ActiveWorkers int64  `json:"active_workers"`
 	SeenURLs      int    `json:"seen_urls"`
+	JSRendered    int64  `json:"js_rendered"`
 }
 
 // IndexerInfo holds indexer-specific stats for the admin dashboard.

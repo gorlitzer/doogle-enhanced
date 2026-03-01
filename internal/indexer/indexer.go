@@ -173,6 +173,7 @@ func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
 		Categories: strings.Join(doc.Categories, ","),
 		Keywords:   strings.Join(doc.Keywords, ","),
 
+		PageRankScore:     doc.PageRankScore,
 		EEATScore:         doc.EEATScore,
 		QualityScore:      doc.QualityScore,
 		SpamScore:         doc.SpamScore,

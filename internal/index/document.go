@@ -23,7 +23,11 @@ type IndexDocument struct {
 	Categories string `json:"categories"` // comma-separated for Bleve
 	Keywords   string `json:"keywords"`   // comma-separated for Bleve
 
+	// Anchor text from inbound links
+	AnchorText string `json:"anchor_text"`
+
 	// Scoring
+	PageRankScore      float64 `json:"pagerank_score"`
 	EEATScore          float64 `json:"eeat_score"`
 	QualityScore       float64 `json:"quality_score"`
 	SpamScore          float64 `json:"spam_score"`

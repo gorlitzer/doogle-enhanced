@@ -31,20 +31,21 @@ func RerankResults(results []models.SearchResult) {
 func computeFinalScore(r *models.SearchResult) float64 {
 	bm25 := r.Score
 
-	// --- Quality multiplier (range: 0.5 – 2.0) ---
+	// --- Quality multiplier (range: 0.5 – 2.5) ---
 	// Weighted sum of quality signals, each in [0,1]
 	qualitySignal := 0.0
-	qualitySignal += r.EEATScore * 0.25         // E-E-A-T
-	qualitySignal += r.QualityScore * 0.25       // Content quality
-	qualitySignal += r.ReadabilityScore * 0.10   // Readability
-	qualitySignal += r.CitationScore * 0.10      // Citation/research quality
-	qualitySignal += r.LinkScore * 0.10          // Link profile
-	qualitySignal += r.SEOScore * 0.10           // On-page SEO
+	qualitySignal += r.EEATScore * 0.20         // E-E-A-T
+	qualitySignal += r.QualityScore * 0.20       // Content quality
+	qualitySignal += r.PageRankScore * 0.20      // PageRank (graph authority)
+	qualitySignal += r.ReadabilityScore * 0.08   // Readability
+	qualitySignal += r.CitationScore * 0.08      // Citation/research quality
+	qualitySignal += r.LinkScore * 0.05          // Link profile
+	qualitySignal += r.SEOScore * 0.08           // On-page SEO
 	qualitySignal += r.AuthorCredibility * 0.05  // Author credibility
-	qualitySignal += r.RelevanceScore * 0.05     // Composite relevance from indexer
+	qualitySignal += r.RelevanceScore * 0.06     // Composite relevance from indexer
 
-	// Map [0, 1] → [0.5, 2.0]: pages with 0 quality get halved, perfect quality get 2x
-	qualityMultiplier := 0.5 + qualitySignal*1.5
+	// Map [0, 1] → [0.5, 2.5]: pages with 0 quality get halved, perfect quality get 2.5x
+	qualityMultiplier := 0.5 + qualitySignal*2.0
 
 	// --- Freshness decay ---
 	freshDecay := freshnessDecay(r.CrawledAt, r.FreshnessScore, r.IsTimeSensitive, r.IsEvergreen)
