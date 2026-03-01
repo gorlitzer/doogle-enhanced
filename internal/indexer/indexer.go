@@ -8,12 +8,15 @@ import (
 
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/internal/store"
 )
 
 // Indexer is the full document processing pipeline:
 // analyze → score → deduplicate → enrich → index.
 type Indexer struct {
 	store       index.Store
+	batch       *index.BatchIndexer
+	genStore    *store.GenerationStore
 	scorer      *Scorer
 	dedup       *DuplicateDetector
 	analyzer    *Analyzer
@@ -30,9 +33,13 @@ type Indexer struct {
 }
 
 // New creates a new indexer with all analysis subsystems.
-func New(store index.Store) *Indexer {
+// If batch is nil, documents are written one at a time (backward compatible).
+// If genStore is nil, generation tracking is disabled.
+func New(store index.Store, batch *index.BatchIndexer, genStore *store.GenerationStore) *Indexer {
 	return &Indexer{
 		store:       store,
+		batch:       batch,
+		genStore:    genStore,
 		scorer:      NewScorer(),
 		dedup:       NewDuplicateDetector(),
 		analyzer:    NewAnalyzer(),
@@ -97,18 +104,40 @@ func (ix *Indexer) Index(doc *models.Document) error {
 	// 6. Convert to index document
 	idxDoc := ix.toIndexDocument(doc)
 
-	// 7. Write to Bleve
-	if err := ix.store.Index(idxDoc); err != nil {
-		return err
+	// 7. Pre-compute static score: quality * spam factor
+	qualitySignal := 0.0
+	qualitySignal += scores.EEAT * 0.20
+	qualitySignal += scores.Quality * 0.20
+	qualitySignal += doc.PageRankScore * 0.20
+	qualitySignal += doc.ReadabilityScore * 0.08
+	qualitySignal += doc.CitationScore * 0.08
+	qualitySignal += scores.Link * 0.05
+	qualitySignal += scores.SEO * 0.08
+	qualitySignal += doc.AuthorCredibility * 0.05
+	qualitySignal += scores.Relevance * 0.06
+	idxDoc.StaticScore = (0.5 + qualitySignal*2.0) * (1.0 - doc.SpamScore*0.8)
+
+	// 8. Set generation
+	if ix.genStore != nil {
+		idxDoc.Generation = ix.genStore.Current()
 	}
 
-	// 8. Track stats
+	// 9. Write to index (batched or single)
+	if ix.batch != nil {
+		ix.batch.Add(idxDoc)
+	} else {
+		if err := ix.store.Index(idxDoc); err != nil {
+			return err
+		}
+	}
+
+	// 10. Track stats
 	ix.totalIndexed.Add(1)
 	ix.qualitySum.Add(int64(scores.Quality * 10000))
 	ix.spamSum.Add(int64(scores.Spam * 10000))
 
-	log.Printf("indexer: indexed %s [eeat=%.2f quality=%.2f spam=%.2f seo=%.2f relevance=%.2f]",
-		doc.URL, scores.EEAT, scores.Quality, scores.Spam, scores.SEO, scores.Relevance)
+	log.Printf("indexer: indexed %s [eeat=%.2f quality=%.2f spam=%.2f seo=%.2f static=%.2f]",
+		doc.URL, scores.EEAT, scores.Quality, scores.Spam, scores.SEO, idxDoc.StaticScore)
 	return nil
 }
 

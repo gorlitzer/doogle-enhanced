@@ -2,6 +2,7 @@ package search
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/models"
@@ -51,7 +52,10 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 
 	var results []models.SearchResult
 	for _, hit := range hits {
-		desc := truncate(hit.Doc.Description, 200)
+		desc := extractSnippet(hit.Doc.Content, pq.Terms, 200)
+		if desc == "" {
+			desc = truncate(hit.Doc.Description, 200)
+		}
 		if desc == "" {
 			desc = truncate(hit.Doc.Content, 200)
 		}
@@ -60,6 +64,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			Title:             hit.Doc.Title,
 			Description:       desc,
 			Domain:            hit.Doc.Domain,
+			Language:          hit.Doc.Language,
 			Score:             hit.Score,
 			PageRankScore:     hit.Doc.PageRankScore,
 			EEATScore:         hit.Doc.EEATScore,
@@ -72,6 +77,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			FreshnessScore:    hit.Doc.FreshnessScore,
 			AuthorCredibility: hit.Doc.AuthorCredibility,
 			RelevanceScore:    hit.Doc.RelevanceScore,
+			StaticScore:       hit.Doc.StaticScore,
 			CrawledAt:         hit.Doc.CrawledAt,
 			IsTimeSensitive:   hit.Doc.IsTimeSensitive,
 			IsEvergreen:       hit.Doc.IsEvergreen,
@@ -95,6 +101,87 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 		Page:     page,
 		PageSize: pageSize,
 	}, nil
+}
+
+// extractSnippet finds the best passage in content that contains the most query terms.
+// Returns a ~maxLen character window around the best match, or "" if no terms found.
+func extractSnippet(content string, terms []string, maxLen int) string {
+	if content == "" || len(terms) == 0 {
+		return ""
+	}
+
+	lower := strings.ToLower(content)
+	lowerTerms := make([]string, len(terms))
+	for i, t := range terms {
+		lowerTerms[i] = strings.ToLower(t)
+	}
+
+	// Slide a window across the content to find the region with the most term hits.
+	bestPos := -1
+	bestCount := 0
+
+	// Step through the content in chunks, scoring each window
+	step := 40
+	halfWindow := maxLen / 2
+	for pos := 0; pos < len(lower); pos += step {
+		start := pos
+		end := pos + maxLen
+		if end > len(lower) {
+			end = len(lower)
+		}
+		window := lower[start:end]
+
+		count := 0
+		for _, t := range lowerTerms {
+			if strings.Contains(window, t) {
+				count++
+			}
+		}
+		if count > bestCount {
+			bestCount = count
+			bestPos = start
+		}
+		if bestCount == len(lowerTerms) {
+			break // all terms found, good enough
+		}
+	}
+
+	if bestCount == 0 {
+		return ""
+	}
+
+	// Extract the window, aligning to word boundaries
+	start := bestPos
+	end := bestPos + maxLen
+	if end > len(content) {
+		end = len(content)
+	}
+
+	// Adjust start to not cut a word
+	prefix := ""
+	if start > 0 {
+		for start < end && content[start] != ' ' {
+			start++
+		}
+		start++ // skip the space
+		prefix = "..."
+	}
+
+	// Adjust end to not cut a word
+	suffix := ""
+	if end < len(content) {
+		for end > start && content[end-1] != ' ' {
+			end--
+		}
+		suffix = "..."
+	}
+
+	if start >= end {
+		return ""
+	}
+
+	_ = halfWindow // reserved for future centering logic
+	return prefix + strings.TrimSpace(content[start:end]) + suffix
 }
 
 func truncate(s string, maxLen int) string {

@@ -31,31 +31,32 @@ func RerankResults(results []models.SearchResult) {
 func computeFinalScore(r *models.SearchResult) float64 {
 	bm25 := r.Score
 
-	// --- Quality multiplier (range: 0.5 – 2.5) ---
-	// Weighted sum of quality signals, each in [0,1]
-	qualitySignal := 0.0
-	qualitySignal += r.EEATScore * 0.20         // E-E-A-T
-	qualitySignal += r.QualityScore * 0.20       // Content quality
-	qualitySignal += r.PageRankScore * 0.20      // PageRank (graph authority)
-	qualitySignal += r.ReadabilityScore * 0.08   // Readability
-	qualitySignal += r.CitationScore * 0.08      // Citation/research quality
-	qualitySignal += r.LinkScore * 0.05          // Link profile
-	qualitySignal += r.SEOScore * 0.08           // On-page SEO
-	qualitySignal += r.AuthorCredibility * 0.05  // Author credibility
-	qualitySignal += r.RelevanceScore * 0.06     // Composite relevance from indexer
+	// --- Quality multiplier ---
+	// Use pre-computed StaticScore when available (set at index time).
+	// This avoids recomputing the quality*spam factor on every search.
+	var qualityMultiplier float64
+	if r.StaticScore > 0 {
+		qualityMultiplier = r.StaticScore
+	} else {
+		// Fallback for documents indexed before StaticScore was introduced
+		qualitySignal := 0.0
+		qualitySignal += r.EEATScore * 0.20
+		qualitySignal += r.QualityScore * 0.20
+		qualitySignal += r.PageRankScore * 0.20
+		qualitySignal += r.ReadabilityScore * 0.08
+		qualitySignal += r.CitationScore * 0.08
+		qualitySignal += r.LinkScore * 0.05
+		qualitySignal += r.SEOScore * 0.08
+		qualitySignal += r.AuthorCredibility * 0.05
+		qualitySignal += r.RelevanceScore * 0.06
 
-	// Map [0, 1] → [0.5, 2.5]: pages with 0 quality get halved, perfect quality get 2.5x
-	qualityMultiplier := 0.5 + qualitySignal*2.0
+		qualityMultiplier = (0.5 + qualitySignal*2.0) * (1.0 - r.SpamScore*0.8)
+	}
 
 	// --- Freshness decay ---
 	freshDecay := freshnessDecay(r.CrawledAt, r.FreshnessScore, r.IsTimeSensitive, r.IsEvergreen)
 
-	// --- Spam penalty ---
-	// spamScore in [0, 1]; convert to penalty factor [1.0, 0.0]
-	spamPenalty := r.SpamScore * 0.8 // max 80% reduction for high spam
-	spamFactor := 1.0 - spamPenalty
-
-	final := bm25 * qualityMultiplier * freshDecay * spamFactor
+	final := bm25 * qualityMultiplier * freshDecay
 
 	return math.Max(0, final)
 }

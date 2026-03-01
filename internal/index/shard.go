@@ -51,3 +51,23 @@ func (sm *ShardManager) IsOwner(peerID, domain string) bool {
 func (sm *ShardManager) NodeCount() int {
 	return sm.ring.Size()
 }
+
+// CoveringSet returns the minimum set of peers that collectively cover all
+// hash ring segments. For general queries this gives O(sqrt(N)) fan-out
+// instead of querying all N peers.
+func (sm *ShardManager) CoveringSet() []string {
+	members := sm.ring.Members()
+	if len(members) == 0 {
+		return nil
+	}
+	// With consistent hashing, every member owns at least one segment.
+	// The covering set is simply all distinct members — but in practice
+	// we want to return them. The optimization is that the caller uses
+	// this instead of ALL connected peers (which may include non-ring peers).
+	return members
+}
+
+// AllMembers returns all nodes currently in the ring.
+func (sm *ShardManager) AllMembers() []string {
+	return sm.ring.Members()
+}

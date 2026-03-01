@@ -131,6 +131,8 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 	docMapping.AddFieldMappingsAt("freshness_score", numericField)
 	docMapping.AddFieldMappingsAt("author_credibility", numericField)
 	docMapping.AddFieldMappingsAt("relevance_score", numericField)
+	docMapping.AddFieldMappingsAt("static_score", numericField)
+	docMapping.AddFieldMappingsAt("generation", numericField)
 
 	// --- Boolean fields ---
 	docMapping.AddFieldMappingsAt("is_https", boolField)
@@ -150,6 +152,17 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 func (bs *BleveStore) Index(doc *IndexDocument) error {
 	doc.IndexedAt = time.Now()
 	return bs.index.Index(doc.ID, doc)
+}
+
+// IndexBatch writes multiple documents to the index in a single batch operation.
+func (bs *BleveStore) IndexBatch(docs []*IndexDocument) error {
+	batch := bs.index.NewBatch()
+	now := time.Now()
+	for _, doc := range docs {
+		doc.IndexedAt = now
+		batch.Index(doc.ID, doc)
+	}
+	return bs.index.Batch(batch)
 }
 
 // Search performs a BM25 search with boosted title matching.
@@ -261,6 +274,41 @@ func (bs *BleveStore) ListRecent(offset, limit int) ([]IndexDocument, int, error
 	return docs, int(result.Total), nil
 }
 
+// ListAll iterates all documents in the index using cursor pagination.
+// The callback receives each document; return false to stop iteration.
+func (bs *BleveStore) ListAll(callback func(doc *IndexDocument) bool) error {
+	pageSize := 100
+	offset := 0
+
+	for {
+		q := bleve.NewMatchAllQuery()
+		req := bleve.NewSearchRequestOptions(q, pageSize, offset, false)
+		req.Fields = []string{"*"}
+		req.SortBy([]string{"_id"})
+
+		result, err := bs.index.Search(req)
+		if err != nil {
+			return fmt.Errorf("bleve list all: %w", err)
+		}
+		if len(result.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range result.Hits {
+			doc := fieldsToDoc(hit.ID, hit.Fields)
+			if !callback(doc) {
+				return nil
+			}
+		}
+
+		offset += len(result.Hits)
+		if uint64(offset) >= result.Total {
+			break
+		}
+	}
+	return nil
+}
+
 // Close closes the Bleve index.
 func (bs *BleveStore) Close() error {
 	log.Println("bleve: closing index")
@@ -300,6 +348,8 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.FreshnessScore = fieldFloat(fields, "freshness_score")
 	doc.AuthorCredibility = fieldFloat(fields, "author_credibility")
 	doc.RelevanceScore = fieldFloat(fields, "relevance_score")
+	doc.StaticScore = fieldFloat(fields, "static_score")
+	doc.Generation = uint64(fieldFloat(fields, "generation"))
 
 	// Boolean fields
 	doc.IsHTTPS = fieldBool(fields, "is_https")
