@@ -56,13 +56,19 @@ docker-logs:
 docker-clean:
 	docker compose down -v --rmi local
 
-# Single node via Docker (quick start)
-docker-run:
+# Single node via Docker (quick start — builds if needed)
+docker-run: docker
 	docker run --rm -it \
 		-p 4001:4001 \
 		-p 8080:8080 \
 		-v doogle-data:/data \
 		doogle:latest
+
+# ---- CLI Search ----
+
+# Quick search from command line (requires a running node)
+search: build
+	./$(BUILD_DIR)/$(BINARY_NAME) search $(ARGS)
 
 # ---- Development (hot reload) ----
 

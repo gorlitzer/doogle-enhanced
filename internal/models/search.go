@@ -12,6 +12,15 @@ type ParsedQuery struct {
 	SiteDomain   string              // from site:example.com
 	Language     string              // from lang:xx filter (empty = any)
 	Synonyms     map[string][]string // term → expansions
+	ExcludeTerms []string            // from -term (NOT operator)
+	OrGroups     [][]string          // groups of OR'd terms
+	InTitle      string              // from intitle:term
+	InURL        string              // from inurl:term
+	InText       string              // from intext:term or inbody:term
+	FileTypes    []string            // from filetype:ext or ext:ext
+	Before       string              // from before:YYYY-MM-DD
+	After        string              // from after:YYYY-MM-DD
+	HasHTTPS     bool                // from has:https
 	UseFuzzy     bool                // true for short queries (≤3 terms)
 	CleanedQuery string              // fallback plain string
 }

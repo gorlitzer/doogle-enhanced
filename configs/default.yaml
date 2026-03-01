@@ -64,6 +64,10 @@ search:
   peer_timeout: 5s
   # Maximum peers to query
   max_peers: 10
+  # LRU cache for search results (0 = disabled)
+  cache_size: 1000
+  # How long cached results stay valid
+  cache_ttl: 5m
 
 # Logging
 log:

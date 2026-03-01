@@ -1,6 +1,8 @@
 package index
 
-import "time"
+import (
+	"time"
+)
 
 // IndexDocument is the Bleve-indexed representation of a web page.
 type IndexDocument struct {
@@ -47,4 +49,10 @@ type IndexDocument struct {
 	IsHTTPS         bool `json:"is_https"`
 	IsTimeSensitive bool `json:"is_time_sensitive"`
 	IsEvergreen     bool `json:"is_evergreen"`
+}
+
+// Type implements bleve.Classifier. All documents use the default mapping;
+// language-specific analysis is applied at query time via LangAnalyzer().
+func (d *IndexDocument) Type() string {
+	return "_default"
 }

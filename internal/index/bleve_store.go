@@ -7,7 +7,21 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/analysis/analyzer/custom"
+	"github.com/blevesearch/bleve/v2/analysis/lang/da"
+	"github.com/blevesearch/bleve/v2/analysis/lang/de"
 	"github.com/blevesearch/bleve/v2/analysis/lang/en"
+	"github.com/blevesearch/bleve/v2/analysis/lang/es"
+	"github.com/blevesearch/bleve/v2/analysis/lang/fi"
+	"github.com/blevesearch/bleve/v2/analysis/lang/fr"
+	"github.com/blevesearch/bleve/v2/analysis/lang/hu"
+	"github.com/blevesearch/bleve/v2/analysis/lang/it"
+	"github.com/blevesearch/bleve/v2/analysis/lang/nl"
+	"github.com/blevesearch/bleve/v2/analysis/lang/no"
+	"github.com/blevesearch/bleve/v2/analysis/lang/pt"
+	"github.com/blevesearch/bleve/v2/analysis/lang/ro"
+	"github.com/blevesearch/bleve/v2/analysis/lang/ru"
+	"github.com/blevesearch/bleve/v2/analysis/lang/sv"
+	"github.com/blevesearch/bleve/v2/analysis/lang/tr"
 	"github.com/blevesearch/bleve/v2/analysis/token/lowercase"
 	"github.com/blevesearch/bleve/v2/analysis/tokenizer/unicode"
 	"github.com/blevesearch/bleve/v2/mapping"
@@ -19,6 +33,29 @@ import (
 )
 
 const analyzerName = "doogle_en"
+
+// supportedLangs maps ISO 639-1 language codes to their Bleve analyzer names.
+var supportedLangs = map[string]string{
+	"de": de.AnalyzerName,
+	"fr": fr.AnalyzerName,
+	"es": es.AnalyzerName,
+	"it": it.AnalyzerName,
+	"pt": pt.AnalyzerName,
+	"nl": nl.AnalyzerName,
+	"ru": ru.AnalyzerName,
+	"sv": sv.AnalyzerName,
+	"da": da.AnalyzerName,
+	"fi": fi.AnalyzerName,
+	"hu": hu.AnalyzerName,
+	"ro": ro.AnalyzerName,
+	"tr": tr.AnalyzerName,
+	"no": no.AnalyzerName,
+}
+
+// LangAnalyzer returns the Bleve analyzer name for a language code, or "" if unsupported.
+func LangAnalyzer(lang string) string {
+	return supportedLangs[lang]
+}
 
 // BleveStore implements Store using Bleve full-text search.
 type BleveStore struct {
@@ -50,38 +87,22 @@ func NewBleveStore(path string) (*BleveStore, error) {
 	return &BleveStore{index: idx, path: path}, nil
 }
 
-func buildMapping() (*mapping.IndexMappingImpl, error) {
-	indexMapping := bleve.NewIndexMapping()
-
-	// Custom English analyzer with stemming
-	err := indexMapping.AddCustomAnalyzer(analyzerName, map[string]interface{}{
-		"type":      custom.Name,
-		"tokenizer": unicode.Name,
-		"token_filters": []string{
-			lowercase.Name,
-			en.StopName,
-			en.SnowballStemmerName,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	indexMapping.DefaultAnalyzer = analyzerName
-
-	// Document mapping
+// buildDocMapping creates a document mapping using the given analyzer for text fields.
+func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	docMapping := bleve.NewDocumentMapping()
 
-	// Text fields with the custom analyzer
+	// Text fields with the specified analyzer
 	textField := bleve.NewTextFieldMapping()
-	textField.Analyzer = analyzerName
+	textField.Analyzer = analyzer
 
-	// Title and description use the same mapping — boosting is applied at query time
 	titleField := bleve.NewTextFieldMapping()
-	titleField.Analyzer = analyzerName
+	titleField.Analyzer = analyzer
 
 	descField := bleve.NewTextFieldMapping()
-	descField.Analyzer = analyzerName
+	descField.Analyzer = analyzer
+
+	anchorField := bleve.NewTextFieldMapping()
+	anchorField.Analyzer = analyzer
 
 	// Keyword fields (not analyzed, stored as-is)
 	keywordField := bleve.NewKeywordFieldMapping()
@@ -89,22 +110,18 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 	// Numeric fields
 	numericField := bleve.NewNumericFieldMapping()
 
-	// Boolean fields (stored as numeric in Bleve)
+	// Boolean fields
 	boolField := bleve.NewBooleanFieldMapping()
 
 	// Date fields
 	dateField := bleve.NewDateTimeFieldMapping()
 
-	// --- Primary text fields (searched with BM25) ---
+	// --- Primary text fields ---
 	docMapping.AddFieldMappingsAt("title", titleField)
 	docMapping.AddFieldMappingsAt("description", descField)
 	docMapping.AddFieldMappingsAt("content", textField)
 	docMapping.AddFieldMappingsAt("keywords", textField)
 	docMapping.AddFieldMappingsAt("categories", textField)
-
-	// Anchor text from inbound links
-	anchorField := bleve.NewTextFieldMapping()
-	anchorField.Analyzer = analyzerName
 	docMapping.AddFieldMappingsAt("anchor_text", anchorField)
 
 	// --- Keyword / identifier fields ---
@@ -143,7 +160,31 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 	docMapping.AddFieldMappingsAt("crawled_at", dateField)
 	docMapping.AddFieldMappingsAt("indexed_at", dateField)
 
-	indexMapping.DefaultMapping = docMapping
+	return docMapping
+}
+
+func buildMapping() (*mapping.IndexMappingImpl, error) {
+	indexMapping := bleve.NewIndexMapping()
+
+	// Custom English analyzer with stemming
+	err := indexMapping.AddCustomAnalyzer(analyzerName, map[string]interface{}{
+		"type":      custom.Name,
+		"tokenizer": unicode.Name,
+		"token_filters": []string{
+			lowercase.Name,
+			en.StopName,
+			en.SnowballStemmerName,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	indexMapping.DefaultAnalyzer = analyzerName
+
+	// Default document mapping (English) — language-specific analysis
+	// is applied at query time via LangAnalyzer(), not via type mappings.
+	indexMapping.DefaultMapping = buildDocMapping(analyzerName)
 
 	return indexMapping, nil
 }

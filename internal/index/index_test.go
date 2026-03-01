@@ -380,6 +380,80 @@ func TestShardManager_EmptyRing(t *testing.T) {
 	}
 }
 
+// ---- IndexDocument.Type() tests ----
+
+func TestIndexDocument_Type_Default(t *testing.T) {
+	doc := &IndexDocument{ID: "d1", Language: ""}
+	if got := doc.Type(); got != "_default" {
+		t.Fatalf("expected '_default', got %q", got)
+	}
+}
+
+func TestIndexDocument_Type_WithLanguage(t *testing.T) {
+	// All documents use the default mapping; lang analysis is at query time
+	doc := &IndexDocument{ID: "d1", Language: "de"}
+	if got := doc.Type(); got != "_default" {
+		t.Fatalf("expected '_default', got %q", got)
+	}
+}
+
+// ---- Multi-language indexing tests ----
+
+func TestBleveStore_MultiLanguageIndex(t *testing.T) {
+	bs := newTestBleve(t)
+
+	deDoc := testDoc("de1", "https://example.de/page", "Programmiersprache Go", "Go ist eine statisch typisierte kompilierte Programmiersprache")
+	deDoc.Language = "de"
+
+	enDoc := testDoc("en1", "https://example.com/page", "Go programming language", "Go is a statically typed compiled programming language")
+	// No language set — uses default mapping (English)
+
+	if err := bs.Index(deDoc); err != nil {
+		t.Fatal(err)
+	}
+	if err := bs.Index(enDoc); err != nil {
+		t.Fatal(err)
+	}
+
+	count, _ := bs.DocCount()
+	if count != 2 {
+		t.Fatalf("expected 2 docs, got %d", count)
+	}
+
+	// English doc (default mapping) should be searchable
+	hits, _, err := bs.Search("programming", 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) == 0 {
+		t.Fatal("expected at least 1 hit for 'programming'")
+	}
+
+	// German doc should be retrievable by ID
+	got, err := bs.Get("de1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Language != "de" {
+		t.Fatalf("expected language='de', got %q", got.Language)
+	}
+}
+
+func TestLangAnalyzer_Supported(t *testing.T) {
+	if a := LangAnalyzer("de"); a == "" {
+		t.Fatal("expected non-empty analyzer for 'de'")
+	}
+	if a := LangAnalyzer("fr"); a == "" {
+		t.Fatal("expected non-empty analyzer for 'fr'")
+	}
+}
+
+func TestLangAnalyzer_Unsupported(t *testing.T) {
+	if a := LangAnalyzer("xx"); a != "" {
+		t.Fatalf("expected empty analyzer for unsupported lang, got %q", a)
+	}
+}
+
 // helper to create a context
 func newContext() (interface {
 	Done() <-chan struct{}

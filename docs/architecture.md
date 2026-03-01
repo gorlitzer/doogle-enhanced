@@ -312,46 +312,81 @@ Content fingerprinting using shingling:
 
 ### Bleve Index
 
-Custom English analyzer pipeline:
+Custom English analyzer pipeline (default):
 ```
 Unicode tokenizer → lowercase → stop word removal → Snowball stemmer
 ```
 
-**Indexed fields (analyzed):** title, description, content
-**Stored fields (exact):** url, domain, content_hash
-**Numeric fields:** content_size, quality_score, spam_score, depth
+**Multi-language support:** 15 languages registered via Bleve's built-in analyzers (en, de, fr, es, it, pt, nl, ru, sv, da, fi, hu, ro, tr, no). Language-specific analysis is applied at query time when `lang:xx` is used.
+
+**Indexed fields (analyzed):** title, description, content, anchor_text, keywords, categories
+**Stored fields (exact):** url, domain, content_hash, language
+**Numeric fields:** content_size, quality_score, spam_score, depth, pagerank_score, and 10+ scoring signals
 
 ---
 
 ## Search Pipeline
 
+### Query Understanding
+
+Raw queries are parsed into a structured `ParsedQuery` before execution:
+
+| Syntax | Example | Effect |
+|--------|---------|--------|
+| Plain terms | `golang tutorial` | AND match across title, description, content |
+| Quoted phrase | `"machine learning"` | Exact phrase match (boosted) |
+| Exclude (`-`) | `golang -tutorial` | MustNot clause across all text fields |
+| OR (uppercase) | `python OR ruby` | Disjunction group (min 1 match) |
+| `site:` | `site:docs.python.org` | Restrict to domain |
+| `lang:` | `lang:de` | Restrict to language + use language-specific analyzer |
+| Synonyms | `js` → `javascript` | Automatic synonym expansion (boost tier) |
+| Fuzzy | short queries (≤3 terms) | Edit-distance matching |
+
+Lowercase `or` is treated as a stop word. `-` prefix works on any term.
+
 ### Local Search
 
-1. Parse and normalize query
-2. Execute Bleve `QueryStringQuery` (supports AND, OR, phrases)
-3. BM25 relevance scoring (Bleve default)
-4. Return hits with all stored fields
+1. Parse query into `ParsedQuery` (phrases, excludes, OR groups, site/lang filters, synonyms)
+2. Build Bleve query tree: Must(AND terms) + MustNot(excludes) + Must(OR groups) + Should(fuzzy/synonyms)
+3. Apply language-specific analyzer if `lang:` is set
+4. BM25 relevance scoring
+5. Return hits with all stored fields
+
+### Search Cache
+
+An LRU cache with TTL sits in front of distributed search:
+
+- **Key:** SHA-256 of `query|page|pageSize` (first 16 hex chars)
+- **Hit:** Return cached response immediately (no peer fan-out)
+- **Miss:** Execute search, store result before returning
+- **Eviction:** LRU when cache reaches `cache_size` (default 1000)
+- **Expiry:** Entries older than `cache_ttl` (default 5m) are treated as misses
 
 ### Distributed Search
 
 ```
-          ┌─── Local Bleve ───────── results ──┐
-          │                                     │
- Query ───┤─── Peer 1 (stream) ──── results ──├──▶ Merge ──▶ Re-rank ──▶ Dedup ──▶ Response
-          │─── Peer 2 (stream) ──── results ──│
-          │─── Peer N (stream) ──── results ──│
-          └────────────────────────────────────┘
-                    (parallel, 5s timeout)
+          ┌─── Cache hit? ──────── return ─────────────────────────────┐
+          │                                                            │
+          │    ┌─── Local Bleve ───────── results ──┐                  │
+          │    │                                     │                  │
+ Query ───┤    ├─── Peer 1 (stream) ──── results ──├──▶ Merge ──▶ Re-rank ──▶ Dedup ──▶ Cache ──▶ Response
+          │    │─── Peer 2 (stream) ──── results ──│
+          │    │─── Peer N (stream) ──── results ──│
+          │    └────────────────────────────────────┘
+          │              (parallel, 5s timeout)
+          └────────────────────────────────────────────────────────────┘
 ```
 
-1. **Local search:** Query the node's own Bleve index
-2. **Peer selection:** Take up to `maxPeers` (default 10) connected peers
-3. **Fan-out:** Open a libp2p stream to each peer (in parallel goroutines)
-4. **Timeout:** Each peer has `peerTimeout` (default 5s) to respond
-5. **Merge:** Combine all results into a single list
-6. **Re-rank:** `combined_score = BM25_score × (1 + quality_score × 0.5)`
-7. **Deduplicate:** Keep first occurrence of each URL
-8. **Paginate:** Return `pageSize` results
+1. **Cache check:** If cached and not expired, return immediately
+2. **Local search:** Query the node's own Bleve index
+3. **Peer selection:** Take up to `maxPeers` (default 10) connected peers
+4. **Fan-out:** Open a libp2p stream to each peer (in parallel goroutines)
+5. **Timeout:** Each peer has `peerTimeout` (default 5s) to respond
+6. **Merge:** Combine all results into a single list
+7. **Re-rank:** Multi-signal scoring (BM25, quality, PageRank, freshness, spam penalty)
+8. **Deduplicate:** Keep first occurrence of each URL
+9. **Cache store:** Save response for future queries
+10. **Paginate:** Return `pageSize` results
 
 Failed peer connections are logged but don't block the response.
 

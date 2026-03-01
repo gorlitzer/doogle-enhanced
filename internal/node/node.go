@@ -192,6 +192,8 @@ func (n *Node) init() error {
 		n.cfg.Index.ReplicationFactor,
 		n.cfg.Search.PeerTimeout,
 		n.cfg.Search.MaxPeers,
+		n.cfg.Search.CacheSize,
+		n.cfg.Search.CacheTTL,
 	)
 
 	// 13. Register P2P protocol handlers

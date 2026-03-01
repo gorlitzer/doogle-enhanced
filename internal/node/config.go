@@ -66,6 +66,8 @@ type SearchConfig struct {
 	DefaultPageSize int           `yaml:"default_page_size"`
 	PeerTimeout     time.Duration `yaml:"peer_timeout"`
 	MaxPeers        int           `yaml:"max_peers"`
+	CacheSize       int           `yaml:"cache_size"`
+	CacheTTL        time.Duration `yaml:"cache_ttl"`
 }
 
 // DefaultConfig returns sensible defaults.
@@ -108,6 +110,8 @@ func DefaultConfig() *Config {
 			DefaultPageSize: 10,
 			PeerTimeout:     5 * time.Second,
 			MaxPeers:        10,
+			CacheSize:       1000,
+			CacheTTL:        5 * time.Minute,
 		},
 	}
 }

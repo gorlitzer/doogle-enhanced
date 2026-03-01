@@ -827,10 +827,33 @@ function renderQuerySyntax(el) {
       <div class="docs-syntax-grid">
         ${syntaxCard('Basic Search', 'golang tutorial', 'Matches documents containing both terms across title, description, content, and anchor text.')}
         ${syntaxCard('Exact Phrase', '"distributed systems"', 'Wrapping terms in quotes forces an exact phrase match. Boosted 5x on title, 4x on content.')}
+        ${syntaxCard('Exclude Term', 'golang -tutorial', 'Prefix a term with - to exclude it. Documents containing "tutorial" are removed from results.')}
+        ${syntaxCard('OR Operator', 'python OR ruby', 'Uppercase OR creates a disjunction. At least one side must match. Chain: python OR ruby OR go')}
         ${syntaxCard('Site Filter', 'site:go.dev concurrency', 'Restricts results to a specific domain. Combine with any other query syntax.')}
+        ${syntaxCard('Language Filter', 'lang:de documentation', 'Restricts to a language and uses language-specific stemmer. 15 languages supported.')}
+        ${syntaxCard('In Title', 'intitle:golang', 'Only match documents with the term in their title.')}
+        ${syntaxCard('In URL', 'inurl:docs', 'Match documents with the substring in their URL.')}
+        ${syntaxCard('In Body', 'intext:kubernetes', 'Only match documents with the term in their body content. Also: inbody:')}
+        ${syntaxCard('File Type', 'filetype:pdf', 'Match documents whose URL ends with the given extension. Also: ext:')}
+        ${syntaxCard('Date Range', 'after:2025-01-01 before:2025-12-31', 'Restrict to documents crawled within a date range.')}
+        ${syntaxCard('HTTPS Only', 'has:https', 'Only show results from HTTPS pages.')}
         ${syntaxCard('Fuzzy Matching', 'pythn', 'Short queries (1-3 terms) automatically enable fuzzy matching. Catches typos for words 4+ characters.')}
         ${syntaxCard('Synonym Expansion', 'js tutorial', 'Common abbreviations are automatically expanded. "js" also searches for "javascript".')}
-        ${syntaxCard('Combined', '"error handling" site:go.dev', 'Mix and match. Phrases, site filters, and regular terms all work together.')}
+        ${syntaxCard('Combined', 'intitle:go -tutorial site:go.dev', 'Mix and match all operators. Phrases, site filters, dorks, and boolean operators all work together.')}
+      </div>
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('monitor', 24, 'var(--green)')}
+        <h2>UI Features</h2>
+      </div>
+      <p class="docs-section-desc">Keyboard shortcuts and result enhancements.</p>
+      <div class="docs-syntax-grid">
+        ${syntaxCard('Focus Search', '/ or Ctrl+K / Cmd+K', 'Press from any page to jump to the search input. Only works when not already typing in an input field.')}
+        ${syntaxCard('Snippet Highlighting', 'automatic', 'Matched query terms are highlighted in search result descriptions. Operator tokens (site:, lang:, etc.) are excluded from highlighting.')}
+        ${syntaxCard('Pagination', 'Prev / Next buttons', 'When results span multiple pages, prev/next buttons appear below results. Changing the query resets to page 1.')}
+        ${syntaxCard('Result Details', 'Click "details" badge', 'Opens a modal with full scoring breakdown: E-E-A-T, quality, spam, PageRank, readability, citations, freshness, and more.')}
       </div>
     </div>
 
@@ -841,7 +864,7 @@ function renderQuerySyntax(el) {
       </div>
       <p class="docs-section-desc">Type a query to see how Doogle parses it in real time.</p>
       <div class="docs-query-tester">
-        <input type="text" id="query-test-input" placeholder='Try: "error handling" site:go.dev kubernetes' value='"error handling" site:go.dev kubernetes'>
+        <input type="text" id="query-test-input" placeholder='Try: intitle:go -tutorial OR rust after:2025-01-01' value='intitle:go -tutorial OR rust after:2025-01-01 site:go.dev'>
         <div class="docs-query-result" id="query-test-result"></div>
       </div>
     </div>
@@ -907,6 +930,15 @@ function renderQuerySyntax(el) {
       <div class="docs-query-parsed">
         ${parsed.phrases.length ? `<div class="docs-qp-row"><span class="docs-qp-label">Phrases</span>${parsed.phrases.map(p => `<span class="badge badge-accent">"${escapeHtml(p)}"</span>`).join(' ')}</div>` : ''}
         ${parsed.site ? `<div class="docs-qp-row"><span class="docs-qp-label">Site Filter</span><span class="badge badge-green">${escapeHtml(parsed.site)}</span></div>` : ''}
+        ${parsed.excludes.length ? `<div class="docs-qp-row"><span class="docs-qp-label">Excludes</span>${parsed.excludes.map(e => `<span class="badge badge-red">-${escapeHtml(e)}</span>`).join(' ')}</div>` : ''}
+        ${parsed.orGroups.length ? `<div class="docs-qp-row"><span class="docs-qp-label">OR Groups</span>${parsed.orGroups.map(g => `<span class="badge badge-purple">${g.join(' OR ')}</span>`).join(' ')}</div>` : ''}
+        ${parsed.lang ? `<div class="docs-qp-row"><span class="docs-qp-label">Language</span><span class="badge badge-green">${escapeHtml(parsed.lang)}</span></div>` : ''}
+        ${parsed.inTitle ? `<div class="docs-qp-row"><span class="docs-qp-label">In Title</span><span class="badge badge-blue">${escapeHtml(parsed.inTitle)}</span></div>` : ''}
+        ${parsed.inURL ? `<div class="docs-qp-row"><span class="docs-qp-label">In URL</span><span class="badge badge-blue">${escapeHtml(parsed.inURL)}</span></div>` : ''}
+        ${parsed.inText ? `<div class="docs-qp-row"><span class="docs-qp-label">In Body</span><span class="badge badge-blue">${escapeHtml(parsed.inText)}</span></div>` : ''}
+        ${parsed.fileTypes.length ? `<div class="docs-qp-row"><span class="docs-qp-label">File Type</span>${parsed.fileTypes.map(f => `<span class="badge badge-amber">.${escapeHtml(f)}</span>`).join(' ')}</div>` : ''}
+        ${parsed.after || parsed.before ? `<div class="docs-qp-row"><span class="docs-qp-label">Date Range</span>${parsed.after ? `<span class="badge badge-amber">after: ${escapeHtml(parsed.after)}</span>` : ''}${parsed.before ? `<span class="badge badge-amber">before: ${escapeHtml(parsed.before)}</span>` : ''}</div>` : ''}
+        ${parsed.hasHTTPS ? `<div class="docs-qp-row"><span class="docs-qp-label">HTTPS</span><span class="badge badge-green">required</span></div>` : ''}
         ${parsed.terms.length ? `<div class="docs-qp-row"><span class="docs-qp-label">Terms</span>${parsed.terms.map(t => `<span class="badge badge-blue">${escapeHtml(t)}</span>`).join(' ')}</div>` : ''}
         ${Object.keys(parsed.synonyms).length ? `<div class="docs-qp-row"><span class="docs-qp-label">Synonyms</span>${Object.entries(parsed.synonyms).map(([k, v]) => `<span class="badge badge-amber">${escapeHtml(k)} &rarr; ${v.join(', ')}</span>`).join(' ')}</div>` : ''}
         <div class="docs-qp-row"><span class="docs-qp-label">Fuzzy</span><span class="badge badge-${parsed.fuzzy ? 'green' : 'default'}">${parsed.fuzzy ? 'enabled' : 'disabled'}</span></div>
@@ -968,14 +1000,83 @@ function demoParseQuery(raw) {
   const sm = text.match(siteRe);
   if (sm) { site = sm[1]; text = text.replace(siteRe, ''); }
 
-  const terms = text.toLowerCase().split(/\s+/).filter(t => t && !STOP_WORDS.has(t));
+  let lang = '';
+  const langRe = /lang:(\S+)/i;
+  const lm = text.match(langRe);
+  if (lm) { lang = lm[1]; text = text.replace(langRe, ''); }
+
+  let inTitle = '';
+  const intitleRe = /intitle:(\S+)/i;
+  const itm = text.match(intitleRe);
+  if (itm) { inTitle = itm[1]; text = text.replace(intitleRe, ''); }
+
+  let inURL = '';
+  const inurlRe = /inurl:(\S+)/i;
+  const ium = text.match(inurlRe);
+  if (ium) { inURL = ium[1]; text = text.replace(inurlRe, ''); }
+
+  let inText = '';
+  const intextRe = /(?:intext|inbody):(\S+)/i;
+  const ixm = text.match(intextRe);
+  if (ixm) { inText = ixm[1]; text = text.replace(intextRe, ''); }
+
+  const fileTypes = [];
+  const filetypeRe = /(?:filetype|ext):(\S+)/gi;
+  let ftm;
+  while ((ftm = filetypeRe.exec(text))) fileTypes.push(ftm[1]);
+  text = text.replace(/(?:filetype|ext):\S+/gi, '');
+
+  let before = '';
+  const beforeRe = /before:(\S+)/i;
+  const bm = text.match(beforeRe);
+  if (bm) { before = bm[1]; text = text.replace(beforeRe, ''); }
+
+  let after = '';
+  const afterRe = /after:(\S+)/i;
+  const am = text.match(afterRe);
+  if (am) { after = am[1]; text = text.replace(afterRe, ''); }
+
+  let hasHTTPS = false;
+  const hasRe = /has:(\S+)/i;
+  const hm = text.match(hasRe);
+  if (hm && hm[1].toLowerCase() === 'https') { hasHTTPS = true; }
+  text = text.replace(/has:\S+/gi, '');
+
+  // Tokenize with -excludes and OR groups
+  const words = text.split(/\s+/).filter(Boolean);
+  const excludes = [];
+  const orGroups = [];
+  const rawTerms = [];
+  let pendingOR = [];
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w.length > 1 && w[0] === '-') { excludes.push(w.slice(1).toLowerCase()); continue; }
+    if (w === 'OR' && i > 0 && i < words.length - 1) {
+      if (pendingOR.length === 0 && rawTerms.length > 0) {
+        pendingOR.push(rawTerms.pop());
+      }
+      continue;
+    }
+    const lower = w.toLowerCase();
+    if (pendingOR.length > 0) {
+      pendingOR.push(lower);
+      if (i + 1 < words.length && words[i + 1] === 'OR') continue;
+      orGroups.push([...pendingOR]);
+      pendingOR = [];
+      continue;
+    }
+    if (!STOP_WORDS.has(lower)) rawTerms.push(lower);
+  }
+
+  const terms = rawTerms;
   const synonyms = {};
   for (const t of terms) {
     if (SYNONYMS[t]) synonyms[t] = SYNONYMS[t].split(' ');
   }
   const fuzzy = terms.length <= 3;
 
-  return { phrases, site, terms, synonyms, fuzzy };
+  return { phrases, site, lang, inTitle, inURL, inText, fileTypes, before, after, hasHTTPS, excludes, orGroups, terms, synonyms, fuzzy };
 }
 
 // ---- Configuration ----

@@ -284,6 +284,8 @@ CLI flags can still override individual settings:
 | `default_page_size` | int | `10` | Default results per page |
 | `peer_timeout` | duration | `5s` | How long to wait for each peer's response |
 | `max_peers` | int | `10` | Max peers to query per search |
+| `cache_size` | int | `1000` | LRU cache entries for search results (0 = disabled) |
+| `cache_ttl` | duration | `5m` | How long cached results stay valid |
 
 ---
 
@@ -421,6 +423,32 @@ rm -rf ./data/doogle
 Approximate storage per 1,000 indexed pages:
 - **BadgerDB:** ~5-20MB (metadata + URL queue)
 - **Bleve index:** ~10-50MB (depends on content size)
+
+---
+
+## CLI Search
+
+You can search from the command line without opening the web UI:
+
+```bash
+# Search a local node
+./bin/doogle search "golang tutorial"
+
+# JSON output (pipe-friendly)
+./bin/doogle search --json "distributed systems" | jq '.results[].title'
+
+# Search a remote node
+./bin/doogle search --api http://192.168.1.100:8080 "privacy"
+
+# Pagination
+./bin/doogle search --page 1 --size 5 "web development"
+
+# Boolean operators
+./bin/doogle search "python OR ruby"
+./bin/doogle search "golang -tutorial"
+```
+
+The CLI search requires a running Doogle node (local or remote).
 
 ---
 

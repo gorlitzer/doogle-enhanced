@@ -21,20 +21,26 @@ type DistributedSearch struct {
 	host              host.Host
 	localEngine       *Engine
 	shards            *index.ShardManager
+	cache             *SearchCache
 	replicationFactor int
 	peerTimeout       time.Duration
 	maxPeers          int
 }
 
 // NewDistributedSearch creates a distributed search engine.
-func NewDistributedSearch(h host.Host, local *Engine, shards *index.ShardManager, replicationFactor int, peerTimeout time.Duration, maxPeers int) *DistributedSearch {
+func NewDistributedSearch(h host.Host, local *Engine, shards *index.ShardManager, replicationFactor int, peerTimeout time.Duration, maxPeers int, cacheSize int, cacheTTL time.Duration) *DistributedSearch {
 	if replicationFactor <= 0 {
 		replicationFactor = 3
+	}
+	var cache *SearchCache
+	if cacheSize > 0 && cacheTTL > 0 {
+		cache = NewSearchCache(cacheSize, cacheTTL)
 	}
 	return &DistributedSearch{
 		host:              h,
 		localEngine:       local,
 		shards:            shards,
+		cache:             cache,
 		replicationFactor: replicationFactor,
 		peerTimeout:       peerTimeout,
 		maxPeers:          maxPeers,
@@ -45,6 +51,15 @@ func NewDistributedSearch(h host.Host, local *Engine, shards *index.ShardManager
 // Uses shard-aware routing when a ShardManager is available.
 func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchRequest) (*models.SearchResponse, error) {
 	start := time.Now()
+
+	// Check cache
+	var cacheKey string
+	if ds.cache != nil {
+		cacheKey = CacheKey(req.Query, req.Page, req.PageSize)
+		if cached := ds.cache.Get(cacheKey); cached != nil {
+			return cached, nil
+		}
+	}
 
 	// Local search
 	localResp, err := ds.localEngine.Search(req)
@@ -116,7 +131,7 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		deduped = deduped[:pageSize]
 	}
 
-	return &models.SearchResponse{
+	resp := &models.SearchResponse{
 		Query:      req.Query,
 		Results:    deduped,
 		Total:      len(deduped),
@@ -124,7 +139,14 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		PageSize:   pageSize,
 		TookMs:     time.Since(start).Milliseconds(),
 		PeersAsked: peersAsked,
-	}, nil
+	}
+
+	// Store in cache
+	if ds.cache != nil {
+		ds.cache.Put(cacheKey, resp)
+	}
+
+	return resp, nil
 }
 
 // selectTargetPeers determines which peers to query based on the search request.
