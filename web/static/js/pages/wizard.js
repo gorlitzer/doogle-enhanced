@@ -1615,7 +1615,12 @@ function renderNav() {
     <button class="btn btn-primary wizard-next-btn" id="wizard-next">Next</button>
   `;
   document.getElementById('wizard-back').addEventListener('click', () => { currentStep--; update(); });
-  document.getElementById('wizard-next').addEventListener('click', () => { currentStep++; update(); });
+  document.getElementById('wizard-next').addEventListener('click', () => {
+    if (currentStep === 2 && getAllSelectedSeeds().length === 0) {
+      if (!confirm('No seeds selected. Your node won\'t crawl anything until you add seeds from the Admin panel. Continue anyway?')) return;
+    }
+    currentStep++; update();
+  });
 }
 
 function update() {
