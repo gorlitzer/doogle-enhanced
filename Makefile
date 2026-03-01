@@ -74,6 +74,7 @@ build:
 	$(GO) build -ldflags "-s -w" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
 
 run: build
+	@-pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null; sleep 0.2
 	./$(BIN_DIR)/$(BINARY) $(ARGS)
 
 test:
