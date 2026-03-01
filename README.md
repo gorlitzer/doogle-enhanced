@@ -58,17 +58,30 @@ These roles aren't assigned — they emerge. Some don't exist yet and will take 
 
 ## Quick Start
 
-### 1. Build & Run
+### 1. Clone & Setup
 
 ```bash
 git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
+make setup                      # checks/installs Go, Docker, all prereqs
+```
+
+`make setup` auto-installs Go locally if not found — no root required. On Windows, use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/) or Docker.
+
+### 2. Build & Run
+
+```bash
 make run                        # build + launch node
 ```
 
 Open [http://localhost:8080](http://localhost:8080) — the setup wizard guides you through seeding and configuration.
 
-### 2. Connect a Second Node
+**No `make`?** Run directly with Go:
+```bash
+go build -o bin/doogle ./cmd/doogle && ./bin/doogle
+```
+
+### 3. Connect a Second Node
 
 ```bash
 ./bin/doogle --port 4002 --api-port 8081 \
@@ -92,9 +105,8 @@ Three nodes on ports 8080, 8081, 8082 — auto-connected via mDNS.
 
 ### Build from Source (manual)
 
-**Prerequisites:** [Go 1.22+](https://go.dev/dl/)
-
 ```bash
+make setup                      # installs Go if needed
 make build
 ./bin/doogle --seed "https://example.com"
 ```
@@ -109,7 +121,7 @@ make build
 - Multi-language stemmers: 15 languages (English + DE, FR, ES, IT, PT, NL, RU, SV, DA, FI, HU, RO, TR, NO)
 - PageRank computation on the backlink graph
 - Search dorks: `intitle:`, `inurl:`, `intext:`, `filetype:`, `before:`/`after:`, `has:https`
-- Query understanding: synonyms, `site:` filter, `lang:` filter, quoted phrases
+- Query understanding: `site:` filter, `lang:` filter, quoted phrases
 - Snippet highlighting — matched query terms highlighted in search results
 - Paginated results with prev/next navigation
 - Keyboard shortcuts: `/` and `Ctrl+K`/`Cmd+K` to focus search
@@ -280,6 +292,7 @@ Dump and restore are **standalone** — they operate on raw data directories and
 ### Makefile Reference
 
 ```bash
+make setup                      # install Go, Docker checks, all prerequisites
 make run                        # build + launch node (API on :8080)
 make run ARGS='--port 4002'     # pass extra flags
 make test                       # run all tests
@@ -446,7 +459,7 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 - [x] P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)
 - [x] Crawler (workers, rate limiting, robots.txt, headless browser, live feed)
 - [x] Indexer (10+ quality signals, E-E-A-T, spam, PageRank, readability, freshness)
-- [x] BM25 search (synonyms, phrases, fuzzy, site: filter, distributed fan-out)
+- [x] BM25 search (phrases, fuzzy, site: filter, distributed fan-out)
 - [x] 6 P2P protocols, shard routing, replication N=3, Merkle anti-entropy
 - [x] Admin dashboard (5 themes, wizard, live feed, network graph)
 - [x] Docker + Compose support
@@ -475,7 +488,7 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 - [ ] Reputation-weighted search (results from high-trust peers ranked higher)
 - [ ] Malicious crawl defense (detect and reject poisoned index documents)
 - [ ] Report audit trail (tamper-proof log of all reports with cryptographic signatures)
-- [ ] Admin UI for trust dashboard (visualize peer trust, manage quarantine, review reports)
+- [x] Admin UI for trust dashboard (visualize peer trust, manage quarantine, review reports)
 - [ ] Allowlist/denylist per node (operator-defined URL/domain overrides)
 
 ### Phase 3 — Dark Web & Privacy

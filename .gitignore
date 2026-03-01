@@ -36,3 +36,6 @@ coverage.out
 
 # Build
 dist/
+
+# Local Go install (make setup)
+.go/
