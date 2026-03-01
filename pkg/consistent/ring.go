@@ -113,6 +113,13 @@ func (r *Ring) Members() []string {
 	return result
 }
 
+// Has returns true if the node is in the ring.
+func (r *Ring) Has(node string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.nodes[node]
+}
+
 // Size returns the number of nodes.
 func (r *Ring) Size() int {
 	r.mu.RLock()

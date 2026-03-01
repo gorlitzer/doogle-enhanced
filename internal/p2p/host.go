@@ -23,7 +23,7 @@ import (
 func NewHost(ctx context.Context, privKey crypto.PrivKey, port int) (host.Host, error) {
 	listenTCP := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)
 
-	cm, err := connmgr.NewConnManager(20, 40, connmgr.WithGracePeriod(20*time.Second))
+	cm, err := connmgr.NewConnManager(40, 80, connmgr.WithGracePeriod(30*time.Second))
 	if err != nil {
 		return nil, fmt.Errorf("connection manager: %w", err)
 	}
