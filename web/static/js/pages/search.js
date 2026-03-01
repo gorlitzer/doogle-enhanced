@@ -4,7 +4,23 @@ import { showModal, scoreBar, escapeHtml, skeleton } from '../components.js';
 
 let currentPage = 1;
 let currentQuery = '';
+let lastQuery = '';
 let lastResults = [];
+
+function highlightTerms(escapedText, query) {
+  if (!query) return escapedText;
+  // Strip operator tokens to get bare content terms
+  const stripped = query
+    .replace(/(?:site|lang|intitle|inurl|intext|filetype|has|after|before):\S+/gi, '')
+    .replace(/-\S+/g, '')
+    .replace(/\bOR\b/gi, '')
+    .replace(/"/g, '');
+  const terms = stripped.split(/\s+/).filter(t => t.length >= 2);
+  if (terms.length === 0) return escapedText;
+  const pattern = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(`(${pattern})`, 'gi');
+  return escapedText.replace(re, '<mark>$1</mark>');
+}
 
 export function renderSearch(container) {
   container.innerHTML = `
@@ -13,8 +29,9 @@ export function renderSearch(container) {
       <p>Decentralized P2P Search Engine</p>
     </div>
     <div class="search-form" id="search-form">
-      <input type="text" id="search-input" placeholder="Search the decentralized web..." autofocus>
+      <input type="text" id="search-input" placeholder="Search... (try: -exclude, OR, intitle:, site:)" autofocus>
       <button id="search-btn">Search</button>
+      <button id="search-tips-btn" title="Search tips" style="background:var(--surface-2);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;cursor:pointer;font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0">?</button>
     </div>
     <div class="search-filters" id="search-filters">
       <select id="filter-lang">
@@ -49,6 +66,31 @@ export function renderSearch(container) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
   btn.addEventListener('click', doSearch);
 
+  document.getElementById('search-tips-btn').addEventListener('click', () => {
+    showModal('Search Syntax Reference', `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Syntax</th><th>Example</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>Basic</td><td><code>golang tutorial</code></td><td>Match documents containing all terms</td></tr>
+            <tr><td>Phrase</td><td><code>"exact match"</code></td><td>Exact phrase matching</td></tr>
+            <tr><td>Exclude</td><td><code>golang -tutorial</code></td><td>Remove documents containing the term</td></tr>
+            <tr><td>OR</td><td><code>python OR ruby</code></td><td>Match documents with either term</td></tr>
+            <tr><td>Site</td><td><code>site:go.dev</code></td><td>Restrict to a specific domain</td></tr>
+            <tr><td>Language</td><td><code>lang:de</code></td><td>Restrict to a language (15 supported)</td></tr>
+            <tr><td>In Title</td><td><code>intitle:golang</code></td><td>Term must appear in the title</td></tr>
+            <tr><td>In URL</td><td><code>inurl:docs</code></td><td>Substring must appear in the URL</td></tr>
+            <tr><td>In Body</td><td><code>intext:kubernetes</code></td><td>Term must appear in body content</td></tr>
+            <tr><td>File Type</td><td><code>filetype:pdf</code></td><td>URL must end with the given extension</td></tr>
+            <tr><td>Date Range</td><td><code>after:2025-01-01</code></td><td>Restrict to a crawl date range</td></tr>
+            <tr><td>HTTPS Only</td><td><code>has:https</code></td><td>Only show HTTPS results</td></tr>
+            <tr><td>Combined</td><td><code>intitle:go -tutorial site:go.dev</code></td><td>Mix and match any syntax</td></tr>
+          </tbody>
+        </table>
+      </div>
+    `, { width: '650px' });
+  });
+
   if (currentQuery) {
     input.value = currentQuery;
     doSearch();
@@ -58,10 +100,12 @@ export function renderSearch(container) {
   window._pageInterval = setInterval(updateStatusBar, 10000);
 }
 
-async function doSearch() {
+async function doSearch(keepPage = false) {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
   currentQuery = q;
+  if (!keepPage || q !== lastQuery) currentPage = 1;
+  lastQuery = q;
 
   const size = parseInt(document.getElementById('filter-size').value) || 10;
   const domain = document.getElementById('filter-domain').value.trim();
@@ -73,7 +117,9 @@ async function doSearch() {
 
   try {
     let query = q;
-    if (domain) query += ` domain:${domain}`;
+    const lang = document.getElementById('filter-lang').value;
+    if (lang) query += ` lang:${lang}`;
+    if (domain) query += ` site:${domain}`;
 
     const data = await api.search(query, currentPage, size);
     if (data.error) {
@@ -91,7 +137,8 @@ async function doSearch() {
       return;
     }
 
-    results.innerHTML = lastResults.map((r, i) => renderResult(r, i)).join('');
+    results.innerHTML = lastResults.map((r, i) => renderResult(r, i)).join('')
+      + renderPagination(data.total, currentPage, size);
 
     // Bind click handlers for detail modal
     results.querySelectorAll('.result-detail-btn').forEach(btn => {
@@ -101,6 +148,12 @@ async function doSearch() {
         showResultDetail(lastResults[idx]);
       });
     });
+
+    // Bind pagination handlers
+    const prevBtn = results.querySelector('#pagination-prev');
+    const nextBtn = results.querySelector('#pagination-next');
+    if (prevBtn) prevBtn.addEventListener('click', () => { currentPage--; doSearch(true); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { currentPage++; doSearch(true); });
   } catch (err) {
     results.innerHTML = `<div class="empty-state"><p>Search failed: ${err.message}</p></div>`;
   }
@@ -108,7 +161,7 @@ async function doSearch() {
 
 function renderResult(r, index) {
   const title = escapeHtml(r.title || r.url);
-  const desc = escapeHtml(r.description || '');
+  const desc = highlightTerms(escapeHtml(r.description || ''), currentQuery);
   const domain = escapeHtml(r.domain || '');
   const scoreColor = r.score > 1.0 ? 'green' : r.score > 0.5 ? 'blue' : 'default';
 
@@ -138,6 +191,18 @@ function renderResult(r, index) {
         ${badges.join('')}
         <button class="badge badge-accent result-detail-btn" data-index="${index}" style="cursor:pointer;border:none;font-family:inherit">details</button>
       </div>
+    </div>
+  `;
+}
+
+function renderPagination(total, page, pageSize) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return '';
+  return `
+    <div class="pagination">
+      <button class="pagination-btn" id="pagination-prev" ${page <= 1 ? 'disabled' : ''}>Prev</button>
+      <span class="pagination-info">Page ${page} of ${totalPages}</span>
+      <button class="pagination-btn" id="pagination-next" ${page >= totalPages ? 'disabled' : ''}>Next</button>
     </div>
   `;
 }

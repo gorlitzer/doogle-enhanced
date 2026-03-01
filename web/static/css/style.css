@@ -292,7 +292,15 @@ a:hover { text-decoration: underline; }
 .result-item .result-title:hover { text-decoration: underline; }
 .result-item .result-url { font-size: 0.8em; color: var(--green); margin: 3px 0; word-break: break-all; }
 .result-item .result-desc { color: var(--text-secondary); font-size: 0.9em; line-height: 1.6; margin-top: 4px; }
+.result-desc mark { background: var(--accent-dim); color: var(--accent); padding: 0 2px; border-radius: 2px; }
 .result-item .result-badges { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---- Pagination ---- */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 16px 0; }
+.pagination-btn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 16px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85em; }
+.pagination-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--bg-hover); }
+.pagination-btn:disabled { opacity: 0.3; cursor: default; }
+.pagination-info { font-size: 0.85em; color: var(--text-muted); }
 
 /* ---- Badges ---- */
 .badge {
