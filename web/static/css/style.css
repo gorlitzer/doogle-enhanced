@@ -2937,8 +2937,45 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   border-color: rgba(239,68,68,0.3);
   background: rgba(239,68,68,0.03);
 }
+.danger-card-layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.danger-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.danger-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.danger-card-title strong {
+  font-size: 1em;
+  color: var(--red);
+}
+.danger-card-info p {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.danger-card-layout .btn-danger {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .actions-danger-zone .actions-section-header {
   border-bottom-color: rgba(239,68,68,0.3);
+}
+@media (max-width: 600px) {
+  .danger-card-layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
 }
 
 /* Loading spinner for buttons */
