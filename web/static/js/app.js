@@ -104,4 +104,21 @@ window.addEventListener('DOMContentLoaded', () => {
   initLogoAnimation();
   render();
   startStatusPolling();
+
+  // Global keyboard shortcuts: / and Ctrl+K / Cmd+K to focus search
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+
+    const isSlash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey;
+    const isCmdK = e.key === 'k' && (e.ctrlKey || e.metaKey);
+
+    if (isSlash || isCmdK) {
+      const input = document.getElementById('search-input');
+      if (input) {
+        e.preventDefault();
+        input.focus();
+      }
+    }
+  });
 });
