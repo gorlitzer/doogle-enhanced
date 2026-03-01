@@ -8,8 +8,7 @@
 
 const LETTERS = 'DOOGLE';
 let currentTheme = null;
-let interval = null;
-let animFrame = null;
+const navState = { interval: null, animFrame: null };
 
 export function initLogoAnimation() {
   const el = document.getElementById('logo-text');
@@ -24,7 +23,7 @@ export function initLogoAnimation() {
 }
 
 function applyLogoAnim(theme) {
-  cleanup();
+  cleanupState(navState);
   currentTheme = theme;
   const el = document.getElementById('logo-text');
   if (!el) return;
@@ -34,23 +33,46 @@ function applyLogoAnim(theme) {
   el.innerHTML = LETTERS;
   el.style.cssText = '';
 
+  applyThemeAnim(el, LETTERS, navState, theme);
+}
+
+/** Animate any element with the current theme's logo animation. Returns a cleanup function. */
+export function animateElement(el, text) {
+  const state = { interval: null, animFrame: null };
+  const theme = document.documentElement.getAttribute('data-theme') || 'dracula';
+  applyThemeAnim(el, text, state, theme);
+
+  function onThemeChange(e) {
+    cleanupState(state);
+    // Re-wrap and animate with new theme
+    applyThemeAnim(el, text, state, e.detail.theme);
+  }
+  window.addEventListener('themechange', onThemeChange);
+
+  return () => {
+    cleanupState(state);
+    window.removeEventListener('themechange', onThemeChange);
+  };
+}
+
+function applyThemeAnim(el, text, state, theme) {
   switch (theme) {
-    case 'dracula': draculaDrip(el); break;
-    case 'crt':     crtGlitch(el); break;
-    case 'modern':  blockBuild(el); break;
-    case 'light':   inkWrite(el); break;
-    case 'pride':   rainbowShimmer(el); break;
-    default:        draculaDrip(el); break;
+    case 'dracula': draculaDrip(el, text, state); break;
+    case 'crt':     crtGlitch(el, text, state); break;
+    case 'modern':  blockBuild(el, text, state); break;
+    case 'light':   inkWrite(el, text, state); break;
+    case 'pride':   rainbowShimmer(el, text, state); break;
+    default:        draculaDrip(el, text, state); break;
   }
 }
 
-function cleanup() {
-  if (interval) { clearInterval(interval); interval = null; }
-  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+function cleanupState(state) {
+  if (state.interval) { clearInterval(state.interval); state.interval = null; }
+  if (state.animFrame) { cancelAnimationFrame(state.animFrame); state.animFrame = null; }
 }
 
-function wrapLetters(el) {
-  el.innerHTML = LETTERS.split('').map((ch, i) =>
+function wrapLetters(el, text) {
+  el.innerHTML = text.split('').map((ch, i) =>
     `<span class="logo-letter" data-index="${i}" style="display:inline-block;position:relative">${ch}</span>`
   ).join('');
   return el.querySelectorAll('.logo-letter');
@@ -61,8 +83,8 @@ function wrapLetters(el) {
 // periodically one letter flickers dim and reforms with a crimson pulse.
 // Clean, no spawned DOM elements.
 // ─────────────────────────────────────────────────
-function draculaDrip(el) {
-  const letters = wrapLetters(el);
+function draculaDrip(el, text, state) {
+  const letters = wrapLetters(el, text);
   el.classList.add('logo-anim-dracula');
   // Ensure no overflow escapes the navbar
   el.style.overflow = 'hidden';
@@ -79,7 +101,7 @@ function draculaDrip(el) {
       if (l.dataset.flickering) return;
       l.style.textShadow = `0 0 ${glow}px rgba(0,212,255,${0.08 * pulse})`;
     });
-    animFrame = requestAnimationFrame(breathe);
+    state.animFrame = requestAnimationFrame(breathe);
   }
 
   // Flicker event — one letter dims to crimson and snaps back
@@ -157,20 +179,20 @@ function draculaDrip(el) {
   // Start ambient breathing after entrance
   setTimeout(() => breathe(), 700);
 
-  interval = setInterval(flicker, 2800);
+  state.interval = setInterval(flicker, 2800);
 }
 
 // ─────────────────────────────────────────────────
 // CRT: Glitch — scan lines, chromatic aberration, character corruption
 // ─────────────────────────────────────────────────
-function crtGlitch(el) {
-  const letters = wrapLetters(el);
+function crtGlitch(el, text, state) {
+  const letters = wrapLetters(el, text);
   el.classList.add('logo-anim-crt');
   const glitchChars = '!@#$%^&*<>{}[]|/\\~01';
 
   // Initial typing effect
   letters.forEach((l, i) => {
-    const orig = LETTERS[i];
+    const orig = text[i];
     l.textContent = '_';
     l.style.opacity = '0.3';
     setTimeout(() => {
@@ -193,7 +215,7 @@ function crtGlitch(el) {
   function glitch() {
     const idx = Math.floor(Math.random() * letters.length);
     const letter = letters[idx];
-    const original = LETTERS[idx];
+    const original = text[idx];
 
     letter.textContent = glitchChars[Math.floor(Math.random() * glitchChars.length)];
 
@@ -223,14 +245,14 @@ function crtGlitch(el) {
     }
   }
 
-  interval = setInterval(burst, 2000 + Math.random() * 2500);
+  state.interval = setInterval(burst, 2000 + Math.random() * 2500);
 }
 
 // ─────────────────────────────────────────────────
 // Modern: Block Build — geometric assembly with glow
 // ─────────────────────────────────────────────────
-function blockBuild(el) {
-  const letters = wrapLetters(el);
+function blockBuild(el, text, state) {
+  const letters = wrapLetters(el, text);
   el.classList.add('logo-anim-modern');
 
   // Initial build: letters materialize from scattered positions with rotation
@@ -275,14 +297,14 @@ function blockBuild(el) {
     }, 300);
   }
 
-  interval = setInterval(rebuild, 3200);
+  state.interval = setInterval(rebuild, 3200);
 }
 
 // ─────────────────────────────────────────────────
 // Light: Ink Write — calligraphic stroke with ink splash
 // ─────────────────────────────────────────────────
-function inkWrite(el) {
-  const letters = wrapLetters(el);
+function inkWrite(el, text, state) {
+  const letters = wrapLetters(el, text);
   el.classList.add('logo-anim-light');
 
   // Initial write-in: quill stroke from left to right with varying pressure
@@ -324,14 +346,14 @@ function inkWrite(el) {
     }, 650);
   }
 
-  interval = setInterval(reink, 3800);
+  state.interval = setInterval(reink, 3800);
 }
 
 // ─────────────────────────────────────────────────
 // Pride: Prismatic Flow — flashy entrance, then readable with subtle rainbow underline
 // ─────────────────────────────────────────────────
-function rainbowShimmer(el) {
-  const letters = wrapLetters(el);
+function rainbowShimmer(el, text, state) {
+  const letters = wrapLetters(el, text);
   el.classList.add('logo-anim-pride');
 
   let t = 0;
@@ -377,7 +399,7 @@ function rainbowShimmer(el) {
       }
     }
 
-    animFrame = requestAnimationFrame(animate);
+    state.animFrame = requestAnimationFrame(animate);
   }
 
   // Phase 1: Flashy rainbow entrance (letters burst in with full color)

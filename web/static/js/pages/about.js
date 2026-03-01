@@ -1,6 +1,8 @@
-// Doogle v2 — About Page: Interactive, visual, simple explanations
+// Doogle v2 — About Page: Interactive, visual, simple explanations (tabbed layout)
 import { api } from '../api.js';
 import { icon, getCSS, hexToRgba, showModal } from '../components.js';
+
+let activeTab = 'overview';
 
 // ---- Data ----
 const pipelineSteps = [
@@ -177,6 +179,9 @@ const limitations = [
 
 // ---- Main Render ----
 export function renderAbout(container) {
+  // Clear any leftover intervals
+  if (window._pageInterval) { clearInterval(window._pageInterval); window._pageInterval = null; }
+
   container.innerHTML = `
     <div class="about-page">
       <section class="about-hero">
@@ -186,12 +191,9 @@ export function renderAbout(container) {
           <p class="about-tagline" aria-label="The search engine for the entire web — surface, deep, and dark."><span class="about-tagline-text"></span><span class="about-cursor">|</span></p>
         </div>
         <p class="about-subtitle">Open source. Zero tracking. Censorship-resistant. Every corner of the internet, indexed by the people.</p>
-        <button class="btn btn-primary about-explore-btn" onclick="document.getElementById('about-pipeline').scrollIntoView({behavior:'smooth'})">
-          Explore How It Works
-        </button>
       </section>
 
-      <section class="about-stats-bar about-reveal">
+      <section class="about-stats-bar">
         <div class="about-stat-item">
           <span class="about-stat-value" id="about-stat-docs">--</span>
           <span class="about-stat-label">Indexed Docs</span>
@@ -210,441 +212,24 @@ export function renderAbout(container) {
         </div>
       </section>
 
-      <!-- Our Vision -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Our Vision</h2>
-        <p class="about-section-desc">Google indexes 5% of the web and decides what you see. We're building infrastructure to index the other 95%.</p>
-        <div class="about-vision-grid">
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
-            <h3>The Entire Web</h3>
-            <p>Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
-            <h3>Privacy-First</h3>
-            <p>Your searches never leave your machine. No cookies, no tracking, no user profiles. Your node, your index, your rules.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--purple)">${icon('lock', 28)}</div>
-            <h3>Censorship-Resistant</h3>
-            <p>No single entity can remove results or block access. Decentralized by architecture, not just by promise.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--blue)">${icon('users', 28)}</div>
-            <h3>Community-Owned</h3>
-            <p>Not a product. Infrastructure for information freedom. Open source forever, governed by the people who run it.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- Your Role -->
-      <section class="about-section about-reveal" id="about-your-role">
-        <h2 class="about-section-title">Your Role</h2>
-        <p class="about-section-desc">Doogle works because different people care about different things. Your interests shape the network — no commitment needed, just be yourself.</p>
-        <div class="about-vision-grid">
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
-            <h3>The Explorer</h3>
-            <p>You pick topics in the wizard that interest you — cooking, science, gaming, whatever. Your node crawls those corners of the web and shares what it finds. You're building a specialized index just by browsing what you love.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
-            <h3>The Guardian</h3>
-            <p>You flag spam, phishing, and garbage when you see it. Reports spread across the network and bad actors get quarantined. The more people who flag, the cleaner the index gets for everyone.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--blue)">${icon('network', 28)}</div>
-            <h3>The Connector</h3>
-            <p>You keep your node running and connected. The longer your node is online, the more peers it serves, the more resilient the network becomes. Just leave it on — that's the whole contribution.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--purple)">${icon('search', 28)}</div>
-            <h3>The Specialist</h3>
-            <p>Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Nodes naturally specialize — some cover science, others cover local news, others cover niche hobbies.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--amber)">${icon('eye', 28)}</div>
-            <h3>The Curator</h3>
-            <p>You notice what's good and what's noise. Your browsing patterns, flags, and topic choices train the network's quality signals. The pages you keep coming back to rise; the junk you skip fades. You shape relevance without writing a single rule.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--red, #ef4444)">${icon('megaphone', 28)}</div>
-            <h3>The Amplifier</h3>
-            <p>You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics, new perspectives, and new corners of the web to the collective index.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--green)">${icon('trendingUp', 28)}</div>
-            <h3>The Archivist</h3>
-            <p>You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your long-running node becomes a time capsule — preserving knowledge that would otherwise be lost.</p>
-          </div>
-          <div class="about-vision-card">
-            <div class="about-vision-icon" style="color:var(--accent)">${icon('code', 28)}</div>
-            <h3>The Builder</h3>
-            <p>You see what's missing and build it. A better crawler for a specific content type, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.</p>
-          </div>
-        </div>
-        <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point: a system that adapts to the people who use it, not the other way around.</p>
-      </section>
-
-      <!-- Pipeline: How It Works -->
-      <section class="about-section about-reveal" id="about-pipeline">
-        <h2 class="about-section-title">How It Works</h2>
-        <p class="about-section-desc">From a website address to a search result — explained simply. Click any step for a deep dive.</p>
-        <div class="about-pipeline">
-          ${pipelineSteps.map((step, i) => `
-            <div class="about-pipeline-step" data-step="${i}">
-              <div class="about-pipeline-icon" style="color:${step.color}">${icon(step.icon, 28)}</div>
-              <div class="about-pipeline-label">${step.title}</div>
-            </div>
-            ${i < pipelineSteps.length - 1 ? `<div class="about-pipeline-arrow">${icon('arrowRight', 16, 'var(--text-muted)')}</div>` : ''}
-          `).join('')}
-        </div>
-        <div class="about-pipeline-detail" id="pipeline-detail">
-          <p class="about-eli5-hint">Click a step above to learn more</p>
-        </div>
-      </section>
-
-      <!-- Interactive PageRank Demo -->
-      <section class="about-section about-reveal" id="about-pagerank">
-        <h2 class="about-section-title">PageRank: The Popularity Contest</h2>
-        <p class="about-section-desc">Pages that lots of other pages link to are probably more important — just like the popular kid at school.</p>
-        <div class="about-interactive-demo">
-          <canvas id="pagerank-demo" width="600" height="360"></canvas>
-          <div class="about-demo-controls">
-            <button class="btn btn-primary" id="pr-add-link">Add a Link</button>
-            <button class="btn" id="pr-reset">Reset</button>
-          </div>
-          <p class="about-demo-caption">Click "Add a Link" to see how linking to a page increases its score. The bigger the circle, the higher the PageRank.</p>
-        </div>
-      </section>
-
-      <!-- Search Pipeline Demo -->
-      <section class="about-section about-reveal" id="about-search-demo">
-        <h2 class="about-section-title">Smart Search: Understanding You</h2>
-        <p class="about-section-desc">Doogle doesn't just match words — it understands what you mean.</p>
-        <div class="about-search-demo-wrap">
-          <div class="about-search-demo-input">
-            <input type="text" id="demo-query" placeholder='Try: intitle:golang -tutorial site:go.dev OR filetype:pdf' value="intitle:go -tutorial site:go.dev">
-            <button class="btn btn-primary" id="demo-parse-btn">Parse</button>
-          </div>
-          <div class="about-search-demo-result" id="demo-parse-result"></div>
-        </div>
-        <div class="about-search-features">
-          <div class="about-search-feature">
-            <div class="about-sf-icon" style="color:var(--accent)">${icon('search', 20)}</div>
-            <div>
-              <strong>Boolean Operators</strong>
-              <p>-exclude terms, OR disjunctions, phrase "exact match"</p>
-            </div>
-          </div>
-          <div class="about-search-feature">
-            <div class="about-sf-icon" style="color:var(--purple)">${icon('fileText', 20)}</div>
-            <div>
-              <strong>Search Dorks</strong>
-              <p>intitle:, inurl:, intext:, filetype:, before:/after:, has:https</p>
-            </div>
-          </div>
-          <div class="about-search-feature">
-            <div class="about-sf-icon" style="color:var(--green)">${icon('globe', 20)}</div>
-            <div>
-              <strong>Filters</strong>
-              <p>site:domain, lang:xx (15 stemmers), synonym expansion</p>
-            </div>
-          </div>
-          <div class="about-search-feature">
-            <div class="about-sf-icon" style="color:var(--amber)">${icon('zap', 20)}</div>
-            <div>
-              <strong>Smart Matching</strong>
-              <p>Fuzzy typo tolerance, synonym expansion, auto phrase boost</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Ranking Formula Visual -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">How Results Are Ranked</h2>
-        <p class="about-section-desc">Like a recipe — mix the right ingredients in the right amounts.</p>
-        <div class="about-ranking-visual">
-          <div class="about-rank-formula">
-            <div class="about-rank-block" style="--color:var(--accent)">
-              <div class="about-rank-bar" style="height:70%"></div>
-              <span>BM25<br>Text Match</span>
-            </div>
-            <span class="about-rank-op">x</span>
-            <div class="about-rank-block" style="--color:var(--green)">
-              <div class="about-rank-bar" style="height:65%"></div>
-              <span>StaticScore<br><small style="opacity:0.7">pre-computed</small></span>
-            </div>
-            <span class="about-rank-op">x</span>
-            <div class="about-rank-block" style="--color:var(--amber)">
-              <div class="about-rank-bar" style="height:80%"></div>
-              <span>Freshness<br>Decay</span>
-            </div>
-            <span class="about-rank-op">=</span>
-            <div class="about-rank-block about-rank-result" style="--color:var(--purple)">
-              <div class="about-rank-bar" style="height:65%"></div>
-              <span>Final<br>Score</span>
-            </div>
-          </div>
-          <div class="about-rank-weights">
-            <div style="grid-column:1/-1;margin-bottom:4px;color:var(--text-secondary);font-size:0.85em"><strong>StaticScore</strong> = (0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8) &nbsp; <em>range [0.1, 2.5] — computed once at index time</em></div>
-            <div><span class="about-dot" style="background:var(--accent)"></span> E-E-A-T: 20%</div>
-            <div><span class="about-dot" style="background:var(--green)"></span> Quality: 20%</div>
-            <div><span class="about-dot" style="background:var(--blue)"></span> PageRank: 20%</div>
-            <div><span class="about-dot" style="background:var(--amber)"></span> Readability: 8%</div>
-            <div><span class="about-dot" style="background:var(--purple)"></span> Citation: 8%</div>
-            <div><span class="about-dot" style="background:var(--red)"></span> SEO: 8%</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Capabilities -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Capabilities</h2>
-        <p class="about-section-desc">Everything packed into a single Go binary. Click any card for details.</p>
-        <div class="about-capabilities-grid">
-          ${capabilities.map((cap, i) => `
-            <div class="about-cap-card" data-cap-idx="${i}" style="cursor:pointer">
-              <div class="about-cap-icon" style="color:var(--accent)">${icon(cap.icon, 28)}</div>
-              <h3>${cap.title}</h3>
-              <p>${cap.desc}</p>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-
-      <!-- Architecture -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Architecture</h2>
-        <p class="about-section-desc">A single binary. No microservices. No external dependencies at runtime. Hover any node to see data flow.</p>
-        <div class="about-arch-canvas-wrap">
-          <canvas id="arch-diagram" width="900" height="520"></canvas>
-          <div class="about-arch-tooltip" id="arch-tooltip"></div>
-        </div>
-        <div class="about-arch-legend">
-          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--accent)"></span>Application</span>
-          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--blue)"></span>P2P Network</span>
-          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--green)"></span>Storage</span>
-          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--purple)"></span>Trust</span>
-        </div>
-        <div class="about-tech-badges">
-          ${techStack.map(t => `<span class="about-tech-badge" style="border-color:${t.color};color:${t.color}">${t.name}</span>`).join('')}
-        </div>
-      </section>
-
-      <!-- Limitations -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Limitations &amp; Trade-offs</h2>
-        <p class="about-section-desc">Honest disclosure — what Doogle can't do (yet), and why.</p>
-        <div class="about-limitations-grid">
-          ${limitations.map(lim => `
-            <div class="about-limit-card">
-              <div class="about-limit-header">
-                <h3>${lim.title}</h3>
-                <span class="badge ${lim.badge === 'planned' ? 'badge-amber' : 'badge-blue'}">${lim.badge}</span>
-              </div>
-              <p>${lim.desc}</p>
-            </div>
-          `).join('')}
-        </div>
-      </section>
-
-      <!-- Node Requirements -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Run a Node</h2>
-        <p class="about-section-desc">Everything you need to run your own Doogle node. It's a single binary — no databases, no external services.</p>
-        <div class="about-requirements-grid">
-          <div class="about-req-card">
-            <div class="about-req-icon" style="color:var(--green)">${icon('cpu', 24)}</div>
-            <h3>System</h3>
-            <ul class="about-req-list">
-              <li><strong>OS:</strong> Linux, macOS, or Windows</li>
-              <li><strong>CPU:</strong> 1 core min, 2-4 recommended</li>
-              <li><strong>RAM:</strong> 256 MB min, 512 MB-1 GB recommended</li>
-              <li><strong>Disk:</strong> ~50 MB per 1K indexed pages</li>
-            </ul>
-          </div>
-          <div class="about-req-card">
-            <div class="about-req-icon" style="color:var(--blue)">${icon('radio', 24)}</div>
-            <h3>Network</h3>
-            <ul class="about-req-list">
-              <li><strong>Port 4001</strong> — P2P (TCP + UDP/QUIC)</li>
-              <li><strong>Port 8080</strong> — HTTP API &amp; Web UI</li>
-              <li>Auto NAT traversal (UPnP / hole punching)</li>
-              <li>mDNS for local peer discovery</li>
-            </ul>
-          </div>
-          <div class="about-req-card">
-            <div class="about-req-icon" style="color:var(--amber)">${icon('code', 24)}</div>
-            <h3>Build</h3>
-            <ul class="about-req-list">
-              <li><strong>Go 1.22+</strong> to compile from source</li>
-              <li>Or use the <strong>Docker image</strong> (Alpine-based)</li>
-              <li>Zero runtime dependencies</li>
-              <li>Optional: Chromium for headless JS rendering</li>
-            </ul>
-          </div>
-          <div class="about-req-card">
-            <div class="about-req-icon" style="color:var(--purple)">${icon('database', 24)}</div>
-            <h3>Storage</h3>
-            <ul class="about-req-list">
-              <li><strong>BadgerDB</strong> — URL queue, metadata, link graph, dedup</li>
-              <li><strong>Bleve</strong> — full-text search index</li>
-              <li>All stored in <code>--data-dir</code> (default: <code>./data/doogle/</code>)</li>
-              <li>Peer identity key persisted across restarts</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- Roadmap -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Roadmap</h2>
-        <p class="about-section-desc">Six phases from foundation to ecosystem. We're finishing Phase 2.</p>
-        <div class="about-roadmap-timeline">
-          <div class="about-roadmap-phase about-roadmap-done">
-            <h3><span class="badge badge-green">complete</span> Phase 1 — Foundation</h3>
-            <ul>
-              <li>P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)</li>
-              <li>Crawler with rate limiting, robots.txt, headless browser, live feed</li>
-              <li>Indexer with 10+ quality signals, E-E-A-T, spam, PageRank</li>
-              <li>BM25 search with boolean operators, search dorks, 15 language stemmers, synonyms, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
-              <li>Admin dashboard with 5 themes, wizard, network graph</li>
-              <li>Docker + Compose support</li>
-            </ul>
-          </div>
-          <div class="about-roadmap-phase about-roadmap-done">
-            <h3><span class="badge badge-green">complete</span> Phase 2 — Quality & Scale</h3>
-            <ul>
-              <li>Spam reporting, peer trust scoring, auto-quarantine, domain flagging</li>
-              <li>16-topic onboarding wizard (Knowledge, Lifestyle, Creative, Technology)</li>
-              <li>CLI search tool, backup & restore, production builds</li>
-              <li>Search result caching, multi-language search, CLI tools</li>
-            </ul>
-          </div>
-          <div class="about-roadmap-phase about-roadmap-next">
-            <h3><span class="badge badge-blue">next</span> Phase 2.5 — Trust & Safety</h3>
-            <ul>
-              <li>Sybil resistance and consensus-based domain blocklists</li>
-              <li>Reputation-weighted search ranking</li>
-              <li>Trust dashboard UI, admin allowlist/denylist</li>
-              <li>Horizontal sharding, PDF/doc indexing, image search</li>
-            </ul>
-          </div>
-          <div class="about-roadmap-phase about-roadmap-dark">
-            <h3><span class="badge badge-purple">planned</span> Phase 3 — Dark Web & Privacy</h3>
-            <ul>
-              <li>Tor integration &amp; .onion crawling via SOCKS5 proxy</li>
-              <li>I2P support via SAM bridge for eepsite crawling</li>
-              <li>Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)</li>
-              <li>Content safety layer (CSAM hash matching, configurable blocklists)</li>
-            </ul>
-          </div>
-          <div class="about-roadmap-phase about-roadmap-next">
-            <h3><span class="badge badge-blue">planned</span> Phase 4 — Intelligence</h3>
-            <ul>
-              <li>Semantic search (sentence embeddings, hybrid BM25 + vector)</li>
-              <li>Knowledge graph with entity cards</li>
-              <li>ML-based ranking, query intent classification</li>
-              <li>Automatic summarization, topic clustering</li>
-            </ul>
-          </div>
-          <div class="about-roadmap-phase about-roadmap-next">
-            <h3><span class="badge badge-blue">planned</span> Phase 5 — Ecosystem</h3>
-            <ul>
-              <li>Browser extension, mobile client</li>
-              <li>Light nodes (~50 MB RAM, relay-only)</li>
-              <li>Plugin system, multi-platform releases</li>
-              <li>Public bootstrap network, community governance</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- Get Started -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">Get Started</h2>
-        <p class="about-section-desc">Three ways to run your own Doogle node.</p>
-        <div class="about-getstarted-grid">
-          <div class="about-terminal">
-            <div class="about-terminal-header">
-              <span class="about-terminal-dot" style="background:var(--red)"></span>
-              <span class="about-terminal-dot" style="background:var(--amber)"></span>
-              <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Quick Start</span>
-            </div>
-            <pre class="about-terminal-body"><code>git clone https://github.com/gorlitzer/doogle-enhanced.git
-cd doogle-enhanced
-make run
-
-# Open http://localhost:8080</code></pre>
-          </div>
-          <div class="about-terminal">
-            <div class="about-terminal-header">
-              <span class="about-terminal-dot" style="background:var(--red)"></span>
-              <span class="about-terminal-dot" style="background:var(--amber)"></span>
-              <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Docker</span>
-            </div>
-            <pre class="about-terminal-body"><code># Single node
-docker compose up -d node1
-
-# Full 3-node cluster
-docker compose up -d</code></pre>
-          </div>
-          <div class="about-terminal">
-            <div class="about-terminal-header">
-              <span class="about-terminal-dot" style="background:var(--red)"></span>
-              <span class="about-terminal-dot" style="background:var(--amber)"></span>
-              <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Second Node</span>
-            </div>
-            <pre class="about-terminal-body"><code>./bin/doogle --port 4002 --api-port 8081 \\
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/&lt;PEER_ID&gt; \\
-  --data-dir ./data/node2</code></pre>
-          </div>
-        </div>
-      </section>
-
-      <!-- References -->
-      <section class="about-section about-reveal">
-        <h2 class="about-section-title">References &amp; Further Reading</h2>
-        <p class="about-section-desc">The standards, papers, and libraries that power Doogle.</p>
-        <div class="about-references-grid">
-          <a href="https://blevesearch.com/" target="_blank" class="about-ref-card">
-            <strong>Bleve Full-Text Search</strong>
-            <p>Go-native full-text search and indexing library</p>
-            <span class="badge badge-green">blevesearch.com</span>
-          </a>
-          <a href="https://docs.libp2p.io/" target="_blank" class="about-ref-card">
-            <strong>libp2p Networking</strong>
-            <p>Modular peer-to-peer networking stack</p>
-            <span class="badge badge-blue">docs.libp2p.io</span>
-          </a>
-          <a href="https://dgraph.io/badger" target="_blank" class="about-ref-card">
-            <strong>BadgerDB</strong>
-            <p>Fast key-value store written in pure Go</p>
-            <span class="badge badge-amber">dgraph.io/badger</span>
-          </a>
-          <a href="https://en.wikipedia.org/wiki/Consistent_hashing" target="_blank" class="about-ref-card">
-            <strong>Consistent Hashing</strong>
-            <p>Karger et al. — distributed hash table routing</p>
-            <span class="badge badge-purple">Wikipedia</span>
-          </a>
-          <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank" class="about-ref-card">
-            <strong>GossipSub Protocol</strong>
-            <p>libp2p publish/subscribe messaging</p>
-            <span class="badge badge-blue">docs.libp2p.io</span>
-          </a>
-          <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank" class="about-ref-card">
-            <strong>BM25 Scoring</strong>
-            <p>Okapi BM25 probabilistic relevance ranking</p>
-            <span class="badge badge-accent">Wikipedia</span>
-          </a>
-        </div>
-      </section>
+      <div class="docs-nav" id="about-tabs">
+        <button class="docs-nav-btn active" data-tab="overview">
+          ${icon('globe', 16)} Overview
+        </button>
+        <button class="docs-nav-btn" data-tab="howitworks">
+          ${icon('cpu', 16)} How It Works
+        </button>
+        <button class="docs-nav-btn" data-tab="features">
+          ${icon('zap', 16)} Features
+        </button>
+        <button class="docs-nav-btn" data-tab="roadmap">
+          ${icon('trendingUp', 16)} Roadmap
+        </button>
+        <button class="docs-nav-btn" data-tab="getstarted">
+          ${icon('code', 16)} Get Started
+        </button>
+      </div>
+      <div class="about-tab-body" id="about-content"></div>
 
       <footer class="about-footer">
         <p>Built for information freedom. Open source forever.</p>
@@ -654,12 +239,491 @@ docker compose up -d</code></pre>
 
   typewriter('The search engine for the entire web — surface, deep, and dark.');
   loadStats();
-  startPipelineAnimation();
+
+  document.querySelectorAll('#about-tabs .docs-nav-btn').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activeTab = tab.dataset.tab;
+      document.querySelectorAll('#about-tabs .docs-nav-btn').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderTab();
+    });
+  });
+
+  renderTab();
+}
+
+function renderTab() {
+  const el = document.getElementById('about-content');
+  if (!el) return;
+
+  if (window._pageInterval) { clearInterval(window._pageInterval); window._pageInterval = null; }
+
+  const tabs = {
+    overview: renderOverview,
+    howitworks: renderHowItWorks,
+    features: renderFeatures,
+    roadmap: renderRoadmap,
+    getstarted: renderGetStarted,
+  };
+
+  const fn = tabs[activeTab] || renderOverview;
+  fn(el);
   setupScrollReveal();
+}
+
+// ─── Tab: Overview ────────────────────────────────────
+function renderOverview(el) {
+  el.innerHTML = `
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Our Vision</h2>
+      <p class="about-section-desc">Google indexes 5% of the web and decides what you see. We're building infrastructure to index the other 95%.</p>
+      <div class="about-vision-grid">
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
+          <h3>The Entire Web</h3>
+          <p>Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
+          <h3>Privacy-First</h3>
+          <p>Your searches never leave your machine. No cookies, no tracking, no user profiles. Your node, your index, your rules.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--purple)">${icon('lock', 28)}</div>
+          <h3>Censorship-Resistant</h3>
+          <p>No single entity can remove results or block access. Decentralized by architecture, not just by promise.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--blue)">${icon('users', 28)}</div>
+          <h3>Community-Owned</h3>
+          <p>Not a product. Infrastructure for information freedom. Open source forever, governed by the people who run it.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal" id="about-your-role">
+      <h2 class="about-section-title">Your Role</h2>
+      <p class="about-section-desc">Doogle works because different people care about different things. Your interests shape the network — no commitment needed, just be yourself.</p>
+      <div class="about-vision-grid">
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
+          <h3>The Explorer</h3>
+          <p>You pick topics in the wizard that interest you — cooking, science, gaming, whatever. Your node crawls those corners of the web and shares what it finds. You're building a specialized index just by browsing what you love.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
+          <h3>The Guardian</h3>
+          <p>You flag spam, phishing, and garbage when you see it. Reports spread across the network and bad actors get quarantined. The more people who flag, the cleaner the index gets for everyone.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--blue)">${icon('network', 28)}</div>
+          <h3>The Connector</h3>
+          <p>You keep your node running and connected. The longer your node is online, the more peers it serves, the more resilient the network becomes. Just leave it on — that's the whole contribution.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--purple)">${icon('search', 28)}</div>
+          <h3>The Specialist</h3>
+          <p>Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Nodes naturally specialize — some cover science, others cover local news, others cover niche hobbies.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--amber)">${icon('eye', 28)}</div>
+          <h3>The Curator</h3>
+          <p>You notice what's good and what's noise. Your browsing patterns, flags, and topic choices train the network's quality signals. The pages you keep coming back to rise; the junk you skip fades. You shape relevance without writing a single rule.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--red, #ef4444)">${icon('megaphone', 28)}</div>
+          <h3>The Amplifier</h3>
+          <p>You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics, new perspectives, and new corners of the web to the collective index.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--green)">${icon('trendingUp', 28)}</div>
+          <h3>The Archivist</h3>
+          <p>You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your long-running node becomes a time capsule — preserving knowledge that would otherwise be lost.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--accent)">${icon('code', 28)}</div>
+          <h3>The Builder</h3>
+          <p>You see what's missing and build it. A better crawler for a specific content type, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.</p>
+        </div>
+      </div>
+      <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point: a system that adapts to the people who use it, not the other way around.</p>
+    </section>
+  `;
+}
+
+// ─── Tab: How It Works ────────────────────────────────
+function renderHowItWorks(el) {
+  el.innerHTML = `
+    <section class="about-section about-reveal" id="about-pipeline">
+      <h2 class="about-section-title">The Pipeline</h2>
+      <p class="about-section-desc">From a website address to a search result — explained simply. Click any step for a deep dive.</p>
+      <div class="about-pipeline">
+        ${pipelineSteps.map((step, i) => `
+          <div class="about-pipeline-step" data-step="${i}">
+            <div class="about-pipeline-icon" style="color:${step.color}">${icon(step.icon, 28)}</div>
+            <div class="about-pipeline-label">${step.title}</div>
+          </div>
+          ${i < pipelineSteps.length - 1 ? `<div class="about-pipeline-arrow">${icon('arrowRight', 16, 'var(--text-muted)')}</div>` : ''}
+        `).join('')}
+      </div>
+      <div class="about-pipeline-detail" id="pipeline-detail">
+        <p class="about-eli5-hint">Click a step above to learn more</p>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal" id="about-pagerank">
+      <h2 class="about-section-title">PageRank: The Popularity Contest</h2>
+      <p class="about-section-desc">Pages that lots of other pages link to are probably more important — just like the popular kid at school.</p>
+      <div class="about-interactive-demo">
+        <canvas id="pagerank-demo" width="600" height="360"></canvas>
+        <div class="about-demo-controls">
+          <button class="btn btn-primary" id="pr-add-link">Add a Link</button>
+          <button class="btn" id="pr-reset">Reset</button>
+        </div>
+        <p class="about-demo-caption">Click "Add a Link" to see how linking to a page increases its score. The bigger the circle, the higher the PageRank.</p>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal" id="about-search-demo">
+      <h2 class="about-section-title">Smart Search: Understanding You</h2>
+      <p class="about-section-desc">Doogle doesn't just match words — it understands what you mean.</p>
+      <div class="about-search-demo-wrap">
+        <div class="about-search-demo-input">
+          <input type="text" id="demo-query" placeholder='Try: intitle:golang -tutorial site:go.dev OR filetype:pdf' value="intitle:go -tutorial site:go.dev">
+          <button class="btn btn-primary" id="demo-parse-btn">Parse</button>
+        </div>
+        <div class="about-search-demo-result" id="demo-parse-result"></div>
+      </div>
+      <div class="about-search-features">
+        <div class="about-search-feature">
+          <div class="about-sf-icon" style="color:var(--accent)">${icon('search', 20)}</div>
+          <div>
+            <strong>Boolean Operators</strong>
+            <p>-exclude terms, OR disjunctions, phrase "exact match"</p>
+          </div>
+        </div>
+        <div class="about-search-feature">
+          <div class="about-sf-icon" style="color:var(--purple)">${icon('fileText', 20)}</div>
+          <div>
+            <strong>Search Dorks</strong>
+            <p>intitle:, inurl:, intext:, filetype:, before:/after:, has:https</p>
+          </div>
+        </div>
+        <div class="about-search-feature">
+          <div class="about-sf-icon" style="color:var(--green)">${icon('globe', 20)}</div>
+          <div>
+            <strong>Filters</strong>
+            <p>site:domain, lang:xx (15 stemmers), synonym expansion</p>
+          </div>
+        </div>
+        <div class="about-search-feature">
+          <div class="about-sf-icon" style="color:var(--amber)">${icon('zap', 20)}</div>
+          <div>
+            <strong>Smart Matching</strong>
+            <p>Fuzzy typo tolerance, synonym expansion, auto phrase boost</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">How Results Are Ranked</h2>
+      <p class="about-section-desc">Like a recipe — mix the right ingredients in the right amounts.</p>
+      <div class="about-ranking-visual">
+        <div class="about-rank-formula">
+          <div class="about-rank-block" style="--color:var(--accent)">
+            <div class="about-rank-bar" style="height:70%"></div>
+            <span>BM25<br>Text Match</span>
+          </div>
+          <span class="about-rank-op">x</span>
+          <div class="about-rank-block" style="--color:var(--green)">
+            <div class="about-rank-bar" style="height:65%"></div>
+            <span>StaticScore<br><small style="opacity:0.7">pre-computed</small></span>
+          </div>
+          <span class="about-rank-op">x</span>
+          <div class="about-rank-block" style="--color:var(--amber)">
+            <div class="about-rank-bar" style="height:80%"></div>
+            <span>Freshness<br>Decay</span>
+          </div>
+          <span class="about-rank-op">=</span>
+          <div class="about-rank-block about-rank-result" style="--color:var(--purple)">
+            <div class="about-rank-bar" style="height:65%"></div>
+            <span>Final<br>Score</span>
+          </div>
+        </div>
+        <div class="about-rank-weights">
+          <div style="grid-column:1/-1;margin-bottom:4px;color:var(--text-secondary);font-size:0.85em"><strong>StaticScore</strong> = (0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8) &nbsp; <em>range [0.1, 2.5] — computed once at index time</em></div>
+          <div><span class="about-dot" style="background:var(--accent)"></span> E-E-A-T: 20%</div>
+          <div><span class="about-dot" style="background:var(--green)"></span> Quality: 20%</div>
+          <div><span class="about-dot" style="background:var(--blue)"></span> PageRank: 20%</div>
+          <div><span class="about-dot" style="background:var(--amber)"></span> Readability: 8%</div>
+          <div><span class="about-dot" style="background:var(--purple)"></span> Citation: 8%</div>
+          <div><span class="about-dot" style="background:var(--red)"></span> SEO: 8%</div>
+        </div>
+      </div>
+    </section>
+  `;
+
+  startPipelineAnimation();
   setupPageRankDemo();
   setupSearchDemo();
+}
+
+// ─── Tab: Features ────────────────────────────────────
+function renderFeatures(el) {
+  el.innerHTML = `
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Capabilities</h2>
+      <p class="about-section-desc">Everything packed into a single Go binary. Click any card for details.</p>
+      <div class="about-capabilities-grid">
+        ${capabilities.map((cap, i) => `
+          <div class="about-cap-card" data-cap-idx="${i}" style="cursor:pointer">
+            <div class="about-cap-icon" style="color:var(--accent)">${icon(cap.icon, 28)}</div>
+            <h3>${cap.title}</h3>
+            <p>${cap.desc}</p>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Architecture</h2>
+      <p class="about-section-desc">A single binary. No microservices. No external dependencies at runtime. Hover any node to see data flow.</p>
+      <div class="about-arch-canvas-wrap">
+        <canvas id="arch-diagram" width="900" height="520"></canvas>
+        <div class="about-arch-tooltip" id="arch-tooltip"></div>
+      </div>
+      <div class="about-arch-legend">
+        <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--accent)"></span>Application</span>
+        <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--blue)"></span>P2P Network</span>
+        <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--green)"></span>Storage</span>
+        <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--purple)"></span>Trust</span>
+      </div>
+      <div class="about-tech-badges">
+        ${techStack.map(t => `<span class="about-tech-badge" style="border-color:${t.color};color:${t.color}">${t.name}</span>`).join('')}
+      </div>
+    </section>
+  `;
+
   setupCapabilityModals();
   setupArchDiagram();
+}
+
+// ─── Tab: Roadmap ─────────────────────────────────────
+function renderRoadmap(el) {
+  el.innerHTML = `
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Roadmap</h2>
+      <p class="about-section-desc">Six phases from foundation to ecosystem. We're finishing Phase 2.</p>
+      <div class="about-roadmap-timeline">
+        <div class="about-roadmap-phase about-roadmap-done">
+          <h3><span class="badge badge-green">complete</span> Phase 1 — Foundation</h3>
+          <ul>
+            <li>P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)</li>
+            <li>Crawler with rate limiting, robots.txt, headless browser, live feed</li>
+            <li>Indexer with 10+ quality signals, E-E-A-T, spam, PageRank</li>
+            <li>BM25 search with boolean operators, search dorks, 15 language stemmers, synonyms, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
+            <li>Admin dashboard with 5 themes, wizard, network graph</li>
+            <li>Docker + Compose support</li>
+          </ul>
+        </div>
+        <div class="about-roadmap-phase about-roadmap-done">
+          <h3><span class="badge badge-green">complete</span> Phase 2 — Quality & Scale</h3>
+          <ul>
+            <li>Spam reporting, peer trust scoring, auto-quarantine, domain flagging</li>
+            <li>16-topic onboarding wizard (Knowledge, Lifestyle, Creative, Technology)</li>
+            <li>CLI search tool, backup & restore, production builds</li>
+            <li>Search result caching, multi-language search, CLI tools</li>
+          </ul>
+        </div>
+        <div class="about-roadmap-phase about-roadmap-next">
+          <h3><span class="badge badge-blue">next</span> Phase 2.5 — Trust & Safety</h3>
+          <ul>
+            <li>Sybil resistance and consensus-based domain blocklists</li>
+            <li>Reputation-weighted search ranking</li>
+            <li>Trust dashboard UI, admin allowlist/denylist</li>
+            <li>Horizontal sharding, PDF/doc indexing, image search</li>
+          </ul>
+        </div>
+        <div class="about-roadmap-phase about-roadmap-dark">
+          <h3><span class="badge badge-purple">planned</span> Phase 3 — Dark Web & Privacy</h3>
+          <ul>
+            <li>Tor integration &amp; .onion crawling via SOCKS5 proxy</li>
+            <li>I2P support via SAM bridge for eepsite crawling</li>
+            <li>Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)</li>
+            <li>Content safety layer (CSAM hash matching, configurable blocklists)</li>
+          </ul>
+        </div>
+        <div class="about-roadmap-phase about-roadmap-next">
+          <h3><span class="badge badge-blue">planned</span> Phase 4 — Intelligence</h3>
+          <ul>
+            <li>Semantic search (sentence embeddings, hybrid BM25 + vector)</li>
+            <li>Knowledge graph with entity cards</li>
+            <li>ML-based ranking, query intent classification</li>
+            <li>Automatic summarization, topic clustering</li>
+          </ul>
+        </div>
+        <div class="about-roadmap-phase about-roadmap-next">
+          <h3><span class="badge badge-blue">planned</span> Phase 5 — Ecosystem</h3>
+          <ul>
+            <li>Browser extension, mobile client</li>
+            <li>Light nodes (~50 MB RAM, relay-only)</li>
+            <li>Plugin system, multi-platform releases</li>
+            <li>Public bootstrap network, community governance</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Limitations &amp; Trade-offs</h2>
+      <p class="about-section-desc">Honest disclosure — what Doogle can't do (yet), and why.</p>
+      <div class="about-limitations-grid">
+        ${limitations.map(lim => `
+          <div class="about-limit-card">
+            <div class="about-limit-header">
+              <h3>${lim.title}</h3>
+              <span class="badge ${lim.badge === 'planned' ? 'badge-amber' : 'badge-blue'}">${lim.badge}</span>
+            </div>
+            <p>${lim.desc}</p>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+// ─── Tab: Get Started ─────────────────────────────────
+function renderGetStarted(el) {
+  el.innerHTML = `
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Run a Node</h2>
+      <p class="about-section-desc">Everything you need to run your own Doogle node. It's a single binary — no databases, no external services.</p>
+      <div class="about-requirements-grid">
+        <div class="about-req-card">
+          <div class="about-req-icon" style="color:var(--green)">${icon('cpu', 24)}</div>
+          <h3>System</h3>
+          <ul class="about-req-list">
+            <li><strong>OS:</strong> Linux, macOS, or Windows</li>
+            <li><strong>CPU:</strong> 1 core min, 2-4 recommended</li>
+            <li><strong>RAM:</strong> 256 MB min, 512 MB-1 GB recommended</li>
+            <li><strong>Disk:</strong> ~50 MB per 1K indexed pages</li>
+          </ul>
+        </div>
+        <div class="about-req-card">
+          <div class="about-req-icon" style="color:var(--blue)">${icon('radio', 24)}</div>
+          <h3>Network</h3>
+          <ul class="about-req-list">
+            <li><strong>Port 4001</strong> — P2P (TCP + UDP/QUIC)</li>
+            <li><strong>Port 8080</strong> — HTTP API &amp; Web UI</li>
+            <li>Auto NAT traversal (UPnP / hole punching)</li>
+            <li>mDNS for local peer discovery</li>
+          </ul>
+        </div>
+        <div class="about-req-card">
+          <div class="about-req-icon" style="color:var(--amber)">${icon('code', 24)}</div>
+          <h3>Build</h3>
+          <ul class="about-req-list">
+            <li><strong>Go 1.22+</strong> to compile from source</li>
+            <li>Or use the <strong>Docker image</strong> (Alpine-based)</li>
+            <li>Zero runtime dependencies</li>
+            <li>Optional: Chromium for headless JS rendering</li>
+          </ul>
+        </div>
+        <div class="about-req-card">
+          <div class="about-req-icon" style="color:var(--purple)">${icon('database', 24)}</div>
+          <h3>Storage</h3>
+          <ul class="about-req-list">
+            <li><strong>BadgerDB</strong> — URL queue, metadata, link graph, dedup</li>
+            <li><strong>Bleve</strong> — full-text search index</li>
+            <li>All stored in <code>--data-dir</code> (default: <code>./data/doogle/</code>)</li>
+            <li>Peer identity key persisted across restarts</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Quick Start</h2>
+      <p class="about-section-desc">Three ways to run your own Doogle node.</p>
+      <div class="about-getstarted-grid">
+        <div class="about-terminal">
+          <div class="about-terminal-header">
+            <span class="about-terminal-dot" style="background:var(--red)"></span>
+            <span class="about-terminal-dot" style="background:var(--amber)"></span>
+            <span class="about-terminal-dot" style="background:var(--green)"></span>
+            <span class="about-terminal-title">Quick Start</span>
+          </div>
+          <pre class="about-terminal-body"><code>git clone https://github.com/gorlitzer/doogle-enhanced.git
+cd doogle-enhanced
+make run
+
+# Open http://localhost:8080</code></pre>
+        </div>
+        <div class="about-terminal">
+          <div class="about-terminal-header">
+            <span class="about-terminal-dot" style="background:var(--red)"></span>
+            <span class="about-terminal-dot" style="background:var(--amber)"></span>
+            <span class="about-terminal-dot" style="background:var(--green)"></span>
+            <span class="about-terminal-title">Docker</span>
+          </div>
+          <pre class="about-terminal-body"><code># Single node
+docker compose up -d node1
+
+# Full 3-node cluster
+docker compose up -d</code></pre>
+        </div>
+        <div class="about-terminal">
+          <div class="about-terminal-header">
+            <span class="about-terminal-dot" style="background:var(--red)"></span>
+            <span class="about-terminal-dot" style="background:var(--amber)"></span>
+            <span class="about-terminal-dot" style="background:var(--green)"></span>
+            <span class="about-terminal-title">Second Node</span>
+          </div>
+          <pre class="about-terminal-body"><code>./bin/doogle --port 4002 --api-port 8081 \\
+  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/&lt;PEER_ID&gt; \\
+  --data-dir ./data/node2</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">References &amp; Further Reading</h2>
+      <p class="about-section-desc">The standards, papers, and libraries that power Doogle.</p>
+      <div class="about-references-grid">
+        <a href="https://blevesearch.com/" target="_blank" class="about-ref-card">
+          <strong>Bleve Full-Text Search</strong>
+          <p>Go-native full-text search and indexing library</p>
+          <span class="badge badge-green">blevesearch.com</span>
+        </a>
+        <a href="https://docs.libp2p.io/" target="_blank" class="about-ref-card">
+          <strong>libp2p Networking</strong>
+          <p>Modular peer-to-peer networking stack</p>
+          <span class="badge badge-blue">docs.libp2p.io</span>
+        </a>
+        <a href="https://dgraph.io/badger" target="_blank" class="about-ref-card">
+          <strong>BadgerDB</strong>
+          <p>Fast key-value store written in pure Go</p>
+          <span class="badge badge-amber">dgraph.io/badger</span>
+        </a>
+        <a href="https://en.wikipedia.org/wiki/Consistent_hashing" target="_blank" class="about-ref-card">
+          <strong>Consistent Hashing</strong>
+          <p>Karger et al. — distributed hash table routing</p>
+          <span class="badge badge-purple">Wikipedia</span>
+        </a>
+        <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank" class="about-ref-card">
+          <strong>GossipSub Protocol</strong>
+          <p>libp2p publish/subscribe messaging</p>
+          <span class="badge badge-blue">docs.libp2p.io</span>
+        </a>
+        <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank" class="about-ref-card">
+          <strong>BM25 Scoring</strong>
+          <p>Okapi BM25 probabilistic relevance ranking</p>
+          <span class="badge badge-accent">Wikipedia</span>
+        </a>
+      </div>
+    </section>
+  `;
 }
 
 // ---- Capability Card Modals ----
@@ -1065,7 +1129,6 @@ function setupArchDiagram() {
   const blue = () => getCSS('--blue');
   const green = () => getCSS('--green');
   const purple = () => getCSS('--purple');
-  const amber = () => getCSS('--amber');
   const textPri = () => getCSS('--text-primary');
   const textSec = () => getCSS('--text-secondary');
   const bgCard = () => getCSS('--bg-card');
@@ -1108,19 +1171,19 @@ function setupArchDiagram() {
 
   // Edges — data flows between nodes
   const archEdges = [
-    // App → Storage
+    // App -> Storage
     { from: 'crawler', to: 'badger',  label: 'URLs' },
     { from: 'indexer', to: 'bleve',   label: 'docs' },
     { from: 'indexer', to: 'links',   label: 'edges' },
     { from: 'search',  to: 'bleve',   label: 'query' },
     { from: 'api',     to: 'trust',   label: 'reports' },
 
-    // App ↔ App
+    // App <-> App
     { from: 'crawler', to: 'indexer', label: 'pages' },
     { from: 'api',     to: 'search',  label: 'req' },
     { from: 'api',     to: 'crawler', label: 'seeds' },
 
-    // App ↔ P2P
+    // App <-> P2P
     { from: 'crawler', to: 'gossip',  label: 'URLs' },
     { from: 'search',  to: 'streams', label: 'fanout' },
     { from: 'indexer', to: 'shard',   label: 'assign' },
@@ -1131,7 +1194,7 @@ function setupArchDiagram() {
     { from: 'gossip',  to: 'streams', label: 'discover' },
     { from: 'shard',   to: 'replica', label: 'catalog' },
 
-    // P2P → Storage
+    // P2P -> Storage
     { from: 'gossip',  to: 'trust',   label: 'spam' },
     { from: 'replica', to: 'badger',  label: 'sync' },
   ];

@@ -1294,6 +1294,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 
 /* Hero */
 .about-page { overflow-x: hidden; }
+.about-tab-body { padding: 0; }
 .about-hero {
   position: relative;
   text-align: center;
@@ -2175,6 +2176,17 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   color: var(--text-primary);
   margin-bottom: 12px;
 }
+.wizard-doogle-link {
+  color: var(--accent);
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+  letter-spacing: 0.04em;
+}
+.wizard-doogle-link:hover { opacity: 0.85; }
 .wizard-welcome p {
   color: var(--text-secondary);
   font-size: 1.05em;
