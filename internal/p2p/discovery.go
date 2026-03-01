@@ -154,11 +154,7 @@ func (d *Discovery) StartFindingPeers(ctx context.Context) {
 }
 
 func (d *Discovery) findAndConnectPeers(ctx context.Context) {
-	// Skip if we already have enough peers
-	if len(d.host.Network().Peers()) >= d.cfg.DHTMaxPeers {
-		return
-	}
-
+	// Connection limits are handled by the connmgr; always search for Doogle peers.
 	findCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
