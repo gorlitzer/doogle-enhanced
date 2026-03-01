@@ -157,6 +157,58 @@ function draculaBats() {
     });
   }
 
+  // Lightning state
+  let lightning = null;     // active bolt
+  let flashAlpha = 0;       // screen flash
+  let nextStrike = performance.now() + 3000 + Math.random() * 5000;
+
+  function generateBolt(x, y, angle, depth) {
+    const segments = [];
+    const len = 60 + Math.random() * 100;
+    const steps = 6 + Math.floor(Math.random() * 6);
+    let cx = x, cy = y;
+    for (let i = 0; i < steps; i++) {
+      const jitter = (Math.random() - 0.5) * 40;
+      const stepLen = len / steps;
+      cx += Math.sin(angle) * stepLen + jitter;
+      cy += Math.cos(angle) * stepLen;
+      segments.push({ x: cx, y: cy });
+    }
+    const branches = [];
+    if (depth < 2) {
+      for (let i = 2; i < segments.length; i++) {
+        if (Math.random() < 0.35) {
+          const branchAngle = angle + (Math.random() - 0.5) * 1.2;
+          branches.push(generateBolt(segments[i].x, segments[i].y, branchAngle, depth + 1));
+        }
+      }
+    }
+    return { startX: x, startY: y, segments, branches, width: Math.max(0.5, 2 - depth) };
+  }
+
+  function drawBolt(bolt, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#e0f0ff';
+    ctx.lineWidth = bolt.width;
+    ctx.shadowColor = '#00d4ff';
+    ctx.shadowBlur = 8 + bolt.width * 4;
+    ctx.beginPath();
+    ctx.moveTo(bolt.startX, bolt.startY);
+    for (const seg of bolt.segments) ctx.lineTo(seg.x, seg.y);
+    ctx.stroke();
+    // Bright core
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(0.3, bolt.width * 0.4);
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(bolt.startX, bolt.startY);
+    for (const seg of bolt.segments) ctx.lineTo(seg.x, seg.y);
+    ctx.stroke();
+    ctx.restore();
+    for (const branch of bolt.branches) drawBolt(branch, alpha * 0.7);
+  }
+
   function drawBat(b) {
     const wing = Math.sin(b.wingPhase) * 0.6;
     ctx.save();
@@ -188,6 +240,19 @@ function draculaBats() {
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const now = performance.now();
+
+    // Trigger new lightning
+    if (now > nextStrike) {
+      const strikeX = canvas.width * 0.1 + Math.random() * canvas.width * 0.8;
+      lightning = {
+        bolt: generateBolt(strikeX, -10, Math.PI * (0.95 + Math.random() * 0.1), 0),
+        born: now,
+        duration: 150 + Math.random() * 200,
+      };
+      flashAlpha = 0.06 + Math.random() * 0.04;
+      nextStrike = now + 4000 + Math.random() * 8000;
+    }
 
     // Mist
     for (const m of mist) {
@@ -221,6 +286,29 @@ function draculaBats() {
       if (b.x > canvas.width + 30) b.x = -30;
       if (b.y < -30) b.y = canvas.height + 30;
       if (b.y > canvas.height + 30) b.y = -30;
+    }
+
+    // Draw lightning bolt
+    if (lightning) {
+      const age = now - lightning.born;
+      if (age < lightning.duration) {
+        // Flicker effect — bolt visible ~70% of frames for a crackling look
+        const flicker = Math.random() > 0.3 ? 1 : 0;
+        const fade = 1 - (age / lightning.duration);
+        drawBolt(lightning.bolt, fade * flicker);
+      } else {
+        lightning = null;
+      }
+    }
+
+    // Screen flash (ambient glow on strike)
+    if (flashAlpha > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = flashAlpha;
+      ctx.fillStyle = '#00d4ff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      flashAlpha *= 0.88; // rapid decay
     }
 
     animId = requestAnimationFrame(draw);
