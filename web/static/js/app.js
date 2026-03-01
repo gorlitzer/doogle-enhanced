@@ -6,6 +6,7 @@ import { renderCrawler } from './pages/crawler.js';
 import { renderIndexer } from './pages/indexer.js';
 import { renderNetwork } from './pages/network.js';
 import { renderDocs } from './pages/docs.js';
+import { renderAbout } from './pages/about.js';
 
 const routes = {
   '':            { render: renderSearch, layout: 'search' },
@@ -15,6 +16,7 @@ const routes = {
   'admin/indexer': { render: renderIndexer, layout: 'admin' },
   'admin/network': { render: renderNetwork, layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
+  'about':       { render: renderAbout,  layout: 'search' },
 };
 
 let statusInterval = null;
