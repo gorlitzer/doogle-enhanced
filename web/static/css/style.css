@@ -1442,6 +1442,45 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   line-height: 1.5;
 }
 
+/* Node Requirements */
+.about-requirements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.about-req-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.about-req-icon {
+  margin-bottom: 10px;
+}
+.about-req-card h3 {
+  font-size: 1em;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+.about-req-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.about-req-list li {
+  padding: 2px 0;
+}
+.about-req-list code {
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  font-family: var(--font-mono);
+}
+
 /* Get Started terminals */
 .about-getstarted-grid {
   display: grid;
