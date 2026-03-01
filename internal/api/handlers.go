@@ -26,6 +26,8 @@ type Deps struct {
 	IndexerStats func() *models.IndexerInfo
 	PeersInfo    func() []models.PeerInfo
 	IndexStore   index.Store
+	ReportURL    func(url, reason, detail string) error
+	TrustSummary func() *models.TrustSummary
 }
 
 // SearchHandler handles GET /api/search?q=...&page=...&size=...
@@ -269,6 +271,63 @@ func isSafeURL(rawURL string) bool {
 	}
 
 	return true
+}
+
+// ReportHandler handles POST /api/report with JSON body {"url": "...", "reason": "...", "detail": "..."}
+func ReportHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.ReportURL == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "trust system not available"})
+			return
+		}
+
+		var body struct {
+			URL    string `json:"url"`
+			Reason string `json:"reason"`
+			Detail string `json:"detail"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" || body.Reason == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error":           "missing 'url' and 'reason' in request body",
+				"valid_reasons":   "spam, malware, phishing, illegal, low_quality",
+			})
+			return
+		}
+
+		// Validate reason
+		valid := false
+		for _, r := range models.ValidReportReasons() {
+			if body.Reason == r {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error":         "invalid reason",
+				"valid_reasons": "spam, malware, phishing, illegal, low_quality",
+			})
+			return
+		}
+
+		if err := deps.ReportURL(body.URL, body.Reason, body.Detail); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "reported", "url": body.URL, "reason": body.Reason})
+	}
+}
+
+// TrustHandler handles GET /api/admin/trust
+func TrustHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.TrustSummary == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.TrustSummary())
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

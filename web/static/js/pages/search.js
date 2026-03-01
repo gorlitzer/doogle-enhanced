@@ -1,6 +1,6 @@
 // Doogle v2 — Search Page (enhanced with detail modal + content warnings)
 import { api } from '../api.js';
-import { showModal, scoreBar, escapeHtml, skeleton } from '../components.js';
+import { showModal, scoreBar, escapeHtml, skeleton, icon } from '../components.js';
 
 let currentPage = 1;
 let currentQuery = '';
@@ -29,9 +29,25 @@ export function renderSearch(container) {
       <p>Decentralized P2P Search Engine</p>
     </div>
     <div class="search-form" id="search-form">
-      <input type="text" id="search-input" placeholder="Search... (try: -exclude, OR, intitle:, site:)" autofocus>
+      <input type="text" id="search-input" placeholder="Search the decentralized web..." autofocus>
       <button id="search-btn">Search</button>
-      <button id="search-tips-btn" title="Search tips" style="background:var(--surface-2);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;cursor:pointer;font-size:16px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0">?</button>
+    </div>
+    <div class="search-tips" id="search-tips">
+      <div class="search-tips-toggle" id="search-tips-toggle">
+        ${icon('zap', 14)} <span>Search operators</span>
+      </div>
+      <div class="search-tips-body" id="search-tips-body">
+        <div class="search-tips-grid">
+          <code>"exact phrase"</code><span>Exact match</span>
+          <code>-exclude</code><span>Remove term</span>
+          <code>python OR ruby</code><span>Either term</span>
+          <code>site:go.dev</code><span>Specific domain</span>
+          <code>intitle:golang</code><span>Term in title</span>
+          <code>filetype:pdf</code><span>File extension</span>
+          <code>lang:en</code><span>Language filter</span>
+          <code>after:2025-01</code><span>Date range</span>
+        </div>
+      </div>
     </div>
     <div class="search-filters" id="search-filters">
       <select id="filter-lang">
@@ -66,29 +82,12 @@ export function renderSearch(container) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
   btn.addEventListener('click', doSearch);
 
-  document.getElementById('search-tips-btn').addEventListener('click', () => {
-    showModal('Search Syntax Reference', `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Syntax</th><th>Example</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td>Basic</td><td><code>golang tutorial</code></td><td>Match documents containing all terms</td></tr>
-            <tr><td>Phrase</td><td><code>"exact match"</code></td><td>Exact phrase matching</td></tr>
-            <tr><td>Exclude</td><td><code>golang -tutorial</code></td><td>Remove documents containing the term</td></tr>
-            <tr><td>OR</td><td><code>python OR ruby</code></td><td>Match documents with either term</td></tr>
-            <tr><td>Site</td><td><code>site:go.dev</code></td><td>Restrict to a specific domain</td></tr>
-            <tr><td>Language</td><td><code>lang:de</code></td><td>Restrict to a language (15 supported)</td></tr>
-            <tr><td>In Title</td><td><code>intitle:golang</code></td><td>Term must appear in the title</td></tr>
-            <tr><td>In URL</td><td><code>inurl:docs</code></td><td>Substring must appear in the URL</td></tr>
-            <tr><td>In Body</td><td><code>intext:kubernetes</code></td><td>Term must appear in body content</td></tr>
-            <tr><td>File Type</td><td><code>filetype:pdf</code></td><td>URL must end with the given extension</td></tr>
-            <tr><td>Date Range</td><td><code>after:2025-01-01</code></td><td>Restrict to a crawl date range</td></tr>
-            <tr><td>HTTPS Only</td><td><code>has:https</code></td><td>Only show HTTPS results</td></tr>
-            <tr><td>Combined</td><td><code>intitle:go -tutorial site:go.dev</code></td><td>Mix and match any syntax</td></tr>
-          </tbody>
-        </table>
-      </div>
-    `, { width: '650px' });
+  // Search tips toggle
+  const tipsToggle = document.getElementById('search-tips-toggle');
+  const tipsBody = document.getElementById('search-tips-body');
+  tipsToggle.addEventListener('click', () => {
+    const open = tipsBody.classList.toggle('open');
+    tipsToggle.classList.toggle('active', open);
   });
 
   if (currentQuery) {

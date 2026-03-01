@@ -15,13 +15,15 @@ import (
 
 const maxGossipMessageSize = 64 * 1024 // 64 KB
 
-// Gossip manages GossipSub pub/sub for the URL frontier and shard catalog.
+// Gossip manages GossipSub pub/sub for the URL frontier, shard catalog, and spam reports.
 type Gossip struct {
 	ps             *pubsub.PubSub
 	urlTopic       *pubsub.Topic
 	urlSub         *pubsub.Subscription
 	shardTopic     *pubsub.Topic
 	shardSub       *pubsub.Subscription
+	reportTopic    *pubsub.Topic
+	reportSub      *pubsub.Subscription
 	host           host.Host
 }
 
@@ -54,13 +56,26 @@ func NewGossip(ctx context.Context, h host.Host) (*Gossip, error) {
 	}
 	log.Printf("GossipSub joined topic: %s", ShardCatalogTopic)
 
+	// Spam report topic
+	reportTopic, err := ps.Join(SpamReportTopic)
+	if err != nil {
+		return nil, fmt.Errorf("join topic %s: %w", SpamReportTopic, err)
+	}
+	reportSub, err := reportTopic.Subscribe()
+	if err != nil {
+		return nil, fmt.Errorf("subscribe to %s: %w", SpamReportTopic, err)
+	}
+	log.Printf("GossipSub joined topic: %s", SpamReportTopic)
+
 	return &Gossip{
-		ps:         ps,
-		urlTopic:   urlTopic,
-		urlSub:     urlSub,
-		shardTopic: shardTopic,
-		shardSub:   shardSub,
-		host:       h,
+		ps:          ps,
+		urlTopic:    urlTopic,
+		urlSub:      urlSub,
+		shardTopic:  shardTopic,
+		shardSub:    shardSub,
+		reportTopic: reportTopic,
+		reportSub:   reportSub,
+		host:        h,
 	}, nil
 }
 
@@ -141,10 +156,51 @@ func (g *Gossip) SubscribeShardCatalog(ctx context.Context) (*ShardCatalog, erro
 	return &catalog, nil
 }
 
+// PublishSpamReport broadcasts a spam report to all peers.
+func (g *Gossip) PublishSpamReport(ctx context.Context, report *models.SpamReport) error {
+	data, err := json.Marshal(report)
+	if err != nil {
+		return fmt.Errorf("marshal spam report: %w", err)
+	}
+	return g.reportTopic.Publish(ctx, data)
+}
+
+// SubscribeSpamReport returns incoming spam reports from peers. Blocks until a message arrives.
+func (g *Gossip) SubscribeSpamReport(ctx context.Context) (*models.SpamReport, error) {
+	msg, err := g.reportSub.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ignore our own messages
+	if msg.ReceivedFrom == g.host.ID() {
+		return nil, nil
+	}
+
+	if len(msg.Data) > maxGossipMessageSize {
+		log.Printf("gossip: dropping oversized spam report (%d bytes) from %s", len(msg.Data), msg.ReceivedFrom.String()[:12])
+		return nil, nil
+	}
+
+	var report models.SpamReport
+	if err := json.Unmarshal(msg.Data, &report); err != nil {
+		return nil, fmt.Errorf("unmarshal spam report: %w", err)
+	}
+
+	// Basic validation
+	if report.URL == "" || report.ReporterID == "" || report.Reason == "" {
+		return nil, nil
+	}
+
+	return &report, nil
+}
+
 // Close shuts down the gossip layer.
 func (g *Gossip) Close() {
 	g.urlSub.Cancel()
 	g.urlTopic.Close()
 	g.shardSub.Cancel()
 	g.shardTopic.Close()
+	g.reportSub.Cancel()
+	g.reportTopic.Close()
 }

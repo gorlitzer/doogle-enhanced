@@ -8,40 +8,114 @@ let customSeeds = '';
 let settings = { depth: 3, workers: 4 };
 let pollInterval = null;
 
-const CATEGORIES = [
+// ─── Category Groups ─────────────────────────────────
+// Organized for everyone — not just developers.
+
+const CATEGORY_GROUPS = [
   {
-    id: 'tech', name: 'Tech & Programming', icon: 'code',
-    seeds: ['https://go.dev', 'https://developer.mozilla.org', 'https://docs.python.org/3/', 'https://www.rust-lang.org', 'https://www.typescriptlang.org', 'https://deno.land', 'https://bun.sh'],
+    id: 'knowledge', name: 'Knowledge & Learning', icon: 'fileText',
+    categories: [
+      {
+        id: 'education', name: 'Education', icon: 'fileText',
+        desc: 'Online courses, encyclopedias, and academic resources',
+        seeds: ['https://en.wikipedia.org', 'https://www.khanacademy.org', 'https://www.britannica.com', 'https://ocw.mit.edu', 'https://www.coursera.org', 'https://stackoverflow.com'],
+      },
+      {
+        id: 'science', name: 'Science & Research', icon: 'cpu',
+        desc: 'Scientific papers, journals, and research databases',
+        seeds: ['https://arxiv.org', 'https://www.nature.com', 'https://pubmed.ncbi.nlm.nih.gov', 'https://www.science.org', 'https://www.nasa.gov', 'https://www.scientificamerican.com'],
+      },
+      {
+        id: 'news', name: 'News & Journalism', icon: 'megaphone',
+        desc: 'World news, investigative reporting, and current events',
+        seeds: ['https://www.reuters.com', 'https://apnews.com', 'https://www.bbc.com/news', 'https://www.npr.org', 'https://www.theguardian.com', 'https://www.aljazeera.com'],
+      },
+      {
+        id: 'history', name: 'History & Culture', icon: 'globe',
+        desc: 'Museums, archives, cultural heritage, and world history',
+        seeds: ['https://www.smithsonianmag.com', 'https://www.history.com', 'https://whc.unesco.org', 'https://www.britishmuseum.org', 'https://archive.org', 'https://www.loc.gov'],
+      },
+    ],
   },
   {
-    id: 'science', name: 'Science & Research', icon: 'cpu',
-    seeds: ['https://arxiv.org', 'https://www.nature.com', 'https://pubmed.ncbi.nlm.nih.gov', 'https://www.science.org', 'https://scholar.google.com', 'https://www.pnas.org'],
+    id: 'lifestyle', name: 'Lifestyle & Wellbeing', icon: 'heart',
+    categories: [
+      {
+        id: 'health', name: 'Health & Medicine', icon: 'heart',
+        desc: 'Medical information, wellness guides, and health research',
+        seeds: ['https://www.who.int', 'https://www.mayoclinic.org', 'https://www.nih.gov', 'https://www.healthline.com', 'https://www.webmd.com', 'https://medlineplus.gov'],
+      },
+      {
+        id: 'food', name: 'Food & Cooking', icon: 'coffee',
+        desc: 'Recipes, cooking techniques, and food culture',
+        seeds: ['https://www.allrecipes.com', 'https://www.seriouseats.com', 'https://www.epicurious.com', 'https://www.bbcgoodfood.com', 'https://www.bonappetit.com', 'https://www.simplyrecipes.com'],
+      },
+      {
+        id: 'sports', name: 'Sports & Fitness', icon: 'trendingUp',
+        desc: 'Sports news, fitness guides, and athletic training',
+        seeds: ['https://www.espn.com', 'https://www.bbc.com/sport', 'https://olympics.com', 'https://www.runnersworld.com', 'https://www.nba.com', 'https://www.fifa.com'],
+      },
+      {
+        id: 'travel', name: 'Travel & Geography', icon: 'map',
+        desc: 'Travel guides, destinations, and geographic exploration',
+        seeds: ['https://www.lonelyplanet.com', 'https://www.nationalgeographic.com', 'https://www.atlasobscura.com', 'https://wikitravel.org', 'https://www.tripadvisor.com', 'https://www.worldnomads.com'],
+      },
+    ],
   },
   {
-    id: 'news', name: 'News & Media', icon: 'megaphone',
-    seeds: ['https://www.reuters.com', 'https://www.bbc.com/news', 'https://arstechnica.com', 'https://news.ycombinator.com', 'https://lobste.rs', 'https://lwn.net'],
+    id: 'creative', name: 'Creative & Entertainment', icon: 'monitor',
+    categories: [
+      {
+        id: 'arts', name: 'Arts & Design', icon: 'image',
+        desc: 'Visual arts, graphic design, illustration, and museums',
+        seeds: ['https://www.moma.org', 'https://www.behance.net', 'https://dribbble.com', 'https://www.deviantart.com', 'https://www.artsy.net', 'https://www.metmuseum.org'],
+      },
+      {
+        id: 'music', name: 'Music & Film', icon: 'music',
+        desc: 'Music discovery, film reviews, and entertainment media',
+        seeds: ['https://www.imdb.com', 'https://pitchfork.com', 'https://bandcamp.com', 'https://www.discogs.com', 'https://letterboxd.com', 'https://www.rollingstone.com'],
+      },
+      {
+        id: 'books', name: 'Books & Literature', icon: 'bookOpen',
+        desc: 'Book reviews, literary archives, and digital libraries',
+        seeds: ['https://www.goodreads.com', 'https://www.gutenberg.org', 'https://openlibrary.org', 'https://www.loc.gov', 'https://lithub.com', 'https://www.poetryfoundation.org'],
+      },
+      {
+        id: 'gaming', name: 'Gaming', icon: 'monitor',
+        desc: 'Game reviews, industry news, and gaming communities',
+        seeds: ['https://www.ign.com', 'https://www.polygon.com', 'https://store.steampowered.com', 'https://www.pcgamer.com', 'https://kotaku.com', 'https://www.gamespot.com'],
+      },
+    ],
   },
   {
-    id: 'opensource', name: 'Open Source', icon: 'network',
-    seeds: ['https://github.com/trending', 'https://sr.ht', 'https://codeberg.org', 'https://opensource.org', 'https://apache.org', 'https://www.linuxfoundation.org'],
-  },
-  {
-    id: 'education', name: 'Education & Reference', icon: 'fileText',
-    seeds: ['https://en.wikipedia.org', 'https://stackoverflow.com', 'https://www.khanacademy.org', 'https://ocw.mit.edu', 'https://www.coursera.org', 'https://www.britannica.com'],
-  },
-  {
-    id: 'webstandards', name: 'Web Standards & Design', icon: 'globe',
-    seeds: ['https://web.dev', 'https://css-tricks.com', 'https://www.smashingmagazine.com', 'https://htmx.org', 'https://tailwindcss.com', 'https://www.w3.org'],
-  },
-  {
-    id: 'infra', name: 'Infrastructure & DevOps', icon: 'database',
-    seeds: ['https://kubernetes.io/docs/', 'https://redis.io/docs/', 'https://www.postgresql.org/docs/', 'https://docs.docker.com', 'https://nginx.com', 'https://prometheus.io/docs/'],
-  },
-  {
-    id: 'frontend', name: 'Frontend Frameworks', icon: 'monitor',
-    seeds: ['https://reactjs.org', 'https://vuejs.org', 'https://angular.dev', 'https://svelte.dev', 'https://nextjs.org', 'https://nuxt.com'],
+    id: 'technology', name: 'Technology & Development', icon: 'code',
+    categories: [
+      {
+        id: 'tech', name: 'Programming', icon: 'code',
+        desc: 'Language docs, tutorials, and developer resources',
+        seeds: ['https://go.dev', 'https://developer.mozilla.org', 'https://docs.python.org/3/', 'https://www.rust-lang.org', 'https://www.typescriptlang.org', 'https://deno.land', 'https://bun.sh'],
+      },
+      {
+        id: 'opensource', name: 'Open Source', icon: 'network',
+        desc: 'Open-source projects, communities, and foundations',
+        seeds: ['https://github.com/trending', 'https://sr.ht', 'https://codeberg.org', 'https://opensource.org', 'https://apache.org', 'https://www.linuxfoundation.org'],
+      },
+      {
+        id: 'infra', name: 'Cloud & DevOps', icon: 'database',
+        desc: 'Infrastructure, databases, containers, and monitoring',
+        seeds: ['https://kubernetes.io/docs/', 'https://redis.io/docs/', 'https://www.postgresql.org/docs/', 'https://docs.docker.com', 'https://nginx.com', 'https://prometheus.io/docs/'],
+      },
+      {
+        id: 'webdev', name: 'Web & Frontend', icon: 'globe',
+        desc: 'Web standards, frameworks, CSS, and browser APIs',
+        seeds: ['https://web.dev', 'https://css-tricks.com', 'https://reactjs.org', 'https://vuejs.org', 'https://svelte.dev', 'https://nextjs.org', 'https://tailwindcss.com', 'https://htmx.org'],
+      },
+    ],
   },
 ];
+
+// Flatten for backward compat
+const CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.categories);
 
 const STEP_LABELS = ['Welcome', 'Identity', 'Focus', 'Settings', 'Launch'];
 
@@ -175,7 +249,7 @@ function renderWelcome(el) {
         </svg>
       </div>
       <h1>Welcome to Doogle</h1>
-      <p>Your node is ready to join the decentralized web. This wizard will help you choose what to crawl and start building your local search index.</p>
+      <p>Your node is ready to join the decentralized web. Pick the topics you care about, and Doogle will build a search index tailored to your interests. Each node specializes — together, the network covers everything.</p>
       <button class="btn btn-primary wizard-begin-btn" id="wizard-begin">Begin Setup</button>
     </div>
   `;
@@ -249,21 +323,44 @@ async function renderIdentity(el) {
 // ─── Step 2: Choose Focus ─────────────────────────────
 function renderFocus(el) {
   const stats = countStats();
+
+  // Count selected per group
+  function groupSelectedCount(group) {
+    return group.categories.filter(c => selectedCategories.has(c.id)).length;
+  }
+
   el.innerHTML = `
     <div class="wizard-focus">
-      <h2>Choose Your Focus</h2>
-      <p class="wizard-subtitle">Select categories to seed your crawler. You can add custom URLs too.</p>
+      <h2>What interests you?</h2>
+      <p class="wizard-subtitle">Pick the topics your node will specialize in. Other nodes in the network cover different topics — together you index the whole web.</p>
 
-      <div class="wizard-categories" id="wizard-categories">
-        ${CATEGORIES.map(cat => `
-          <div class="wizard-category ${selectedCategories.has(cat.id) ? 'selected' : ''}" data-id="${cat.id}">
-            <div class="wizard-category-icon">${icon(cat.icon, 28)}</div>
-            <div class="wizard-category-info">
-              <strong>${cat.name}</strong>
-              <span class="wizard-category-count">${cat.seeds.length} seeds</span>
+      <div class="wizard-category-groups" id="wizard-categories">
+        ${CATEGORY_GROUPS.map(group => `
+          <div class="wizard-group">
+            <div class="wizard-group-header" data-group="${group.id}">
+              <div class="wizard-group-title">
+                ${icon(group.icon, 20)}
+                <strong>${group.name}</strong>
+                <span class="wizard-group-badge">${groupSelectedCount(group)}/${group.categories.length}</span>
+              </div>
+              <button class="wizard-group-toggle" data-group-toggle="${group.id}" title="Select all in group">
+                ${groupSelectedCount(group) === group.categories.length ? 'Deselect all' : 'Select all'}
+              </button>
             </div>
-            <div class="wizard-category-check">
-              ${selectedCategories.has(cat.id) ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="3 8.5 6.5 12 13 4"/></svg>' : ''}
+            <div class="wizard-group-categories">
+              ${group.categories.map(cat => `
+                <div class="wizard-category ${selectedCategories.has(cat.id) ? 'selected' : ''}" data-id="${cat.id}">
+                  <div class="wizard-category-icon">${icon(cat.icon, 24)}</div>
+                  <div class="wizard-category-info">
+                    <strong>${cat.name}</strong>
+                    <span class="wizard-category-desc">${cat.desc}</span>
+                    <span class="wizard-category-count">${cat.seeds.length} seed sites</span>
+                  </div>
+                  <div class="wizard-category-check">
+                    ${selectedCategories.has(cat.id) ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="3 8.5 6.5 12 13 4"/></svg>' : ''}
+                  </div>
+                </div>
+              `).join('')}
             </div>
           </div>
         `).join('')}
@@ -271,15 +368,18 @@ function renderFocus(el) {
 
       <div class="wizard-custom-seeds">
         <h3>Custom Seeds</h3>
-        <textarea id="wizard-custom-textarea" rows="4" placeholder="One URL per line:&#10;https://example.com&#10;https://my-site.org">${customSeeds}</textarea>
+        <p class="wizard-subtitle" style="margin-bottom:8px">Add any websites you want your node to crawl. One URL per line.</p>
+        <textarea id="wizard-custom-textarea" rows="4" placeholder="https://example.com&#10;https://my-favorite-blog.org&#10;https://local-newspaper.com">${customSeeds}</textarea>
       </div>
 
       <div class="wizard-seed-total" id="wizard-seed-total">
-        ${stats.total} seed${stats.total !== 1 ? 's' : ''} selected from ${stats.catCount} categor${stats.catCount !== 1 ? 'ies' : 'y'}
+        ${stats.total} seed${stats.total !== 1 ? 's' : ''} selected from ${stats.catCount} topic${stats.catCount !== 1 ? 's' : ''}
+        ${stats.customCount > 0 ? ` + ${stats.customCount} custom` : ''}
       </div>
     </div>
   `;
 
+  // Category click handlers
   document.querySelectorAll('.wizard-category').forEach(card => {
     card.addEventListener('click', () => {
       const id = card.dataset.id;
@@ -290,12 +390,32 @@ function renderFocus(el) {
     });
   });
 
+  // Select-all toggle per group
+  document.querySelectorAll('.wizard-group-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const groupId = btn.dataset.groupToggle;
+      const group = CATEGORY_GROUPS.find(g => g.id === groupId);
+      if (!group) return;
+      const allSelected = group.categories.every(c => selectedCategories.has(c.id));
+      group.categories.forEach(c => {
+        if (allSelected) selectedCategories.delete(c.id);
+        else selectedCategories.add(c.id);
+      });
+      renderFocus(el);
+      renderNav();
+    });
+  });
+
+  // Custom seeds textarea
   const textarea = document.getElementById('wizard-custom-textarea');
   textarea.addEventListener('input', () => {
     customSeeds = textarea.value;
     const s = countStats();
     const totalEl = document.getElementById('wizard-seed-total');
-    if (totalEl) totalEl.textContent = `${s.total} seed${s.total !== 1 ? 's' : ''} selected from ${s.catCount} categor${s.catCount !== 1 ? 'ies' : 'y'}`;
+    if (totalEl) {
+      totalEl.textContent = `${s.total} seed${s.total !== 1 ? 's' : ''} selected from ${s.catCount} topic${s.catCount !== 1 ? 's' : ''}${s.customCount > 0 ? ` + ${s.customCount} custom` : ''}`;
+    }
     renderNav();
   });
 }
@@ -376,10 +496,12 @@ function workersDesc(n) {
 // ─── Step 4: Launch & Watch ───────────────────────────
 async function renderLaunch(el) {
   const seeds = getAllSelectedSeeds();
+  const topicNames = CATEGORIES.filter(c => selectedCategories.has(c.id)).map(c => c.name);
 
   el.innerHTML = `
     <div class="wizard-launch">
       <h2>Launch</h2>
+      ${topicNames.length > 0 ? `<p class="wizard-launch-topics">Specializing in: <strong>${topicNames.join(', ')}</strong></p>` : ''}
       <div class="wizard-launch-status" id="wizard-launch-status">Submitting ${seeds.length} seeds...</div>
       <div class="wizard-progress-bar"><div class="wizard-progress-fill" id="wizard-progress-fill" style="width:0%"></div></div>
       <div class="wizard-counters" id="wizard-counters">

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,8 +12,10 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/doogle/doogle-v2/internal/models"
 	"github.com/doogle/doogle-v2/internal/node"
@@ -20,10 +24,19 @@ import (
 func main() {
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-	// Check for "search" subcommand before flag.Parse()
-	if len(os.Args) > 1 && os.Args[1] == "search" {
-		runSearch(os.Args[2:])
-		return
+	// Check for subcommands before flag.Parse()
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "search":
+			runSearch(os.Args[2:])
+			return
+		case "dump":
+			runDump(os.Args[2:])
+			return
+		case "restore":
+			runRestore(os.Args[2:])
+			return
+		}
 	}
 
 	// Load config with defaults, then apply CLI flags
@@ -128,4 +141,229 @@ func truncateCLI(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// runDump creates a tar.gz archive of the data directory.
+func runDump(args []string) {
+	fs := flag.NewFlagSet("dump", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "./data/doogle", "Data directory to back up")
+	output := fs.String("output", "", "Output archive path (default: doogle-backup-<timestamp>.tar.gz)")
+	fs.Parse(args)
+
+	// Resolve data directory
+	absDir, err := filepath.Abs(*dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error resolving path: %v\n", err)
+		os.Exit(1)
+	}
+
+	info, err := os.Stat(absDir)
+	if err != nil || !info.IsDir() {
+		fmt.Fprintf(os.Stderr, "error: data directory %s does not exist\n", absDir)
+		os.Exit(1)
+	}
+
+	// Determine output path
+	outPath := *output
+	if outPath == "" {
+		outPath = fmt.Sprintf("doogle-backup-%s.tar.gz", time.Now().Format("20060102T150405"))
+	}
+
+	// Create the archive
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating archive: %v\n", err)
+		os.Exit(1)
+	}
+	defer outFile.Close()
+
+	gzWriter := gzip.NewWriter(outFile)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	fileCount := 0
+	baseName := filepath.Base(absDir)
+
+	err = filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Build archive path relative to parent of data dir
+		relPath, err := filepath.Rel(filepath.Dir(absDir), path)
+		if err != nil {
+			return err
+		}
+
+		header, err := tar.FileInfoHeader(fi, "")
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
+
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		if _, err := io.Copy(tarWriter, f); err != nil {
+			return err
+		}
+
+		fileCount++
+		return nil
+	})
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating archive: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Close writers to flush
+	tarWriter.Close()
+	gzWriter.Close()
+	outFile.Close()
+
+	// Report
+	archiveInfo, _ := os.Stat(outPath)
+	size := archiveInfo.Size()
+	sizeStr := formatBytes(size)
+
+	fmt.Printf("Dump complete\n")
+	fmt.Printf("  Source:  %s (%s)\n", absDir, baseName)
+	fmt.Printf("  Archive: %s (%s)\n", outPath, sizeStr)
+	fmt.Printf("  Files:   %d\n", fileCount)
+}
+
+// runRestore extracts a tar.gz archive to the data directory.
+func runRestore(args []string) {
+	fs := flag.NewFlagSet("restore", flag.ExitOnError)
+	dataDir := fs.String("data-dir", "./data/doogle", "Data directory to restore into")
+	force := fs.Bool("force", false, "Overwrite existing data directory")
+	fs.Parse(args)
+
+	if fs.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "usage: doogle restore [--data-dir PATH] [--force] <archive.tar.gz>")
+		os.Exit(1)
+	}
+
+	archivePath := fs.Arg(0)
+
+	// Verify archive exists
+	if _, err := os.Stat(archivePath); err != nil {
+		fmt.Fprintf(os.Stderr, "error: archive %s not found\n", archivePath)
+		os.Exit(1)
+	}
+
+	absDir, err := filepath.Abs(*dataDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error resolving path: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if data dir exists
+	if info, err := os.Stat(absDir); err == nil && info.IsDir() {
+		if !*force {
+			fmt.Fprintf(os.Stderr, "error: %s already exists (use --force to overwrite)\n", absDir)
+			os.Exit(1)
+		}
+		fmt.Printf("Removing existing %s...\n", absDir)
+		if err := os.RemoveAll(absDir); err != nil {
+			fmt.Fprintf(os.Stderr, "error removing directory: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	// Open archive
+	f, err := os.Open(archivePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error opening archive: %v\n", err)
+		os.Exit(1)
+	}
+	defer f.Close()
+
+	gzReader, err := gzip.NewReader(f)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s is not a valid gzip archive\n", archivePath)
+		os.Exit(1)
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+	parentDir := filepath.Dir(absDir)
+	fileCount := 0
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading archive: %v\n", err)
+			os.Exit(1)
+		}
+
+		targetPath := filepath.Join(parentDir, header.Name)
+
+		// Prevent path traversal
+		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(parentDir)) {
+			fmt.Fprintf(os.Stderr, "error: archive contains path traversal: %s\n", header.Name)
+			os.Exit(1)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				fmt.Fprintf(os.Stderr, "error creating directory: %v\n", err)
+				os.Exit(1)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "error creating directory: %v\n", err)
+				os.Exit(1)
+			}
+			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error creating file: %v\n", err)
+				os.Exit(1)
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				outFile.Close()
+				fmt.Fprintf(os.Stderr, "error writing file: %v\n", err)
+				os.Exit(1)
+			}
+			outFile.Close()
+			fileCount++
+		}
+	}
+
+	fmt.Printf("Restore complete\n")
+	fmt.Printf("  Archive: %s\n", archivePath)
+	fmt.Printf("  Target:  %s\n", absDir)
+	fmt.Printf("  Files:   %d\n", fileCount)
+}
+
+// formatBytes formats a byte count as a human-readable string.
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

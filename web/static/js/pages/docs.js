@@ -85,8 +85,8 @@ function renderQuickstart(el) {
       <p class="docs-section-desc">Get a Doogle search node running in under 2 minutes.</p>
 
       <div class="docs-method-toggle">
-        <button class="docs-method-btn active" data-method="docker">${icon('database', 16)} Docker (recommended)</button>
-        <button class="docs-method-btn" data-method="native">${icon('code', 16)} Go (native)</button>
+        <button class="docs-method-btn active" data-method="native">${icon('code', 16)} Make (recommended)</button>
+        <button class="docs-method-btn" data-method="docker">${icon('database', 16)} Docker</button>
       </div>
 
       <div id="docs-method-content"></div>
@@ -117,6 +117,25 @@ function renderQuickstart(el) {
   --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID>`, 'bash')}
         `)}
       </div>
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('network', 24, 'var(--purple)')}
+        <h2>Your Role in the Network</h2>
+      </div>
+      <p class="docs-section-desc">There's no sign-up, no commitment, and no special skills required. You contribute just by being yourself.</p>
+      <div class="docs-env-grid">
+        ${infoCard('globe', 'The Explorer', 'Pick the topics that interest you — cooking, science, gaming, local news. Your node crawls and indexes those corners of the web. You build a specialized index just by following your curiosity.', 'var(--accent)')}
+        ${infoCard('shield', 'The Guardian', 'When you spot spam, phishing, or junk, flag it. Reports propagate across the network and bad actors get quarantined. The more people who flag, the cleaner the index becomes for everyone.', 'var(--green)')}
+        ${infoCard('network', 'The Connector', 'Keep your node running. The longer it stays online, the more peers it serves. You don\'t have to do anything — just leave it on and the network gets stronger.', 'var(--blue)')}
+        ${infoCard('search', 'The Specialist', 'Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Stale nodes get replaced by fresh ones — people who care about a topic keep that corner alive.', 'var(--purple)')}
+        ${infoCard('eye', 'The Curator', 'Your browsing patterns, flags, and topic choices train the network\'s quality signals. The pages you keep coming back to rise; the junk you skip fades. You shape relevance without writing a single rule.', 'var(--amber)')}
+        ${infoCard('megaphone', 'The Amplifier', 'You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics and new corners of the web to the collective index.', 'var(--red, #ef4444)')}
+        ${infoCard('trendingUp', 'The Archivist', 'You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your long-running node becomes a time capsule — preserving knowledge that would otherwise be lost.', 'var(--green)')}
+        ${infoCard('code', 'The Builder', 'You see what\'s missing and build it. A better crawler, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.', 'var(--accent)')}
+      </div>
+      <p class="docs-section-desc" style="margin-top:12px;font-size:0.85em">These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined.</p>
     </div>
 
     <div class="docs-section">
@@ -229,12 +248,15 @@ function renderQuickstart(el) {
     } else {
       methodContent.innerHTML = `
         <div class="docs-steps">
-          ${stepCard(1, 'Build from source', codeBlock(`cd doogle-v2
-make build`, 'bash'))}
-          ${stepCard(2, 'Run a node', codeBlock(`./bin/doogle --port 4001 --api-port 8080 \\
-  --seed https://en.wikipedia.org`, 'bash'))}
-          ${stepCard(3, 'Run a second node (another terminal)', codeBlock(`./bin/doogle --port 4002 --api-port 8081 \\
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID>`, 'bash'))}
+          ${stepCard(1, 'Clone and start', codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
+cd doogle-enhanced
+make start`, 'bash'))}
+          ${stepCard(2, 'Open the dashboard', `
+            <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
+          `)}
+          ${stepCard(3, 'Connect a second node (another terminal)', codeBlock(`./bin/doogle --port 4002 --api-port 8081 \\
+  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID> \\
+  --data-dir ./data/node2`, 'bash'))}
         </div>
         ${infoCard('zap', 'Tip', 'The peer ID is printed to the console on startup. Copy it from Node 1\'s log output.', 'var(--amber)')}
       `;
@@ -243,7 +265,7 @@ make build`, 'bash'))}
   }
 
   methodBtns.forEach(btn => btn.addEventListener('click', () => showMethod(btn.dataset.method)));
-  showMethod('docker');
+  showMethod('native');
 
   bindCopyButtons(el);
   bindCollapsibles(el);
@@ -1203,6 +1225,37 @@ seed_urls:
   - "https://docs.python.org/3/"
   - "https://go.dev"
   - "https://news.ycombinator.com"`, 'yaml')}
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('database', 24, 'var(--amber)')}
+        <h2>Backup & Restore</h2>
+      </div>
+      <p class="docs-section-desc">Back up your node's data (index, crawl history, identity key) and restore it on the same or different machine.</p>
+
+      <h3>What's Backed Up</h3>
+      <div class="docs-env-grid">
+        ${infoCard('database', 'BadgerDB', 'URL queue, link graph (backlinks for PageRank), dedup fingerprints, and all metadata.', 'var(--blue)')}
+        ${infoCard('search', 'Bleve Index', 'Full-text search index with all crawled documents and BM25 scores.', 'var(--green)')}
+        ${infoCard('shield', 'Identity Key', 'Your libp2p identity key (identity.key) — determines your Peer ID on the network.', 'var(--amber)')}
+      </div>
+
+      <h3>Via Makefile</h3>
+      ${codeBlock(`# Create a timestamped backup
+make backup
+
+# Restore from a backup archive
+make restore BACKUP=doogle-backup-20260301T120000.tar.gz`, 'bash')}
+
+      <h3>Via CLI</h3>
+      ${codeBlock(`# Dump data directory to archive
+doogle dump [--data-dir PATH] [--output FILE]
+
+# Restore from archive (errors if data dir exists unless --force)
+doogle restore [--data-dir PATH] [--force] <archive.tar.gz>`, 'bash')}
+
+      ${infoCard('alertTriangle', 'Stop the Node First', 'For a consistent backup, stop the node before running dump or backup. BadgerDB and Bleve may have in-flight writes that won\'t be captured if the node is running.', 'var(--red)')}
     </div>
 
     <div class="docs-section">
