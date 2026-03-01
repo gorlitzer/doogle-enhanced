@@ -28,6 +28,7 @@ type Deps struct {
 	IndexStore   index.Store
 	ReportURL    func(url, reason, detail string) error
 	TrustSummary func() *models.TrustSummary
+	SetNodeName  func(name string)
 }
 
 // SearchHandler handles GET /api/search?q=...&page=...&size=...
@@ -327,6 +328,28 @@ func TrustHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, deps.TrustSummary())
+	}
+}
+
+// SetNodeNameHandler handles POST /api/config/name
+func SetNodeNameHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.SetNodeName == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not supported"})
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+			return
+		}
+		if len(body.Name) > 64 {
+			body.Name = body.Name[:64]
+		}
+		deps.SetNodeName(body.Name)
+		writeJSON(w, http.StatusOK, map[string]string{"name": body.Name})
 	}
 }
 
