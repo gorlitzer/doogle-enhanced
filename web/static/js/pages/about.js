@@ -82,7 +82,7 @@ const pipelineSteps = [
   {
     icon: 'search', title: 'Search', color: 'var(--accent)',
     eli5: 'You ask a question, and Doogle looks through its filing cabinet super fast to find the best answers.',
-    detail: 'Queries are parsed (boolean operators, search dorks, phrases, synonyms, fuzzy matching), matched against Bleve, then ranked by BM25 x StaticScore x freshness.',
+    detail: 'Queries are parsed (boolean operators, search dorks, phrases, fuzzy matching), matched against Bleve, then ranked by BM25 x StaticScore x freshness.',
     modal: `<p>The search pipeline parses your query into structured components:</p>
       <ul>
         <li><strong>Phrases</strong> — <code>"exact match"</code> terms</li>
@@ -90,7 +90,6 @@ const pipelineSteps = [
         <li><strong>Site filter</strong> — <code>site:example.com</code></li>
         <li><strong>Language filter</strong> — <code>lang:de</code> with language-specific stemmers (15 languages)</li>
         <li><strong>Search dorks</strong> — <code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code></li>
-        <li><strong>Synonym expansion</strong> — "js" also searches "javascript"</li>
         <li><strong>Fuzzy matching</strong> — typo tolerance for short queries</li>
       </ul>
       <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay</code></p>
@@ -113,8 +112,8 @@ const pipelineSteps = [
 const capabilities = [
   { icon: 'download', title: 'Distributed Crawling', desc: 'Multi-worker crawl engine with per-domain rate limiting, robots.txt respect, and configurable depth.',
     modal: `<p>The crawler uses a goroutine worker pool (default 4) with per-domain rate limiting. Each domain gets its own crawl queue with configurable max depth. Respects robots.txt exclusion rules and supports custom User-Agent strings.</p><p>Reference: Go's <code>net/http</code> + <a href="https://github.com/PuerkitoBio/goquery" target="_blank">goquery</a> for HTML parsing.</p>` },
-  { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered full-text search with boolean operators, search dorks (intitle:, inurl:, filetype:, etc.), 15 language stemmers, phrase matching, synonyms, and fuzzy queries.',
-    modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. Queries support boolean operators (<code>-exclude</code>, <code>OR</code>), search dorks (<code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code>), phrase matching, synonym expansion (20+ mappings), fuzzy matching for typo tolerance, <code>site:</code> and <code>lang:</code> filters (15 language stemmers). Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
+  { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered full-text search with boolean operators, search dorks (intitle:, inurl:, filetype:, etc.), 15 language stemmers, phrase matching, and fuzzy queries.',
+    modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. Queries support boolean operators (<code>-exclude</code>, <code>OR</code>), search dorks (<code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code>), phrase matching, fuzzy matching for typo tolerance, <code>site:</code> and <code>lang:</code> filters (15 language stemmers). Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
   { icon: 'star', title: 'Quality Scoring (E-E-A-T)', desc: '10+ scoring signals including expertise, authority, trustworthiness, readability, freshness, and citation analysis.',
     modal: `<p>E-E-A-T scoring evaluates pages across 10+ dimensions, mirroring Google's quality rater guidelines. Signals include expertise, authority, trustworthiness, content depth, heading structure, media richness, citation count, and readability (Flesch-Kincaid).</p>` },
   { icon: 'cpu', title: 'Content Analysis', desc: 'Rich extraction of title, meta tags, headings, links, images, OG tags, and canonical URLs from every crawled page.',
@@ -423,14 +422,14 @@ function renderHowItWorks(el) {
           <div class="about-sf-icon" style="color:var(--green)">${icon('globe', 20)}</div>
           <div>
             <strong>Filters</strong>
-            <p>site:domain, lang:xx (15 stemmers), synonym expansion</p>
+            <p>site:domain, lang:xx (15 stemmers)</p>
           </div>
         </div>
         <div class="about-search-feature">
           <div class="about-sf-icon" style="color:var(--amber)">${icon('zap', 20)}</div>
           <div>
             <strong>Smart Matching</strong>
-            <p>Fuzzy typo tolerance, synonym expansion, auto phrase boost</p>
+            <p>Fuzzy typo tolerance, auto phrase boost</p>
           </div>
         </div>
       </div>
@@ -532,7 +531,7 @@ function renderRoadmap(el) {
             <li>P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)</li>
             <li>Crawler with rate limiting, robots.txt, headless browser, live feed</li>
             <li>Indexer with 10+ quality signals, E-E-A-T, spam, PageRank</li>
-            <li>BM25 search with boolean operators, search dorks, 15 language stemmers, synonyms, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
+            <li>BM25 search with boolean operators, search dorks, 15 language stemmers, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
             <li>Admin dashboard with 5 themes, wizard, network graph</li>
             <li>Docker + Compose support</li>
           </ul>
@@ -959,20 +958,12 @@ function setupPageRankDemo() {
 }
 
 // ---- Search Demo ----
-const synonymMap = {
-  js: ['javascript'], javascript: ['js'], ts: ['typescript'], typescript: ['ts'],
-  py: ['python'], python: ['py'], k8s: ['kubernetes'], kubernetes: ['k8s'],
-  docs: ['documentation'], doc: ['documentation'], db: ['database'], database: ['db'],
-  golang: ['go'], go: ['golang'], rust: ['rustlang'], tutorial: ['guide', 'howto'],
-  fix: ['repair', 'resolve'], error: ['bug', 'issue'], ml: ['machine learning'],
-};
-
 const stopWords = new Set(['a','an','the','is','are','was','were','be','been','to','of','in','for','on','with','at','by','from','as','and','but','or','not','this','that','it','i','you','he','she','we','they','my','your','his','her','its','our','their','how','what','which','who']);
 
 function parseQueryDemo(raw) {
   const result = { raw, terms: [], phrases: [], site: '', lang: '', excludes: [], orGroups: [],
     inTitle: '', inURL: '', inText: '', fileTypes: [], before: '', after: '', hasHTTPS: false,
-    synonyms: {}, fuzzy: false };
+    fuzzy: false };
   let remaining = raw.trim();
 
   // Phrases
@@ -1018,11 +1009,6 @@ function parseQueryDemo(raw) {
       continue;
     }
     if (lower && !stopWords.has(lower)) result.terms.push(lower);
-  }
-
-  // Synonyms
-  for (const t of result.terms) {
-    if (synonymMap[t]) result.synonyms[t] = synonymMap[t];
   }
 
   result.fuzzy = result.terms.length <= 3;
@@ -1089,10 +1075,6 @@ function setupSearchDemo() {
           <span class="about-parse-label">Terms</span>
           <span class="about-parse-value">${pq.terms.map(t => `<span class="badge badge-accent">${t}</span>`).join(' ') || '<span class="about-parse-empty">none</span>'}</span>
         </div>
-        ${Object.keys(pq.synonyms).length ? `<div class="about-parse-item">
-          <span class="about-parse-label">Synonyms</span>
-          <span class="about-parse-value">${Object.entries(pq.synonyms).map(([k, v]) => `<span class="badge badge-blue">${k} \u2192 ${v.join(', ')}</span>`).join(' ')}</span>
-        </div>` : ''}
         <div class="about-parse-item">
           <span class="about-parse-label">Fuzzy</span>
           <span class="about-parse-value"><span class="badge ${pq.fuzzy ? 'badge-amber' : 'badge-default'}">${pq.fuzzy ? 'enabled (short query)' : 'disabled'}</span></span>
