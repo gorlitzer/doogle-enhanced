@@ -2633,6 +2633,15 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   color: var(--text-muted);
   margin-top: 4px;
 }
+.wizard-launch-note {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin: 16px auto 0;
+  line-height: 1.5;
+  text-align: center;
+  opacity: 0.85;
+}
 .wizard-launch-actions {
   display: flex;
   align-items: center;
