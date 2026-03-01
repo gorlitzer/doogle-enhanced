@@ -2123,6 +2123,19 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   max-width: 520px;
   margin: 0 auto 28px;
 }
+.wizard-append-note {
+  background: var(--bg-card);
+  border: 1px solid var(--amber, #f59e0b);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 0.88em;
+  color: var(--text-secondary);
+  max-width: 520px;
+  margin: 0 auto 20px;
+}
+.wizard-append-note strong {
+  color: var(--amber, #f59e0b);
+}
 .wizard-begin-btn {
   font-size: 1.05em;
   padding: 14px 36px;
