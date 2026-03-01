@@ -90,4 +90,5 @@ docker:
 	docker compose up --build -d
 
 clean:
+	@-docker compose down -v 2>/dev/null
 	rm -rf $(BIN_DIR) .go/ data/
