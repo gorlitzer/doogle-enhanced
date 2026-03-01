@@ -988,6 +988,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   background: var(--accent-dim); color: var(--accent);
   font-weight: 700; font-size: 0.9em; border-radius: 50%;
 }
+.docs-step-body { flex: 1; min-width: 0; }
 .docs-step-body h3 { font-size: 1em; color: var(--text-primary); margin-bottom: 6px; }
 .docs-step-body p { color: var(--text-secondary); font-size: 0.9em; margin-bottom: 8px; }
 
@@ -2934,6 +2935,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   margin-top: 4px;
 }
 .action-card-danger {
+  grid-column: 1 / -1;
   border-color: rgba(239,68,68,0.3);
   background: rgba(239,68,68,0.03);
 }
