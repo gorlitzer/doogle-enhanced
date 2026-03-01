@@ -63,7 +63,7 @@ export function renderActions(container) {
           ${icon('cpu', 20, 'var(--green)')}
           <h3>Node Settings</h3>
         </div>
-        <div class="actions-grid">
+        <div class="actions-grid actions-grid-full">
           <div class="action-card">
             <div class="action-card-header">
               <div class="action-icon">${icon('fileText', 24, 'var(--green)')}</div>
@@ -133,7 +133,7 @@ export function renderActions(container) {
           ${icon('alertTriangle', 20, 'var(--red)')}
           <h3>Danger Zone</h3>
         </div>
-        <div class="actions-grid">
+        <div class="actions-grid actions-grid-full">
           <div class="action-card action-card-danger">
             <div class="action-card-header">
               <div class="action-icon">${icon('trash', 24, 'var(--red)')}</div>
