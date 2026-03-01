@@ -88,6 +88,14 @@ func (n *Node) init() error {
 	n.peerID = peerID
 	log.Printf("node: peer ID = %s", peerID)
 
+	// 1b. Restore persisted node name (if not set via flag/config)
+	if n.cfg.NodeName == "" {
+		if saved := LoadNodeName(dataDir); saved != "" {
+			n.cfg.NodeName = saved
+			log.Printf("node: restored name = %q", saved)
+		}
+	}
+
 	// 2. libp2p host
 	h, err := p2p.NewHost(n.ctx, privKey, n.cfg.P2P.Port)
 	if err != nil {
@@ -224,7 +232,10 @@ func (n *Node) init() error {
 		IndexStore:   bleveIdx,
 		ReportURL:    n.ReportURL,
 		TrustSummary: n.trustManager.Summary,
-		SetNodeName:  func(name string) { n.cfg.NodeName = name },
+		SetNodeName: func(name string) {
+			n.cfg.NodeName = name
+			_ = SaveNodeName(dataDir, name)
+		},
 		DataDir:      dataDir,
 	})
 
