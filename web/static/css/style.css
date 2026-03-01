@@ -672,11 +672,39 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   grid-template-columns: 8px 1fr 100px 120px 60px 70px;
   gap: 8px;
   align-items: center;
-  padding: 5px 10px;
+  padding: 6px 10px;
   font-size: 0.82em;
   border-bottom: 1px solid var(--border);
-  animation: crawlEventEnter 0.35s ease-out;
+  position: relative;
+  overflow: hidden;
+  animation: crawlEventEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   transition: background 0.15s;
+}
+/* Scanner sweep highlight on entry */
+.crawl-event::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-dim) 40%, rgba(0,212,255,0.25) 50%, var(--accent-dim) 60%, transparent 100%);
+  animation: crawlSweep 0.8s ease-out forwards;
+  pointer-events: none;
+}
+/* Left accent border glow */
+.crawl-event::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent);
+  animation: crawlBorderGlow 1.5s ease-out forwards;
+  pointer-events: none;
+}
+.crawl-event.ev-fail::after {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red), 0 0 16px var(--red);
 }
 .crawl-event:hover {
   background: var(--bg-hover);
@@ -686,6 +714,8 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 .crawl-event.fading {
   animation: crawlEventFade 8s ease-in forwards;
 }
+.crawl-event.fading::before,
+.crawl-event.fading::after { display: none; }
 .crawl-event.fading:hover {
   animation-play-state: paused;
   opacity: 1 !important;
@@ -696,8 +726,16 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   border-radius: 50%;
   flex-shrink: 0;
 }
-.crawl-dot.dot-ok { background: var(--green); box-shadow: 0 0 4px var(--green); }
-.crawl-dot.dot-fail { background: var(--red); box-shadow: 0 0 4px var(--red); }
+.crawl-dot.dot-ok {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: dotPulse 0.6s ease-out;
+}
+.crawl-dot.dot-fail {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+  animation: dotPulse 0.6s ease-out;
+}
 .crawl-url {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -728,9 +766,27 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   font-size: 0.8em;
   text-align: right;
 }
+
+/* --- Crawl Feed Animations --- */
 @keyframes crawlEventEnter {
-  from { opacity: 0; transform: translateY(-20px); }
-  to   { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; transform: translateY(-24px) scaleY(0.7); }
+  50%  { opacity: 1; transform: translateY(2px) scaleY(1.02); }
+  100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes crawlSweep {
+  0%   { transform: translateX(-100%); opacity: 1; }
+  60%  { transform: translateX(100%); opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+@keyframes crawlBorderGlow {
+  0%   { opacity: 1; width: 3px; }
+  40%  { opacity: 0.8; width: 2px; }
+  100% { opacity: 0; width: 1px; }
+}
+@keyframes dotPulse {
+  0%   { transform: scale(2.5); box-shadow: 0 0 12px currentColor; }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
 }
 @keyframes crawlEventFade {
   from { opacity: 1; }

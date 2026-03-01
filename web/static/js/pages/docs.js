@@ -170,6 +170,25 @@ function renderQuickstart(el) {
             <p><strong>Workaround:</strong> Use <code>--bootstrap</code> to explicitly connect outbound to known peers. Your node will crawl, index, and participate in gossip — it just can't accept new inbound connections from unknown peers.</p>
           </div>
         </div>
+        <div class="docs-collapsible">
+          <button class="docs-collapse-trigger">Machine went to sleep / lost power</button>
+          <div class="docs-collapse-body">
+            <p>When your machine sleeps, hibernates, or loses power, the Doogle process is killed without running its graceful shutdown sequence. Here's what survives and what doesn't:</p>
+            <table style="width:100%;font-size:0.9em;margin:8px 0">
+              <thead><tr><th style="text-align:left">Data</th><th style="text-align:left">Status</th><th style="text-align:left">Why</th></tr></thead>
+              <tbody>
+                <tr><td>Identity key (Peer ID)</td><td><span class="badge badge-green">safe</span></td><td>Written to disk on first run, never changes</td></tr>
+                <tr><td>BadgerDB (URL store, links, dedup)</td><td><span class="badge badge-green">safe</span></td><td>Uses a write-ahead log — committed transactions survive crashes</td></tr>
+                <tr><td>Bleve search index</td><td><span class="badge badge-green">safe</span></td><td>Self-repairs on next open; segments already flushed to disk are intact</td></tr>
+                <tr><td>Batch indexer buffer</td><td><span class="badge badge-amber">lost</span></td><td>Up to 100 documents in memory may not have been flushed to Bleve yet</td></tr>
+                <tr><td>Crawl queue</td><td><span class="badge badge-amber">lost</span></td><td>In-memory queue; re-add seeds or let peers re-share URLs via GossipSub</td></tr>
+                <tr><td>Live crawl feed</td><td><span class="badge badge-amber">lost</span></td><td>In-memory ring buffer, resets on restart</td></tr>
+                <tr><td>Peer connections</td><td><span class="badge badge-amber">lost</span></td><td>Reconnected automatically via mDNS / DHT / bootstrap on restart</td></tr>
+              </tbody>
+            </table>
+            <p><strong>Recovery:</strong> Just restart the node. All indexed documents are immediately searchable. Add seed URLs again if the crawl queue was active, or wait for peer gossip to repopulate it.</p>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -1094,6 +1113,9 @@ seed_urls:
         ${infoCard('network', 'Firewall', 'Ensure the libp2p port (default 4001) is reachable if you want peers from outside your LAN to connect.', 'var(--amber)')}
         ${infoCard('shield', 'VPN / Proxy', 'Crawling and local search work fine behind a VPN. However, mDNS discovery breaks (broadcasts stay on the physical LAN), NAT port-mapping and hole-punching are bypassed, and your node becomes unreachable for inbound P2P connections. You can still connect outbound to bootstrap peers. See Troubleshooting for details.', 'var(--red)')}
         ${infoCard('monitor', 'Headless Chrome', 'If enable_headless is true, Chromium will be downloaded automatically on first use via go-rod. Requires ~300MB disk space.', 'var(--purple)')}
+        ${infoCard('zap', 'Graceful Shutdown (Ctrl+C)', 'On SIGINT/SIGTERM the node flushes the batch indexer, closes the Bleve index and BadgerDB cleanly. Crawler workers finish their current page. Zero data loss — safe to stop and restart anytime.', 'var(--green)')}
+        ${infoCard('alertTriangle', 'Sleep / Standby / Power Loss', 'If the machine sleeps, hibernates, or loses power, the process is killed without cleanup. BadgerDB uses a write-ahead log so committed data survives, but up to 100 documents in the batch indexer memory buffer may be lost. The Bleve index self-repairs on next startup. Crawl queue state in memory is also lost — seed URLs will need to be re-added or re-discovered from peers.', 'var(--amber)')}
+        ${infoCard('refresh', 'Restart Behavior', 'On restart the node reloads its identity key (same Peer ID), reopens BadgerDB and Bleve from disk, and resumes normal operation. Previously indexed documents are immediately searchable. The crawl queue starts empty — add seeds via CLI, API, or let GossipSub peers share discovered URLs.', 'var(--blue)')}
       </div>
     </div>
   `;
