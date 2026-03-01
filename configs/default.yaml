@@ -30,11 +30,19 @@ crawler:
   max_depth: 3
   # Respect robots.txt
   respect_robots: true
+  # Headless browser rendering for JS-heavy SPAs (requires Chromium)
+  enable_headless: false
+  # Content below this byte threshold triggers headless fallback
+  headless_threshold: 500
+  # Timeout for headless page rendering
+  headless_timeout: 30s
 
 # Index settings
 index:
   # Bleve index directory (relative to data_dir)
   bleve_dir: "bleve"
+  # How often to recompute PageRank scores
+  pagerank_interval: 5m
 
 # Storage settings
 storage:

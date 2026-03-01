@@ -34,16 +34,20 @@ type APIConfig struct {
 }
 
 type CrawlerConfig struct {
-	Workers        int           `yaml:"workers"`
-	UserAgent      string        `yaml:"user_agent"`
-	RequestTimeout time.Duration `yaml:"request_timeout"`
-	RateLimit      int           `yaml:"rate_limit"`
-	MaxDepth       int           `yaml:"max_depth"`
-	RespectRobots  bool          `yaml:"respect_robots"`
+	Workers           int           `yaml:"workers"`
+	UserAgent         string        `yaml:"user_agent"`
+	RequestTimeout    time.Duration `yaml:"request_timeout"`
+	RateLimit         int           `yaml:"rate_limit"`
+	MaxDepth          int           `yaml:"max_depth"`
+	RespectRobots     bool          `yaml:"respect_robots"`
+	EnableHeadless    bool          `yaml:"enable_headless"`
+	HeadlessThreshold int           `yaml:"headless_threshold"`
+	HeadlessTimeout   time.Duration `yaml:"headless_timeout"`
 }
 
 type IndexConfig struct {
-	BleveDir string `yaml:"bleve_dir"`
+	BleveDir         string        `yaml:"bleve_dir"`
+	PageRankInterval time.Duration `yaml:"pagerank_interval"`
 }
 
 type StorageConfig struct {
@@ -70,15 +74,19 @@ func DefaultConfig() *Config {
 			Bind: "0.0.0.0",
 		},
 		Crawler: CrawlerConfig{
-			Workers:        4,
-			UserAgent:      "DoogleBot/2.0 (+https://github.com/doogle/doogle-v2)",
-			RequestTimeout: 30 * time.Second,
-			RateLimit:      10,
-			MaxDepth:       3,
-			RespectRobots:  true,
+			Workers:           4,
+			UserAgent:         "DoogleBot/2.0 (+https://github.com/doogle/doogle-v2)",
+			RequestTimeout:    30 * time.Second,
+			RateLimit:         10,
+			MaxDepth:          3,
+			RespectRobots:     true,
+			EnableHeadless:    false,
+			HeadlessThreshold: 500,
+			HeadlessTimeout:   30 * time.Second,
 		},
 		Index: IndexConfig{
-			BleveDir: "bleve",
+			BleveDir:         "bleve",
+			PageRankInterval: 5 * time.Minute,
 		},
 		Storage: StorageConfig{
 			DataDir:   "./data/doogle",
@@ -126,6 +134,7 @@ func ParseFlags(cfg *Config) {
 	flag.StringVar(&seed, "seed", "", "Seed URL(s) to crawl (comma-separated)")
 	flag.IntVar(&cfg.Crawler.Workers, "workers", cfg.Crawler.Workers, "Crawler worker count")
 	flag.BoolVar(&cfg.P2P.MDNS, "mdns", cfg.P2P.MDNS, "Enable mDNS discovery")
+	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
 	flag.Parse()
 
 	// If a config file was specified, reload

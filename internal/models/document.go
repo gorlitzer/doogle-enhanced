@@ -53,6 +53,9 @@ type Document struct {
 	IsTimeSensitive bool    `json:"is_time_sensitive"`
 	IsEvergreen     bool    `json:"is_evergreen"`
 
+	// PageRank (set by PageRank computer)
+	PageRankScore float64 `json:"pagerank_score"`
+
 	// Composite
 	RelevanceScore float64 `json:"relevance_score"`
 }
@@ -62,6 +65,7 @@ type Link struct {
 	URL        string `json:"url"`
 	Text       string `json:"text"`
 	IsExternal bool   `json:"is_external"`
+	NoFollow   bool   `json:"nofollow,omitempty"`
 }
 
 // Image represents an extracted image.

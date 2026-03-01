@@ -119,10 +119,14 @@ func ExtractLinks(doc *goquery.Document, baseURLStr string) (links []models.Link
 		isExternal := parsedURL.Host != baseURL.Host
 		text := strings.TrimSpace(s.Text())
 
+		rel, _ := s.Attr("rel")
+		noFollow := strings.Contains(strings.ToLower(rel), "nofollow")
+
 		links = append(links, models.Link{
 			URL:        absURL,
 			Text:       text,
 			IsExternal: isExternal,
+			NoFollow:   noFollow,
 		})
 
 		if urlutil.ShouldCrawl(absURL) {

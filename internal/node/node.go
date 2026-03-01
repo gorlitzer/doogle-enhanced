@@ -36,6 +36,8 @@ type Node struct {
 	bleveIdx  *index.BleveStore
 	badger    *store.BadgerStore
 	urlStore  *store.URLStore
+	linkStore *store.LinkStore
+	pageRank  *indexer.PageRankComputer
 	apiServer *api.Server
 	shards    *index.ShardManager
 	startedAt time.Time
@@ -102,6 +104,7 @@ func (n *Node) init() error {
 	}
 	n.badger = bs
 	n.urlStore = store.NewURLStore(bs)
+	n.linkStore = store.NewLinkStore(bs)
 
 	// 6. Bleve index
 	blevePath := filepath.Join(dataDir, n.cfg.Index.BleveDir)
@@ -115,18 +118,22 @@ func (n *Node) init() error {
 	n.shards = index.NewShardManager()
 	n.shards.AddNode(peerID.String())
 
-	// 8. Indexer
+	// 8. Indexer + PageRank
 	n.indexer = indexer.New(bleveIdx)
+	n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
 
 	// 9. Crawler with callback
 	n.scheduler = crawler.NewScheduler(n.urlStore, 10000)
 	n.crawler = crawler.New(crawler.Config{
-		Workers:        n.cfg.Crawler.Workers,
-		UserAgent:      n.cfg.Crawler.UserAgent,
-		RequestTimeout: n.cfg.Crawler.RequestTimeout,
-		RateLimit:      n.cfg.Crawler.RateLimit,
-		MaxDepth:       n.cfg.Crawler.MaxDepth,
-		RespectRobots:  n.cfg.Crawler.RespectRobots,
+		Workers:           n.cfg.Crawler.Workers,
+		UserAgent:         n.cfg.Crawler.UserAgent,
+		RequestTimeout:    n.cfg.Crawler.RequestTimeout,
+		RateLimit:         n.cfg.Crawler.RateLimit,
+		MaxDepth:          n.cfg.Crawler.MaxDepth,
+		RespectRobots:     n.cfg.Crawler.RespectRobots,
+		EnableHeadless:    n.cfg.Crawler.EnableHeadless,
+		HeadlessThreshold: n.cfg.Crawler.HeadlessThreshold,
+		HeadlessTimeout:   n.cfg.Crawler.HeadlessTimeout,
 	}, n.scheduler, n.onDocumentCrawled)
 
 	// 10. Search engines
@@ -156,6 +163,9 @@ func (n *Node) init() error {
 func (n *Node) Run() error {
 	// Start crawler
 	n.crawler.Start()
+
+	// Start PageRank background computation
+	n.pageRank.Start(n.ctx)
 
 	// Start gossip listener
 	go n.gossipLoop()
@@ -213,7 +223,7 @@ func (n *Node) Status() *models.NodeStatus {
 
 // CrawlerInfo returns crawler configuration and stats for the admin API.
 func (n *Node) CrawlerInfo() *models.CrawlerInfo {
-	crawled, failed, active := n.crawler.Stats()
+	crawled, failed, active, jsRendered := n.crawler.Stats()
 	return &models.CrawlerInfo{
 		Workers:       n.cfg.Crawler.Workers,
 		RateLimit:     n.cfg.Crawler.RateLimit,
@@ -223,6 +233,7 @@ func (n *Node) CrawlerInfo() *models.CrawlerInfo {
 		TotalFailed:   failed,
 		ActiveWorkers: active,
 		SeenURLs:      n.urlStore.SeenCount(),
+		JSRendered:    jsRendered,
 	}
 }
 
@@ -256,6 +267,9 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 		log.Printf("node: index error: %v", err)
 	}
 
+	// Record link graph edges
+	n.recordLinks(doc)
+
 	n.urlStore.IncrementCrawled()
 
 	// Schedule discovered URLs
@@ -282,6 +296,27 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 		}
 		if err := n.gossip.Publish(n.ctx, ann); err != nil {
 			log.Printf("node: gossip publish error: %v", err)
+		}
+	}
+}
+
+// recordLinks stores link graph edges from a crawled document.
+func (n *Node) recordLinks(doc *models.Document) {
+	fromID := models.DocumentID(doc.URL)
+	for _, link := range doc.Links {
+		if link.NoFollow {
+			continue
+		}
+		toURL := urlutil.Normalize(link.URL)
+		toID := models.DocumentID(toURL)
+		edge := store.LinkEdge{
+			FromURL:    doc.URL,
+			ToURL:      toURL,
+			AnchorText: link.Text,
+			IsCross:    link.IsExternal,
+		}
+		if err := n.linkStore.AddLink(fromID, toID, edge); err != nil {
+			log.Printf("node: record link error: %v", err)
 		}
 	}
 }

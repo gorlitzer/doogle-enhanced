@@ -14,6 +14,8 @@ import (
 
 	// Register analysis components
 	_ "github.com/blevesearch/bleve/v2/analysis/token/stop"
+
+	"github.com/doogle/doogle-v2/internal/models"
 )
 
 const analyzerName = "doogle_en"
@@ -100,6 +102,11 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 	docMapping.AddFieldMappingsAt("keywords", textField)
 	docMapping.AddFieldMappingsAt("categories", textField)
 
+	// Anchor text from inbound links
+	anchorField := bleve.NewTextFieldMapping()
+	anchorField.Analyzer = analyzerName
+	docMapping.AddFieldMappingsAt("anchor_text", anchorField)
+
 	// --- Keyword / identifier fields ---
 	docMapping.AddFieldMappingsAt("url", keywordField)
 	docMapping.AddFieldMappingsAt("domain", keywordField)
@@ -113,6 +120,7 @@ func buildMapping() (*mapping.IndexMappingImpl, error) {
 	docMapping.AddFieldMappingsAt("depth", numericField)
 
 	// Scoring fields
+	docMapping.AddFieldMappingsAt("pagerank_score", numericField)
 	docMapping.AddFieldMappingsAt("eeat_score", numericField)
 	docMapping.AddFieldMappingsAt("quality_score", numericField)
 	docMapping.AddFieldMappingsAt("spam_score", numericField)
@@ -168,6 +176,32 @@ func (bs *BleveStore) Search(query string, offset, limit int) ([]SearchHit, int,
 	result, err := bs.index.Search(searchReq)
 	if err != nil {
 		return nil, 0, fmt.Errorf("bleve search: %w", err)
+	}
+
+	var hits []SearchHit
+	for _, match := range result.Hits {
+		doc := fieldsToDoc(match.ID, match.Fields)
+		hits = append(hits, SearchHit{
+			ID:    match.ID,
+			Score: match.Score,
+			Doc:   doc,
+		})
+	}
+
+	return hits, int(result.Total), nil
+}
+
+// SearchAdvanced performs a structured search using a ParsedQuery.
+func (bs *BleveStore) SearchAdvanced(pq *models.ParsedQuery, offset, limit int) ([]SearchHit, int, error) {
+	q := BuildQuery(pq)
+
+	searchReq := bleve.NewSearchRequestOptions(q, limit, offset, false)
+	searchReq.Fields = []string{"*"}
+	searchReq.SortBy([]string{"_score"})
+
+	result, err := bs.index.Search(searchReq)
+	if err != nil {
+		return nil, 0, fmt.Errorf("bleve advanced search: %w", err)
 	}
 
 	var hits []SearchHit
@@ -246,6 +280,7 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.Language = fieldString(fields, "language")
 	doc.Categories = fieldString(fields, "categories")
 	doc.Keywords = fieldString(fields, "keywords")
+	doc.AnchorText = fieldString(fields, "anchor_text")
 
 	// Integer fields (Bleve returns numerics as float64)
 	doc.ContentSize = fieldInt(fields, "content_size")
@@ -254,6 +289,7 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.Depth = fieldInt(fields, "depth")
 
 	// Float fields — scores
+	doc.PageRankScore = fieldFloat(fields, "pagerank_score")
 	doc.EEATScore = fieldFloat(fields, "eeat_score")
 	doc.QualityScore = fieldFloat(fields, "quality_score")
 	doc.SpamScore = fieldFloat(fields, "spam_score")

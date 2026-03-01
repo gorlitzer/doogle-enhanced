@@ -19,8 +19,8 @@ func NewEngine(store index.Store) *Engine {
 
 // Search performs a local search and returns results.
 func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, error) {
-	query := ParseQuery(req.Query)
-	if query == "" {
+	pq := ParseQuery(req.Query)
+	if pq.CleanedQuery == "" && len(pq.Phrases) == 0 {
 		return &models.SearchResponse{Query: req.Query}, nil
 	}
 
@@ -37,7 +37,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 	}
 
 	offset := (page - 1) * pageSize
-	hits, total, err := e.store.Search(query, offset, pageSize)
+	hits, total, err := e.store.SearchAdvanced(pq, offset, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -54,6 +54,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			Description:       desc,
 			Domain:            hit.Doc.Domain,
 			Score:             hit.Score,
+			PageRankScore:     hit.Doc.PageRankScore,
 			EEATScore:         hit.Doc.EEATScore,
 			QualityScore:      hit.Doc.QualityScore,
 			SpamScore:         hit.Doc.SpamScore,
