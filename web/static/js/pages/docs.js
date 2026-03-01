@@ -252,13 +252,19 @@ function renderQuickstart(el) {
     } else {
       methodContent.innerHTML = `
         <div class="docs-steps">
-          ${stepCard(1, 'Clone and start', codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
+          ${stepCard(1, 'Install Go 1.22+', `
+            <p>Doogle is written in Go. Download the installer for your platform from <a href="https://go.dev/dl/" target="_blank">go.dev/dl</a> — it covers macOS, Linux, and Windows.</p>
+            ${codeBlock(`# Verify installation
+go version`, 'bash')}
+            <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">You'll also need <code>make</code> and <code>git</code>. These are pre-installed on most systems. On Windows, use WSL2 or the Docker method instead.</p>
+          `)}
+          ${stepCard(2, 'Clone and start', codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
 make run`, 'bash'))}
-          ${stepCard(2, 'Open the dashboard', `
+          ${stepCard(3, 'Open the dashboard', `
             <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
           `)}
-          ${stepCard(3, 'Connect a second node (another terminal)', codeBlock(`./bin/doogle --port 4002 --api-port 8081 \\
+          ${stepCard(4, 'Connect a second node (another terminal)', codeBlock(`./bin/doogle --port 4002 --api-port 8081 \\
   --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID> \\
   --data-dir ./data/node2`, 'bash'))}
         </div>
