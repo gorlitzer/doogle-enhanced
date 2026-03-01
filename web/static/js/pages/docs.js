@@ -864,7 +864,6 @@ function renderQuerySyntax(el) {
         ${syntaxCard('Date Range', 'after:2025-01-01 before:2025-12-31', 'Restrict to documents crawled within a date range.')}
         ${syntaxCard('HTTPS Only', 'has:https', 'Only show results from HTTPS pages.')}
         ${syntaxCard('Fuzzy Matching', 'pythn', 'Short queries (1-3 terms) automatically enable fuzzy matching. Catches typos for words 4+ characters.')}
-        ${syntaxCard('Synonym Expansion', 'js tutorial', 'Common abbreviations are automatically expanded. "js" also searches for "javascript".')}
         ${syntaxCard('Combined', 'intitle:go -tutorial site:go.dev', 'Mix and match all operators. Phrases, site filters, dorks, and boolean operators all work together.')}
       </div>
     </div>
@@ -897,36 +896,6 @@ function renderQuerySyntax(el) {
 
     <div class="docs-section">
       <div class="docs-section-header">
-        ${icon('trendingUp', 24, 'var(--purple)')}
-        <h2>Synonym Map</h2>
-      </div>
-      <p class="docs-section-desc">These abbreviations are automatically expanded during search.</p>
-      <div class="docs-synonym-grid">
-        ${synonymRow('js', 'javascript')}
-        ${synonymRow('ts', 'typescript')}
-        ${synonymRow('py', 'python')}
-        ${synonymRow('rb', 'ruby')}
-        ${synonymRow('k8s', 'kubernetes')}
-        ${synonymRow('db', 'database')}
-        ${synonymRow('api', 'interface endpoint')}
-        ${synonymRow('auth', 'authentication authorization')}
-        ${synonymRow('config', 'configuration')}
-        ${synonymRow('docs', 'documentation')}
-        ${synonymRow('repo', 'repository')}
-        ${synonymRow('deps', 'dependencies')}
-        ${synonymRow('env', 'environment')}
-        ${synonymRow('msg', 'message')}
-        ${synonymRow('err', 'error')}
-        ${synonymRow('req', 'request')}
-        ${synonymRow('res', 'response')}
-        ${synonymRow('fn', 'function')}
-        ${synonymRow('pkg', 'package')}
-        ${synonymRow('cmd', 'command')}
-      </div>
-    </div>
-
-    <div class="docs-section">
-      <div class="docs-section-header">
         ${icon('star', 24, 'var(--green)')}
         <h2>Field Boosting</h2>
       </div>
@@ -936,10 +905,8 @@ function renderQuerySyntax(el) {
         ${boostBar('Phrase in Content', 4.0, 'var(--blue)')}
         ${boostBar('Term in Title', 3.0, 'var(--accent)')}
         ${boostBar('Term in Anchor Text', 2.0, 'var(--purple)')}
-        ${boostBar('Synonym in Title', 1.5, 'var(--amber)')}
         ${boostBar('Term in Description', 1.5, 'var(--green)')}
         ${boostBar('Term in Content', 1.0, 'var(--text-muted)')}
-        ${boostBar('Synonym in Content', 0.7, 'var(--text-muted)')}
         ${boostBar('Fuzzy Match', 0.5, 'var(--border-light)')}
       </div>
     </div>
@@ -966,7 +933,6 @@ function renderQuerySyntax(el) {
         ${parsed.after || parsed.before ? `<div class="docs-qp-row"><span class="docs-qp-label">Date Range</span>${parsed.after ? `<span class="badge badge-amber">after: ${escapeHtml(parsed.after)}</span>` : ''}${parsed.before ? `<span class="badge badge-amber">before: ${escapeHtml(parsed.before)}</span>` : ''}</div>` : ''}
         ${parsed.hasHTTPS ? `<div class="docs-qp-row"><span class="docs-qp-label">HTTPS</span><span class="badge badge-green">required</span></div>` : ''}
         ${parsed.terms.length ? `<div class="docs-qp-row"><span class="docs-qp-label">Terms</span>${parsed.terms.map(t => `<span class="badge badge-blue">${escapeHtml(t)}</span>`).join(' ')}</div>` : ''}
-        ${Object.keys(parsed.synonyms).length ? `<div class="docs-qp-row"><span class="docs-qp-label">Synonyms</span>${Object.entries(parsed.synonyms).map(([k, v]) => `<span class="badge badge-amber">${escapeHtml(k)} &rarr; ${v.join(', ')}</span>`).join(' ')}</div>` : ''}
         <div class="docs-qp-row"><span class="docs-qp-label">Fuzzy</span><span class="badge badge-${parsed.fuzzy ? 'green' : 'default'}">${parsed.fuzzy ? 'enabled' : 'disabled'}</span></div>
       </div>
     `;
@@ -986,16 +952,6 @@ function syntaxCard(title, example, desc) {
   `;
 }
 
-function synonymRow(from, to) {
-  return `
-    <div class="docs-synonym-row">
-      <code>${from}</code>
-      <span class="docs-synonym-arrow">${icon('arrowRight', 12, 'var(--text-muted)')}</span>
-      <span>${to}</span>
-    </div>
-  `;
-}
-
 function boostBar(label, boost, color) {
   const maxBoost = 5.0;
   const pct = Math.round((boost / maxBoost) * 100);
@@ -1011,7 +967,6 @@ function boostBar(label, boost, color) {
 }
 
 const STOP_WORDS = new Set(['the','a','an','is','are','was','were','be','been','being','in','on','at','to','for','of','with','by','and','or','not','it','this','that','from','as','but','if','no','do','does','did','will','would','could','should','can','may','might','shall','has','have','had','its','than','them','they','their','what','which','who','whom','how','when','where','why','all','each','every','both','few','more','most','other','some','such','only','own']);
-const SYNONYMS = { js:'javascript', ts:'typescript', py:'python', rb:'ruby', k8s:'kubernetes', db:'database', api:'interface endpoint', auth:'authentication authorization', config:'configuration', docs:'documentation', repo:'repository', deps:'dependencies', env:'environment', msg:'message', err:'error', req:'request', res:'response', fn:'function', pkg:'package', cmd:'command', golang:'go', rust:'rustlang', ml:'machine learning', ai:'artificial intelligence', css:'stylesheet', html:'markup', sql:'database query', http:'web protocol', url:'link address', gui:'graphical interface', cli:'command line', os:'operating system', oop:'object oriented', devops:'deployment operations', ci:'continuous integration', cd:'continuous deployment' };
 
 function demoParseQuery(raw) {
   let text = raw.trim();
@@ -1096,13 +1051,9 @@ function demoParseQuery(raw) {
   }
 
   const terms = rawTerms;
-  const synonyms = {};
-  for (const t of terms) {
-    if (SYNONYMS[t]) synonyms[t] = SYNONYMS[t].split(' ');
-  }
   const fuzzy = terms.length <= 3;
 
-  return { phrases, site, lang, inTitle, inURL, inText, fileTypes, before, after, hasHTTPS, excludes, orGroups, terms, synonyms, fuzzy };
+  return { phrases, site, lang, inTitle, inURL, inText, fileTypes, before, after, hasHTTPS, excludes, orGroups, terms, fuzzy };
 }
 
 // ---- Configuration ----

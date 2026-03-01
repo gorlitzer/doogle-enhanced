@@ -109,19 +109,6 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		}
 	}
 
-	for _, syns := range pq.Synonyms {
-		synStr := strings.Join(syns, " ")
-		titleSyn := bleve.NewMatchQuery(synStr)
-		titleSyn.SetField("title")
-		titleSyn.SetBoost(1.5)
-
-		contentSyn := bleve.NewMatchQuery(synStr)
-		contentSyn.SetField("content")
-		contentSyn.SetBoost(0.7)
-
-		boostClauses = append(boostClauses, titleSyn, contentSyn)
-	}
-
 	// If no primary clauses, fall back to a simple query
 	if len(primaryClauses) == 0 {
 		if pq.CleanedQuery != "" {
