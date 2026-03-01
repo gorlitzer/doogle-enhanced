@@ -32,7 +32,7 @@ async function loadNetwork() {
       <div class="card-grid">
         <div class="card">
           <div class="card-label">This Node</div>
-          <div class="card-value" style="font-size:0.85em;word-break:break-all;font-family:monospace">${status.peer_id.slice(0, 16)}...</div>
+          <div class="card-value">${status.node_name ? escapeHtml(status.node_name) : '<span style="font-size:0.85em;word-break:break-all;font-family:monospace">' + status.peer_id.slice(0, 16) + '...</span>'}</div>
         </div>
         <div class="card">
           <div class="card-label">Connected Peers</div>
@@ -120,6 +120,7 @@ async function loadNetwork() {
               <table>
                 <thead>
                   <tr>
+                    <th>Name</th>
                     <th>Peer ID</th>
                     <th>Addresses</th>
                     <th>Status</th>
@@ -129,8 +130,10 @@ async function loadNetwork() {
                   ${peerList.map(p => {
                     const id = typeof p === 'string' ? p : p.peer_id;
                     const addrs = typeof p === 'string' ? [] : (p.addrs || []);
+                    const name = typeof p === 'string' ? '' : (p.node_name || '');
                     return `
                       <tr>
+                        <td>${name ? escapeHtml(name) : '<span style="color:var(--text-muted)">—</span>'}</td>
                         <td class="mono" style="font-size:0.8em">${escapeHtml(id).slice(0, 24)}...</td>
                         <td class="mono" style="font-size:0.75em;color:var(--text-muted)">${addrs.length > 0 ? addrs.map(a => escapeHtml(a)).join('<br>') : '—'}</td>
                         <td><span class="badge badge-green">connected</span></td>
@@ -186,8 +189,8 @@ function buildGraph(status, peerList) {
   // This node (center, larger)
   nodes.push({
     id: status.peer_id,
-    label: 'You',
-    tooltip: status.peer_id.slice(0, 24) + '...',
+    label: status.node_name || 'You',
+    tooltip: (status.node_name ? status.node_name + ' — ' : '') + status.peer_id.slice(0, 24) + '...',
     type: 'self',
     color: getCSS('--accent'),
     radius: 20,
@@ -196,10 +199,11 @@ function buildGraph(status, peerList) {
   // Connected peers
   peerList.forEach((p, i) => {
     const id = typeof p === 'string' ? p : p.peer_id;
+    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : `Peer ${i + 1}`;
     nodes.push({
       id: id,
-      label: `Peer ${i + 1}`,
-      tooltip: id.slice(0, 20) + '...',
+      label: peerName,
+      tooltip: (typeof p !== 'string' && p.node_name ? p.node_name + ' — ' : '') + id.slice(0, 20) + '...',
       type: 'peer',
       color: getCSS('--green'),
       radius: 14,

@@ -182,7 +182,10 @@ function renderResult(r, index) {
   if (r.citation_score > 0.3) badges.push(`<span class="badge badge-purple">cited</span>`);
   if (r.is_time_sensitive) badges.push('<span class="badge badge-amber">time-sensitive</span>');
   if (r.is_evergreen) badges.push('<span class="badge badge-green">evergreen</span>');
-  if (r.peer_id) badges.push(`<span class="badge badge-blue">peer: ${r.peer_id.slice(0, 8)}</span>`);
+  if (r.peer_name || r.peer_id) {
+    const src = r.peer_name || r.peer_id.slice(0, 12) + '...';
+    badges.push(`<span class="badge badge-blue">${escapeHtml(src)}</span>`);
+  }
 
   const spamWarning = r.spam_score > 0.3
     ? `<div class="content-warning">Low trust score (spam: ${r.spam_score.toFixed(2)}) — content may be unreliable</div>`
@@ -246,8 +249,8 @@ function showResultDetail(r) {
       <span class="detail-label">BM25 Score</span>
       <span class="detail-value">${r.score.toFixed(4)}</span>
       ${r.peer_id ? `
-        <span class="detail-label">Source Peer</span>
-        <span class="detail-value" style="font-family:monospace;font-size:0.85em">${escapeHtml(r.peer_id)}</span>
+        <span class="detail-label">Source Node</span>
+        <span class="detail-value">${r.peer_name ? escapeHtml(r.peer_name) + ' ' : ''}<span style="font-family:monospace;font-size:0.8em;color:var(--text-muted)">${escapeHtml(r.peer_id.slice(0, 20))}...</span></span>
       ` : ''}
     </div>
 

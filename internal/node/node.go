@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -53,6 +54,10 @@ type Node struct {
 	trustStore   *store.TrustStore
 	trustManager *TrustManager
 
+	// Peer name resolution
+	peerNames   map[string]string // peer ID → node name
+	peerNamesMu sync.RWMutex
+
 	startedAt time.Time
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -64,6 +69,7 @@ func New(cfg *Config) (*Node, error) {
 
 	n := &Node{
 		cfg:       cfg,
+		peerNames: make(map[string]string),
 		startedAt: time.Now(),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -163,6 +169,9 @@ func (n *Node) init() error {
 		DisconnectedF: func(_ network.Network, conn network.Conn) {
 			pid := conn.RemotePeer().String()
 			n.shards.RemoveNode(pid)
+			n.peerNamesMu.Lock()
+			delete(n.peerNames, pid)
+			n.peerNamesMu.Unlock()
 			log.Printf("shard ring: removed peer %s (total: %d)", pid[:12], n.shards.NodeCount())
 		},
 	})
@@ -211,6 +220,9 @@ func (n *Node) init() error {
 		n.cfg.Search.CacheSize,
 		n.cfg.Search.CacheTTL,
 	)
+	n.search.PeerNameFn = n.PeerName
+	n.search.LocalName = n.cfg.NodeName
+	n.search.LocalID = n.peerID.String()
 
 	// 13. Register P2P protocol handlers
 	p2p.RegisterSearchProtocol(h, n.handlePeerSearch)
@@ -234,6 +246,7 @@ func (n *Node) init() error {
 		TrustSummary: n.trustManager.Summary,
 		SetNodeName: func(name string) {
 			n.cfg.NodeName = name
+			n.search.LocalName = name
 			_ = SaveNodeName(dataDir, name)
 		},
 		DataDir:      dataDir,
@@ -348,11 +361,19 @@ func (n *Node) PeersInfo() []models.PeerInfo {
 			addrStrs = append(addrStrs, a.String())
 		}
 		result = append(result, models.PeerInfo{
-			PeerID: p.String(),
-			Addrs:  addrStrs,
+			PeerID:   p.String(),
+			NodeName: n.PeerName(p.String()),
+			Addrs:    addrStrs,
 		})
 	}
 	return result
+}
+
+// PeerName returns the human-readable name for a peer, or empty if unknown.
+func (n *Node) PeerName(id string) string {
+	n.peerNamesMu.RLock()
+	defer n.peerNamesMu.RUnlock()
+	return n.peerNames[id]
 }
 
 // onDocumentCrawled is called by the crawler when a page is fetched.
@@ -519,8 +540,13 @@ func (n *Node) shardCatalogLoop() {
 
 		// Ensure the peer is in our shard ring
 		n.shards.AddNode(catalog.PeerID)
-		log.Printf("shard catalog: received from %s (%d domains, %d docs, gen %d)",
-			catalog.PeerID[:12], len(catalog.Domains), catalog.DocCount, catalog.Generation)
+		if catalog.NodeName != "" {
+			n.peerNamesMu.Lock()
+			n.peerNames[catalog.PeerID] = catalog.NodeName
+			n.peerNamesMu.Unlock()
+		}
+		log.Printf("shard catalog: received from %s [%s] (%d domains, %d docs, gen %d)",
+			catalog.PeerID[:12], catalog.NodeName, len(catalog.Domains), catalog.DocCount, catalog.Generation)
 	}
 }
 
@@ -535,6 +561,7 @@ func (n *Node) shardCatalogPublisher() {
 			docCount, _ := n.bleveIdx.DocCount()
 			catalog := &p2p.ShardCatalog{
 				PeerID:     n.peerID.String(),
+				NodeName:   n.cfg.NodeName,
 				DocCount:   docCount,
 				Generation: n.genStore.Current(),
 			}
@@ -564,7 +591,12 @@ func (n *Node) handlePeerIndexDoc(doc *models.Document) error {
 
 func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 	n.shards.AddNode(catalog.PeerID)
-	log.Printf("shard protocol: catalog from %s (%d docs)", catalog.PeerID[:12], catalog.DocCount)
+	if catalog.NodeName != "" {
+		n.peerNamesMu.Lock()
+		n.peerNames[catalog.PeerID] = catalog.NodeName
+		n.peerNamesMu.Unlock()
+	}
+	log.Printf("shard protocol: catalog from %s [%s] (%d docs)", catalog.PeerID[:12], catalog.NodeName, catalog.DocCount)
 	return nil
 }
 
