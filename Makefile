@@ -68,7 +68,7 @@ setup:
 
 build:
 	@mkdir -p $(BIN_DIR)
-	@HASH=$$(find web/static -type f | sort | xargs cat | shasum -a 256 | cut -c1-16); \
+	@HASH=$$(find web/static -type f -not -name '.DS_Store' | LC_ALL=C sort | xargs cat | shasum -a 256 | cut -c1-16); \
 	  printf 'package web\n\nconst embedHash = "%s"\n' "$$HASH" > web/embed_hash.go.tmp; \
 	  cmp -s web/embed_hash.go.tmp web/embed_hash.go 2>/dev/null || mv web/embed_hash.go.tmp web/embed_hash.go; \
 	  rm -f web/embed_hash.go.tmp
