@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev docker clean
+.PHONY: help setup build run test dev docker clean reset
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -90,4 +90,4 @@ docker:
 	docker compose up --build -d
 
 clean:
-	rm -rf $(BIN_DIR) .go/
+	rm -rf $(BIN_DIR) .go/ data/
