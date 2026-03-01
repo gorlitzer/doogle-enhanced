@@ -67,6 +67,7 @@ setup:
 
 build:
 	@mkdir -p $(BIN_DIR)
+	@touch web/embed.go
 	$(GO) build -ldflags "-s -w" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
 
 run: build

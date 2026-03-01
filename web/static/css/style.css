@@ -2833,8 +2833,11 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 }
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+@media (max-width: 768px) {
+  .actions-grid { grid-template-columns: 1fr; }
 }
 .action-card {
   background: var(--bg-card);
@@ -3049,9 +3052,6 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   display: flex;
   gap: 10px;
   justify-content: flex-end;
-}
-@media (max-width: 768px) {
-  .actions-grid { grid-template-columns: 1fr; }
 }
 
 /* ---- About: Vision Grid ---- */
