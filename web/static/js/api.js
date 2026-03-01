@@ -28,6 +28,9 @@ export const api = {
   addSeed(url) {
     return postJSON('/api/crawl', { url });
   },
+  crawlBatch(urls) {
+    return postJSON('/api/crawl/batch', { urls });
+  },
   crawlerStatus() {
     return fetchJSON('/api/admin/crawler');
   },

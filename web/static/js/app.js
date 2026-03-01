@@ -9,6 +9,9 @@ import { renderNetwork } from './pages/network.js';
 import { renderDocs } from './pages/docs.js';
 import { renderAbout } from './pages/about.js';
 import { renderLearn } from './pages/learn.js';
+import { renderWizard } from './pages/wizard.js';
+import { initBgAnimation } from './bg-animation.js';
+import { initLogoAnimation } from './logo-animation.js';
 
 const routes = {
   '':            { render: renderSearch, layout: 'search' },
@@ -20,6 +23,7 @@ const routes = {
   'docs':        { render: renderDocs,   layout: 'search' },
   'learn':       { render: renderLearn,  layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
+  'wizard':      { render: renderWizard, layout: 'search' },
 };
 
 let statusInterval = null;
@@ -67,12 +71,19 @@ function render() {
 }
 
 function startStatusPolling() {
+  let firstPoll = true;
   async function poll() {
     try {
       const s = await api.status();
       const badge = document.getElementById('node-badge-text');
       if (badge) {
         badge.textContent = `${s.peer_id.slice(0, 12)}... | ${s.indexed_docs} docs | ${s.connected_peers} peers`;
+      }
+      if (firstPoll) {
+        firstPoll = false;
+        if (s.indexed_docs === 0 && !localStorage.getItem('doogle_wizard_dismissed')) {
+          window.location.hash = '#/wizard';
+        }
       }
     } catch {
       const badge = document.getElementById('node-badge-text');
@@ -88,6 +99,8 @@ window.addEventListener('hashchange', render);
 window.addEventListener('DOMContentLoaded', () => {
   initTheme();
   createThemePicker();
+  initBgAnimation();
+  initLogoAnimation();
   render();
   startStatusPolling();
 });
