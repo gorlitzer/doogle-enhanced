@@ -10,7 +10,7 @@ services:
       - --port=4001
       - --api-port=8080
       - --data-dir=/data
-      - --seed=https://example.com
+      - --seed=https://en.wikipedia.org,https://news.ycombinator.com,https://go.dev,https://developer.mozilla.org,https://docs.python.org/3/,https://www.rust-lang.org,https://blog.cloudflare.com,https://arxiv.org,https://lobste.rs,https://lwn.net,https://stackoverflow.com,https://www.reuters.com,https://arstechnica.com,https://www.bbc.com/news,https://www.nature.com,https://github.com/trending,https://css-tricks.com,https://www.smashingmagazine.com,https://web.dev,https://kubernetes.io/docs/,https://redis.io/docs/,https://www.postgresql.org/docs/,https://reactjs.org,https://vuejs.org,https://angular.dev,https://www.typescriptlang.org,https://deno.land,https://bun.sh,https://htmx.org,https://tailwindcss.com
     ports:
       - "4001:4001"   # P2P
       - "8080:8080"   # API + Web UI

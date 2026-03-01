@@ -787,6 +787,32 @@ function renderConfig(el) {
   el.innerHTML = `
     <div class="docs-section">
       <div class="docs-section-header">
+        ${icon('monitor', 24, 'var(--green)')}
+        <h2>System Requirements</h2>
+      </div>
+      <p class="docs-section-desc">Minimum and recommended specs for running a Doogle node.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Component</th><th>Minimum</th><th>Recommended</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>OS</td><td colspan="2">Linux, macOS, Windows</td><td>Docker image uses Alpine</td></tr>
+            <tr><td>Go</td><td colspan="2">1.22+</td><td>Build from source only</td></tr>
+            <tr><td>CPU</td><td>1 core</td><td>2–4 cores</td><td>More cores = faster crawling</td></tr>
+            <tr><td>RAM</td><td>256 MB</td><td>512 MB – 1 GB</td><td>Scales with index size + workers</td></tr>
+            <tr><td>Disk</td><td>30 MB (empty)</td><td>~50 MB per 1K pages</td><td>BadgerDB + Bleve index</td></tr>
+            <tr><td>P2P Port</td><td colspan="2">4001 (TCP + UDP)</td><td>QUIC-v1 on UDP, configurable</td></tr>
+            <tr><td>API Port</td><td colspan="2">8080 (TCP)</td><td>Web UI + REST API, configurable</td></tr>
+            <tr><td>Ext. deps</td><td colspan="2">None</td><td>Single binary, zero runtime deps</td></tr>
+            <tr><td>Chromium</td><td colspan="2">Optional</td><td>Only if <code>--enable-headless</code> is set</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
         ${icon('cpu', 24, 'var(--accent)')}
         <h2>Configuration</h2>
       </div>

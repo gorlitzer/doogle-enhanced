@@ -304,6 +304,54 @@ export function renderAbout(container) {
         </div>
       </section>
 
+      <!-- Node Requirements -->
+      <section class="about-section about-reveal">
+        <h2 class="about-section-title">Run a Node</h2>
+        <p class="about-section-desc">Everything you need to run your own Doogle node. It's a single binary — no databases, no external services.</p>
+        <div class="about-requirements-grid">
+          <div class="about-req-card">
+            <div class="about-req-icon" style="color:var(--green)">${icon('cpu', 24)}</div>
+            <h3>System</h3>
+            <ul class="about-req-list">
+              <li><strong>OS:</strong> Linux, macOS, or Windows</li>
+              <li><strong>CPU:</strong> 1 core min, 2–4 recommended</li>
+              <li><strong>RAM:</strong> 256 MB min, 512 MB–1 GB recommended</li>
+              <li><strong>Disk:</strong> ~50 MB per 1K indexed pages</li>
+            </ul>
+          </div>
+          <div class="about-req-card">
+            <div class="about-req-icon" style="color:var(--blue)">${icon('radio', 24)}</div>
+            <h3>Network</h3>
+            <ul class="about-req-list">
+              <li><strong>Port 4001</strong> — P2P (TCP + UDP/QUIC)</li>
+              <li><strong>Port 8080</strong> — HTTP API &amp; Web UI</li>
+              <li>Auto NAT traversal (UPnP / hole punching)</li>
+              <li>mDNS for local peer discovery</li>
+            </ul>
+          </div>
+          <div class="about-req-card">
+            <div class="about-req-icon" style="color:var(--amber)">${icon('code', 24)}</div>
+            <h3>Build</h3>
+            <ul class="about-req-list">
+              <li><strong>Go 1.22+</strong> to compile from source</li>
+              <li>Or use the <strong>Docker image</strong> (Alpine-based)</li>
+              <li>Zero runtime dependencies</li>
+              <li>Optional: Chromium for headless JS rendering</li>
+            </ul>
+          </div>
+          <div class="about-req-card">
+            <div class="about-req-icon" style="color:var(--purple)">${icon('database', 24)}</div>
+            <h3>Storage</h3>
+            <ul class="about-req-list">
+              <li><strong>BadgerDB</strong> — URL queue, metadata, link graph</li>
+              <li><strong>Bleve</strong> — full-text search index</li>
+              <li>All stored in <code>--data-dir</code> (default: <code>./data/doogle/</code>)</li>
+              <li>Peer identity key persisted across restarts</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <!-- Get Started -->
       <section class="about-section about-reveal">
         <h2 class="about-section-title">Get Started</h2>
@@ -392,10 +440,13 @@ async function loadStats() {
 function startPipelineAnimation() {
   const steps = document.querySelectorAll('.about-pipeline-step');
   const detail = document.getElementById('pipeline-detail');
+  const pipeline = document.querySelector('.about-pipeline');
   if (!steps.length || !detail) return;
 
   let current = 0;
   let autoPlay = true;
+  let hovered = false;
+  let clickTimer = null;
 
   function highlight(index) {
     steps.forEach((s, i) => s.classList.toggle('active', i === index));
@@ -412,21 +463,33 @@ function startPipelineAnimation() {
     `;
   }
 
+  // Click/tap — pause until another step is tapped or 12s timeout
   steps.forEach((s, i) => {
     s.addEventListener('click', () => {
       autoPlay = false;
       current = i;
       highlight(i);
-      setTimeout(() => { autoPlay = true; }, 8000);
+      if (clickTimer) clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => { autoPlay = true; }, 12000);
     });
   });
 
+  // Hover pause (desktop) — pause on enter, resume on leave
+  if (pipeline) {
+    pipeline.addEventListener('mouseenter', () => { hovered = true; });
+    pipeline.addEventListener('mouseleave', () => { hovered = false; });
+  }
+  if (detail) {
+    detail.addEventListener('mouseenter', () => { hovered = true; });
+    detail.addEventListener('mouseleave', () => { hovered = false; });
+  }
+
   highlight(0);
   window._pageInterval = setInterval(() => {
-    if (!autoPlay) return;
+    if (!autoPlay || hovered) return;
     current = (current + 1) % pipelineSteps.length;
     highlight(current);
-  }, 3000);
+  }, 6000);
 }
 
 // ---- PageRank Interactive Demo ----
