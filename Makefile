@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev docker clean
+.PHONY: help setup build run test dev docker clean nuke
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -17,7 +17,8 @@ help:
 	@echo "    make dev                Docker backend + hot-reload UI on :3000"
 	@echo "    make docker             Build + start 3-node cluster"
 	@echo "    make build              Compile binary to bin/ without running"
-	@echo "    make clean              Remove build artifacts + all node data"
+	@echo "    make clean              Remove binary and node data"
+	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
 	@echo ""
 
 setup:
@@ -91,4 +92,7 @@ docker:
 
 clean:
 	@-docker compose down -v 2>/dev/null
-	rm -rf $(BIN_DIR) .go/ data/
+	rm -rf $(BIN_DIR) data/
+
+nuke: clean
+	rm -rf .go/
