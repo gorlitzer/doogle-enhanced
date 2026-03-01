@@ -1,8 +1,9 @@
 // Doogle v2 — Documentation Page (interactive, visual, consistent with about page)
 import { api } from '../api.js';
-import { icon, escapeHtml, codeBlock, infoCard, bindCopyButtons, bindCollapsibles, showModal } from '../components.js';
+import { icon, escapeHtml, codeBlock, infoCard, bindCopyButtons, bindCollapsibles, showModal, getCSS, hexToRgba } from '../components.js';
 
 let activeTab = 'quickstart';
+let dhtViz = null;
 
 export function renderDocs(container) {
   container.innerHTML = `
@@ -35,8 +36,13 @@ export function renderDocs(container) {
     </div>
   `;
 
+  window._pageCleanup = () => {
+    if (dhtViz) { dhtViz.stop(); dhtViz = null; }
+  };
+
   document.querySelectorAll('#docs-tabs .docs-nav-btn').forEach(tab => {
     tab.addEventListener('click', () => {
+      if (dhtViz) { dhtViz.stop(); dhtViz = null; }
       activeTab = tab.dataset.tab;
       document.querySelectorAll('#docs-tabs .docs-nav-btn').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
@@ -116,9 +122,9 @@ function renderQuickstart(el) {
           ${codeBlock(`curl 'http://localhost:7002/api/search?q=example&page=1&size=10'`, 'bash')}
         `)}
         ${stepCard(4, 'Connect peers', `
-          <p>Run more nodes and they discover each other automatically via mDNS (same LAN) or bootstrap explicitly:</p>
-          ${codeBlock(`./bin/doogle --port 7003 --api-port 7004 \\
-  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID>`, 'bash')}
+          <p>Nodes discover each other <strong>automatically</strong> via the IPFS public DHT — no manual bootstrap needed. Just start another node:</p>
+          ${codeBlock(`./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2`, 'bash')}
+          <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">Peers appear within 30–60 seconds. mDNS also works for LAN discovery. For manual bootstrap: <code>--bootstrap /ip4/HOST/tcp/PORT/p2p/PEER_ID</code></p>
         `)}
       </div>
     </div>
@@ -157,7 +163,7 @@ function renderQuickstart(el) {
         <div class="docs-collapsible">
           <button class="docs-collapse-trigger">No peers connecting</button>
           <div class="docs-collapse-body">
-            <p>On the same LAN, mDNS should work automatically. Across networks, use the <code>--bootstrap</code> flag with a peer's multiaddr. Check the <a href="#/admin/network">Network page</a> for connection status.</p>
+            <p>DHT discovery is enabled by default — nodes find each other via the IPFS public DHT within 30–60 seconds. On the same LAN, mDNS also works automatically. If both fail, use <code>--bootstrap</code> with a peer's multiaddr. Check the <a href="#/admin/network">Network page</a> for connection status. Disable DHT discovery with <code>--dht-discovery=false</code>.</p>
           </div>
         </div>
         <div class="docs-collapsible">
@@ -182,6 +188,7 @@ function renderQuickstart(el) {
                 <tr><td>Web crawling</td><td><span class="badge badge-green">works</span></td><td>Outbound HTTP goes through the VPN tunnel normally</td></tr>
                 <tr><td>Local search &amp; indexing</td><td><span class="badge badge-green">works</span></td><td>Purely local, no network involved</td></tr>
                 <tr><td>Web UI</td><td><span class="badge badge-green">works</span></td><td>Served on localhost, unaffected by VPN routing</td></tr>
+                <tr><td>DHT discovery (IPFS)</td><td><span class="badge badge-green">works</span></td><td>Outbound connections to IPFS bootstrap peers go through the tunnel; DHT advertising and peer finding work normally</td></tr>
                 <tr><td>Outbound peer connections</td><td><span class="badge badge-green">works</span></td><td>Connecting to <code>--bootstrap</code> peers goes through the tunnel</td></tr>
                 <tr><td>GossipSub messaging</td><td><span class="badge badge-green">works</span></td><td>Uses existing outbound streams, no new inbound needed</td></tr>
                 <tr><td>mDNS discovery</td><td><span class="badge badge-red">broken</span></td><td>Multicast stays on physical LAN; VPN tunnel interface does not relay mDNS</td></tr>
@@ -190,7 +197,7 @@ function renderQuickstart(el) {
                 <tr><td>Inbound peer connections</td><td><span class="badge badge-red">broken</span></td><td>Other nodes cannot dial your VPN-assigned IP; your node is a leaf/consumer</td></tr>
               </tbody>
             </table>
-            <p><strong>Workaround:</strong> Use <code>--bootstrap</code> to explicitly connect outbound to known peers. Your node will crawl, index, and participate in gossip — it just can't accept new inbound connections from unknown peers.</p>
+            <p><strong>Good news:</strong> DHT discovery works behind a VPN — your node will find and connect to other Doogle nodes automatically via the IPFS public DHT. You can also use <code>--bootstrap</code> for explicit connections. Your node will crawl, index, and participate in gossip — it just can't accept new inbound connections from unknown peers.</p>
           </div>
         </div>
         <div class="docs-collapsible">
@@ -245,7 +252,7 @@ function renderQuickstart(el) {
                 <code>http://localhost:7006</code>
               </div>
             </div>
-            <p style="margin-top:8px;font-size:0.85em;color:var(--text-muted)">Three nodes auto-connected via mDNS.</p>
+            <p style="margin-top:8px;font-size:0.85em;color:var(--text-muted)">Three nodes auto-connected via IPFS DHT discovery and mDNS.</p>
           `)}
         </div>
       `;
@@ -262,8 +269,7 @@ make setup`, 'bash')}
           ${stepCard(3, 'Open the dashboard', `
             <p>Open <a href="http://localhost:7002" target="_blank">http://localhost:7002</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
           `)}
-          ${stepCard(4, 'Connect a second node (another terminal)', codeBlock(`./bin/doogle --port 7003 --api-port 7004 \\
-  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID> \\
+          ${stepCard(4, 'Connect a second node (another terminal — auto-discovers via DHT)', codeBlock(`./bin/doogle --port 7003 --api-port 7004 \\
   --data-dir ./data/node2`, 'bash'))}
         </div>
         ${infoCard('zap', 'Tip', 'The peer ID is printed to the console on startup. Copy it from Node 1\'s log output.', 'var(--amber)')}
@@ -288,7 +294,7 @@ const archCardDetails = [
   { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>` },
   // P2P layer
-  { title: 'Kademlia DHT', html: `<p>Distributed peer routing via <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a>. Enables internet-wide peer discovery and routing. Bootstrap from known peers or rely on mDNS for LAN discovery. Part of <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
+  { title: 'Kademlia DHT', html: `<p>Distributed peer routing via <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a>. Enables internet-wide peer discovery and routing. By default, connects to IPFS public bootstrap peers and uses <code>RoutingDiscovery</code> to advertise under <code>doogle/network/v2</code> — peers find each other automatically within 30–60 seconds. Also supports mDNS for LAN discovery and manual <code>--bootstrap</code>. Part of <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
   { title: 'GossipSub', html: `<p>Pub/sub message propagation via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a>. Used for URL frontier broadcast (discovered URLs), shard catalog exchange (domain assignments), and peer coordination. Epidemic-style propagation ensures network-wide consistency.</p>` },
   { title: 'Stream Protocols', html: `<p>Request-reply protocols over <a href="https://docs.libp2p.io/" target="_blank">libp2p</a> streams:<br><code>/doogle/search/1.0.0</code> — distributed search fan-out<br><code>/doogle/crawl/1.0.0</code> — crawl task delegation to shard owners<br><code>/doogle/index/1.0.0</code> — document forwarding to shard owners</p>` },
   { title: 'Shard Protocol', html: `<p>Protocol <code>/doogle/shard/1.0.0</code> enables shard catalog exchange between peers. Nodes publish their domain assignments (which domains each node is responsible for) via GossipSub every 60 seconds. The shard catalog includes owned domains, document count, and generation counter.</p>` },
@@ -399,7 +405,7 @@ function renderArchitecture(el) {
               ${icon('network', 18, 'var(--blue)')}
               <div>
                 <strong>Kademlia DHT</strong>
-                <p>Distributed peer routing across the internet. Bootstrap from known peers.</p>
+                <p>Distributed peer routing with IPFS DHT auto-discovery. Zero-config peer finding.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="5" style="cursor:pointer">
@@ -549,7 +555,32 @@ function renderArchitecture(el) {
         </div>
       </div>
     </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('radio', 24, 'var(--amber)')}
+        <h2>DHT Discovery Flow</h2>
+      </div>
+      <p class="docs-section-desc">Live visualization of the IPFS DHT peer discovery flow. Your node connects to IPFS bootstrap peers, advertises on the DHT, and discovers other Doogle nodes automatically.</p>
+      <div class="graph-container" style="position:relative">
+        <canvas id="dht-discovery-graph"></canvas>
+        <div class="graph-legend">
+          <span><span class="dot" style="background:var(--accent)"></span> This node</span>
+          <span><span class="dot" style="background:var(--amber)"></span> IPFS bootstrap</span>
+          <span><span class="dot" style="background:var(--green)"></span> Doogle peer</span>
+          <span><span class="dot" style="background:var(--purple);opacity:0.5"></span> DHT signal</span>
+        </div>
+      </div>
+    </div>
   `;
+
+  // Start DHT discovery visualization
+  if (dhtViz) dhtViz.stop();
+  const dhtCanvas = document.getElementById('dht-discovery-graph');
+  if (dhtCanvas) {
+    dhtViz = new DHTDiscoveryViz(dhtCanvas);
+    dhtViz.start();
+  }
 
   // Bind architecture card modals
   el.querySelectorAll('.docs-arch-card[data-arch-idx]').forEach(card => {
@@ -1067,7 +1098,8 @@ const configDetails = [
   { title: '--port', html: '<p>libp2p listen port for P2P communication. Uses TCP and UDP (QUIC-v1). Default: 7001.</p><p>Environment variable: <code>DOOGLE_PORT</code></p><p>YAML: <code>p2p.port: 7001</code></p>' },
   { title: '--api-port', html: '<p>HTTP API and web UI port. Serves the REST API and embedded SPA. Default: 7002.</p><p>Environment variable: <code>DOOGLE_API_PORT</code></p><p>YAML: <code>api.port: 7002</code></p>' },
   { title: '--data-dir', html: '<p>Directory for Bleve index, BadgerDB databases, identity keys, and all persistent state. Default: ./data</p><p>Environment variable: <code>DOOGLE_DATA_DIR</code></p><p>YAML: <code>storage.data_dir: "./data"</code></p>' },
-  { title: '--bootstrap', html: '<p>Bootstrap peer multiaddr for joining an existing network. Format: <code>/ip4/&lt;IP&gt;/tcp/7001/p2p/&lt;PEER_ID&gt;</code></p><p>If not provided, relies on mDNS for local peer discovery.</p><p>YAML: <code>p2p.bootstrap_peers: ["/ip4/.../tcp/7001/p2p/..."]</code></p>' },
+  { title: '--bootstrap', html: '<p>Bootstrap peer multiaddr for manual connection to a specific peer. Format: <code>/ip4/&lt;IP&gt;/tcp/7001/p2p/&lt;PEER_ID&gt;</code></p><p>Usually not needed — DHT discovery finds peers automatically via the IPFS public DHT. Use this for faster initial connections or private networks.</p><p>YAML: <code>p2p.bootstrap_peers: ["/ip4/.../tcp/7001/p2p/..."]</code></p>' },
+  { title: '--dht-discovery', html: '<p>Enable or disable automatic peer discovery via the IPFS public DHT. When enabled (default), the node connects to IPFS bootstrap peers, advertises under the rendezvous namespace <code>doogle/network/v2</code>, and periodically searches for other Doogle nodes. Peers are found within 30–60 seconds.</p><p>Disable for air-gapped or private networks: <code>--dht-discovery=false</code></p><p>YAML: <code>p2p.dht_discovery: true</code></p>' },
   { title: '--seed', html: '<p>Seed URL(s) to start crawling on launch. Comma-separated for multiple URLs.</p><p>YAML: <code>seed_urls: ["https://..."]</code></p>' },
   { title: '--workers', html: '<p>Number of concurrent crawler workers. More workers = faster crawling but higher CPU/memory. Default: 4.</p><p>YAML: <code>crawler.workers: 4</code></p>' },
   { title: '--max-depth', html: '<p>Maximum link depth the crawler will follow from a seed URL. Higher values discover more pages but take longer. Default: 3.</p><p>YAML: <code>crawler.max_depth: 3</code></p>' },
@@ -1120,7 +1152,8 @@ function renderConfig(el) {
         ${configCard('--port', '7001', 'libp2p listen port for P2P communication.', 'network', 1)}
         ${configCard('--api-port', '7002', 'HTTP API and web UI port.', 'monitor', 2)}
         ${configCard('--data-dir', './data', 'Directory for Bleve index, BadgerDB, and identity keys.', 'database', 3)}
-        ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network', 4)}
+        ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for manual connection (usually not needed).', 'network', 4)}
+        ${configCard('--dht-discovery', 'true', 'Auto-discover peers via IPFS public DHT.', 'radio', 14)}
         ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe', 5)}
         ${configCard('--workers', '4', 'Number of concurrent crawler workers.', 'download', 6)}
         ${configCard('--max-depth', '3', 'Maximum link depth the crawler will follow from a seed URL.', 'link', 7)}
@@ -1144,6 +1177,10 @@ function renderConfig(el) {
 p2p:
   port: 7001
   mdns: true
+  dht_discovery: true            # auto-discover peers via IPFS public DHT
+  dht_rendezvous: "doogle/network/v2"
+  dht_discovery_interval: 30s
+  dht_max_peers: 50
   bootstrap_peers: []
 
 api:
@@ -1226,7 +1263,7 @@ doogle restore [--data-dir PATH] [--force] <archive.tar.gz>`, 'bash')}
         ${infoCard('database', 'Data Persistence', 'All data is stored in --data-dir. Back up this directory to preserve your index, crawl history, and identity key.', 'var(--blue)')}
         ${infoCard('shield', 'Identity', 'A libp2p identity key is auto-generated on first run and stored in data-dir/identity.key. This key determines your Peer ID.', 'var(--green)')}
         ${infoCard('network', 'Firewall', 'Ensure the libp2p port (default 7001) is reachable if you want peers from outside your LAN to connect.', 'var(--amber)')}
-        ${infoCard('shield', 'VPN / Proxy', 'Crawling and local search work fine behind a VPN. However, mDNS discovery breaks (broadcasts stay on the physical LAN), NAT port-mapping and hole-punching are bypassed, and your node becomes unreachable for inbound P2P connections. You can still connect outbound to bootstrap peers. See Troubleshooting for details.', 'var(--red)')}
+        ${infoCard('shield', 'VPN / Proxy', 'Crawling and local search work fine behind a VPN. DHT discovery also works — your node finds peers via the IPFS public DHT through the VPN tunnel. However, mDNS breaks (broadcasts stay on the physical LAN), NAT port-mapping and hole-punching are bypassed, and inbound P2P connections are blocked. See Troubleshooting for details.', 'var(--red)')}
         ${infoCard('monitor', 'Headless Chrome', 'If enable_headless is true, Chromium will be downloaded automatically on first use via go-rod. Requires ~300MB disk space.', 'var(--purple)')}
         ${infoCard('zap', 'Graceful Shutdown (Ctrl+C)', 'On SIGINT/SIGTERM the node flushes the batch indexer, closes the Bleve index and BadgerDB cleanly. Crawler workers finish their current page. Zero data loss — safe to stop and restart anytime.', 'var(--green)')}
         ${infoCard('alertTriangle', 'Sleep / Standby / Power Loss', 'If the machine sleeps, hibernates, or loses power, the process is killed without cleanup. BadgerDB uses a write-ahead log so committed data survives, but up to 100 documents in the batch indexer memory buffer may be lost. The Bleve index self-repairs on next startup. Crawl queue state in memory is also lost — seed URLs will need to be re-added or re-discovered from peers.', 'var(--amber)')}
@@ -1421,4 +1458,365 @@ function configCard(flag, defaultVal, desc, iconName, idx) {
       </div>
     </div>
   `;
+}
+
+// ============================================================
+// DHT DISCOVERY ANIMATED VISUALIZATION
+// ============================================================
+
+class DHTDiscoveryViz {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.animFrame = null;
+    this.running = false;
+    this.t = 0;
+    this.particles = [];
+    this.discoveredPeers = [];
+    this.pulses = [];
+    this.phase = 0;
+    this.phaseTimer = 0;
+    this.hovered = null;
+    this.mouse = { x: 0, y: 0 };
+
+    this._resize();
+    this._initNodes();
+    this._bindEvents();
+  }
+
+  _resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const parent = this.canvas.parentElement;
+    const W = parent.offsetWidth || 600;
+    const H = 380;
+    this.canvas.width = W * dpr;
+    this.canvas.height = H * dpr;
+    this.canvas.style.width = W + 'px';
+    this.canvas.style.height = H + 'px';
+    this.ctx.scale(dpr, dpr);
+    this.W = W;
+    this.H = H;
+    this.cx = W / 2;
+    this.cy = H / 2;
+  }
+
+  _initNodes() {
+    const cx = this.cx, cy = this.cy;
+    this.selfNode = { x: cx, y: cy, r: 22, label: 'You', type: 'self' };
+
+    const bootstrapNames = ['IPFS-1', 'IPFS-2', 'IPFS-3', 'IPFS-4', 'IPFS-5'];
+    const innerR = 100;
+    this.bootstrapNodes = bootstrapNames.map((name, i) => {
+      const angle = (i / bootstrapNames.length) * Math.PI * 2 - Math.PI / 2;
+      return {
+        x: cx + Math.cos(angle) * innerR,
+        y: cy + Math.sin(angle) * innerR,
+        r: 10, label: name, type: 'bootstrap',
+        angle, connected: false, connectProgress: 0,
+      };
+    });
+
+    const outerR = 175;
+    const peerCount = 4;
+    this.discoveredPeers = [];
+    for (let i = 0; i < peerCount; i++) {
+      const angle = (i / peerCount) * Math.PI * 2 + Math.PI / 6;
+      this.discoveredPeers.push({
+        x: cx + Math.cos(angle) * outerR,
+        y: cy + Math.sin(angle) * outerR,
+        r: 12, label: `Peer ${i + 1}`, type: 'doogle',
+        angle, discovered: false, discoverProgress: 0, connectProgress: 0,
+      });
+    }
+  }
+
+  _bindEvents() {
+    this.canvas.addEventListener('mousemove', e => {
+      const r = this.canvas.getBoundingClientRect();
+      this.mouse = { x: e.clientX - r.left, y: e.clientY - r.top };
+      this.hovered = this._hitTest(this.mouse.x, this.mouse.y);
+      this.canvas.style.cursor = this.hovered ? 'pointer' : 'default';
+    });
+  }
+
+  _hitTest(mx, my) {
+    const all = [this.selfNode, ...this.bootstrapNodes, ...this.discoveredPeers.filter(p => p.discovered)];
+    for (const n of all) {
+      const dx = n.x - mx, dy = n.y - my;
+      if (dx * dx + dy * dy < (n.r + 6) ** 2) return n;
+    }
+    return null;
+  }
+
+  start() {
+    this.running = true;
+    this.phase = 0;
+    this.phaseTimer = 0;
+    const tick = () => {
+      if (!this.running) return;
+      this.t++;
+      this._update();
+      this._draw();
+      this.animFrame = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  stop() {
+    this.running = false;
+    if (this.animFrame) cancelAnimationFrame(this.animFrame);
+  }
+
+  _update() {
+    this.phaseTimer++;
+
+    if (this.phase === 0) {
+      this.bootstrapNodes.forEach((n, i) => {
+        if (this.phaseTimer > i * 15) {
+          n.connectProgress = Math.min(1, n.connectProgress + 0.03);
+          if (n.connectProgress >= 1) n.connected = true;
+        }
+      });
+      if (this.bootstrapNodes.every(n => n.connected)) {
+        this.phase = 1;
+        this.phaseTimer = 0;
+      }
+    }
+
+    if (this.phase === 1) {
+      if (this.phaseTimer % 30 === 0 && this.pulses.length < 6) {
+        this.pulses.push({ x: this.cx, y: this.cy, r: 0, maxR: 200, alpha: 0.7, type: 'advertise' });
+      }
+      if (this.phaseTimer > 120) {
+        this.phase = 2;
+        this.phaseTimer = 0;
+      }
+    }
+
+    if (this.phase === 2) {
+      if (this.phaseTimer % 20 === 0) {
+        const src = this.bootstrapNodes[Math.floor(Math.random() * this.bootstrapNodes.length)];
+        const target = this.discoveredPeers[Math.floor(Math.random() * this.discoveredPeers.length)];
+        this.particles.push({
+          x: src.x, y: src.y,
+          tx: target.x, ty: target.y,
+          progress: 0, speed: 0.02 + Math.random() * 0.02,
+        });
+      }
+
+      this.discoveredPeers.forEach((p, i) => {
+        if (this.phaseTimer > 40 + i * 25) {
+          if (!p.discovered) {
+            p.discovered = true;
+            this.pulses.push({ x: p.x, y: p.y, r: 0, maxR: 40, alpha: 0.8, type: 'discover' });
+          }
+          p.discoverProgress = Math.min(1, p.discoverProgress + 0.03);
+        }
+        if (p.discovered && p.discoverProgress >= 0.5) {
+          p.connectProgress = Math.min(1, p.connectProgress + 0.02);
+        }
+      });
+
+      if (this.discoveredPeers.every(p => p.connectProgress >= 1)) {
+        this.phase = 3;
+        this.phaseTimer = 0;
+      }
+    }
+
+    if (this.phase === 3) {
+      if (this.phaseTimer % 90 === 0) {
+        this.pulses.push({ x: this.cx, y: this.cy, r: 0, maxR: 200, alpha: 0.3, type: 'advertise' });
+      }
+      if (this.phaseTimer > 600) {
+        this._resetAnimation();
+      }
+    }
+
+    this.particles = this.particles.filter(p => {
+      p.progress += p.speed;
+      p.x = p.x + (p.tx - p.x) * p.speed * 3;
+      p.y = p.y + (p.ty - p.y) * p.speed * 3;
+      return p.progress < 1;
+    });
+
+    this.pulses = this.pulses.filter(p => {
+      p.r += 2;
+      p.alpha -= 0.008;
+      return p.alpha > 0 && p.r < p.maxR;
+    });
+  }
+
+  _resetAnimation() {
+    this.phase = 0;
+    this.phaseTimer = 0;
+    this.particles = [];
+    this.pulses = [];
+    this.bootstrapNodes.forEach(n => { n.connected = false; n.connectProgress = 0; });
+    this.discoveredPeers.forEach(p => { p.discovered = false; p.discoverProgress = 0; p.connectProgress = 0; });
+  }
+
+  _draw() {
+    const ctx = this.ctx;
+    const W = this.W, H = this.H;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = getCSS('--bg-card');
+    ctx.fillRect(0, 0, W, H);
+
+    const accent = getCSS('--accent');
+    const amber = getCSS('--amber');
+    const green = getCSS('--green');
+    const purple = getCSS('--purple');
+    const textColor = getCSS('--canvas-text') || getCSS('--text-primary');
+    const textMuted = getCSS('--text-muted');
+
+    for (const p of this.pulses) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.strokeStyle = p.type === 'advertise'
+        ? hexToRgba(purple, p.alpha * 0.6)
+        : hexToRgba(green, p.alpha * 0.8);
+      ctx.lineWidth = p.type === 'advertise' ? 2 : 1.5;
+      ctx.setLineDash(p.type === 'advertise' ? [6, 4] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    for (const n of this.bootstrapNodes) {
+      if (n.connectProgress > 0) {
+        const dx = n.x - this.cx, dy = n.y - this.cy;
+        ctx.beginPath();
+        ctx.moveTo(this.cx, this.cy);
+        ctx.lineTo(this.cx + dx * n.connectProgress, this.cy + dy * n.connectProgress);
+        ctx.strokeStyle = hexToRgba(amber, 0.3 + n.connectProgress * 0.3);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    for (const p of this.discoveredPeers) {
+      if (p.connectProgress > 0) {
+        const dx = p.x - this.cx, dy = p.y - this.cy;
+        ctx.beginPath();
+        ctx.moveTo(this.cx, this.cy);
+        ctx.lineTo(this.cx + dx * p.connectProgress, this.cy + dy * p.connectProgress);
+        ctx.strokeStyle = hexToRgba(green, 0.2 + p.connectProgress * 0.4);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    for (const p of this.particles) {
+      const alpha = 1 - p.progress;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba(purple, alpha * 0.8);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = hexToRgba(purple, alpha * 0.2);
+      ctx.fill();
+    }
+
+    for (const n of this.bootstrapNodes) {
+      const isHov = this.hovered === n;
+      if (isHov) { ctx.shadowColor = amber; ctx.shadowBlur = 12; }
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = n.connected ? amber : hexToRgba(amber, 0.3);
+      ctx.fill();
+      ctx.strokeStyle = isHov ? amber : hexToRgba(amber, 0.5);
+      ctx.lineWidth = isHov ? 2 : 1;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = textMuted;
+      ctx.font = '9px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, n.y + n.r + 12);
+    }
+
+    for (const p of this.discoveredPeers) {
+      if (!p.discovered) continue;
+      const scale = Math.min(1, p.discoverProgress * 2);
+      const isHov = this.hovered === p;
+      if (isHov) { ctx.shadowColor = green; ctx.shadowBlur = 12; }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * scale, 0, Math.PI * 2);
+      ctx.fillStyle = p.connectProgress >= 1 ? green : hexToRgba(green, 0.4 + p.connectProgress * 0.6);
+      ctx.fill();
+      ctx.strokeStyle = isHov ? green : hexToRgba(green, 0.6);
+      ctx.lineWidth = isHov ? 2 : 1;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (scale >= 0.8) {
+        ctx.fillStyle = textColor;
+        ctx.font = '10px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.label, p.x, p.y + p.r + 14);
+      }
+    }
+
+    const selfGlow = Math.sin(this.t * 0.05) * 0.15 + 0.85;
+    const isHovSelf = this.hovered === this.selfNode;
+    if (isHovSelf) { ctx.shadowColor = accent; ctx.shadowBlur = 20; }
+    else { ctx.shadowColor = accent; ctx.shadowBlur = 8 * selfGlow; }
+    ctx.beginPath();
+    ctx.arc(this.selfNode.x, this.selfNode.y, this.selfNode.r, 0, Math.PI * 2);
+    ctx.fillStyle = accent;
+    ctx.fill();
+    ctx.strokeStyle = isHovSelf ? '#fff' : hexToRgba(accent, 0.6);
+    ctx.lineWidth = isHovSelf ? 2.5 : 1.5;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('You', this.selfNode.x, this.selfNode.y);
+    ctx.textBaseline = 'alphabetic';
+
+    const phaseLabels = [
+      'Connecting to IPFS bootstrap peers...',
+      'Advertising on DHT as "doogle/network/v2"...',
+      'Finding Doogle peers on the DHT...',
+      'Connected — re-advertising periodically',
+    ];
+    ctx.fillStyle = textMuted;
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(phaseLabels[this.phase], this.cx, H - 14);
+
+    if (this.hovered) {
+      const n = this.hovered;
+      let tip = '';
+      if (n.type === 'self') tip = 'Your Doogle node';
+      else if (n.type === 'bootstrap') tip = `IPFS Bootstrap — ${n.connected ? 'Connected' : 'Connecting...'}`;
+      else if (n.type === 'doogle') tip = `Doogle Peer — ${n.connectProgress >= 1 ? 'Connected' : 'Discovering...'}`;
+
+      ctx.fillStyle = getCSS('--canvas-tooltip-bg') || 'rgba(0,0,0,0.8)';
+      const tw = ctx.measureText(tip).width + 16;
+      const tx = n.x - tw / 2;
+      const ty = n.y - n.r - 30;
+      _roundRect(ctx, tx, ty, tw, 22, 4);
+      ctx.fill();
+      ctx.fillStyle = getCSS('--canvas-text-bold') || '#fff';
+      ctx.font = '10px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(tip, n.x, ty + 14);
+    }
+  }
+}
+
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }

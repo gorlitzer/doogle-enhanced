@@ -109,8 +109,21 @@ func (n *Node) init() error {
 	}
 	n.host = h
 
-	// 3. Discovery (DHT + mDNS)
-	disc, err := p2p.NewDiscovery(n.ctx, h, n.cfg.P2P.BootstrapPeers, n.cfg.P2P.MDNS)
+	// 3. Discovery (DHT + mDNS + IPFS routing discovery)
+	disc, err := p2p.NewDiscovery(n.ctx, h, p2p.DiscoveryConfig{
+		BootstrapPeers:       n.cfg.P2P.BootstrapPeers,
+		EnableMDNS:           n.cfg.P2P.MDNS,
+		EnableDHTDiscovery:   n.cfg.P2P.DHTDiscovery,
+		DHTRendezvous:        n.cfg.P2P.DHTRendezvous,
+		DHTDiscoveryInterval: n.cfg.P2P.DHTDiscoveryInterval,
+		DHTMaxPeers:          n.cfg.P2P.DHTMaxPeers,
+		OnDooglePeerConnected: func(pid peer.ID) {
+			pidStr := pid.String()
+			n.shards.AddNode(pidStr)
+			h.ConnManager().Protect(pid, "doogle")
+			log.Printf("shard ring: added Doogle peer %s (total: %d)", pidStr[:12], n.shards.NodeCount())
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("discovery: %w", err)
 	}
@@ -159,15 +172,12 @@ func (n *Node) init() error {
 	n.shards = index.NewShardManager()
 	n.shards.AddNode(peerID.String())
 
-	// 7a. Register network notifiee to track peer join/leave for shard ring
+	// 7a. Register network notifiee for peer disconnect cleanup
 	h.Network().Notify(&network.NotifyBundle{
-		ConnectedF: func(_ network.Network, conn network.Conn) {
-			pid := conn.RemotePeer().String()
-			n.shards.AddNode(pid)
-			log.Printf("shard ring: added peer %s (total: %d)", pid[:12], n.shards.NodeCount())
-		},
 		DisconnectedF: func(_ network.Network, conn network.Conn) {
-			pid := conn.RemotePeer().String()
+			remotePeer := conn.RemotePeer()
+			pid := remotePeer.String()
+			h.ConnManager().Unprotect(remotePeer, "doogle")
 			n.shards.RemoveNode(pid)
 			n.peerNamesMu.Lock()
 			delete(n.peerNames, pid)
@@ -276,6 +286,10 @@ func (n *Node) Run() error {
 	go n.antiEntropyLoop()
 	go n.spamReportLoop()
 
+	// Start DHT routing discovery (advertise + find peers)
+	n.discovery.StartAdvertising(n.ctx)
+	go n.discovery.StartFindingPeers(n.ctx)
+
 	// Add seed URLs
 	for _, seed := range n.cfg.SeedURLs {
 		n.crawler.AddSeed(seed)
@@ -309,17 +323,20 @@ func (n *Node) Shutdown() {
 func (n *Node) Status() *models.NodeStatus {
 	docCount, _ := n.bleveIdx.DocCount()
 
-	peers := n.host.Network().Peers()
-	peerList := make([]string, 0, len(peers))
-	for _, p := range peers {
-		peerList = append(peerList, p.String())
+	// Only report Doogle peers (shard ring members), not IPFS routing peers
+	dooglePeers := n.shards.AllMembers()
+	peerList := make([]string, 0, len(dooglePeers))
+	for _, p := range dooglePeers {
+		if p != n.peerID.String() {
+			peerList = append(peerList, p)
+		}
 	}
 
 	return &models.NodeStatus{
 		PeerID:         n.peerID.String(),
 		NodeName:       n.cfg.NodeName,
 		Addrs:          multiaddrsToStrings(n.host),
-		ConnectedPeers: len(peers),
+		ConnectedPeers: len(peerList),
 		PeerList:       peerList,
 		IndexedDocs:    int(docCount),
 		CrawledURLs:    n.urlStore.CrawledCount(),
@@ -350,19 +367,27 @@ func (n *Node) IndexerStats() *models.IndexerInfo {
 	return n.indexer.Stats()
 }
 
-// PeersInfo returns detailed info about connected peers.
+// PeersInfo returns detailed info about connected Doogle peers.
 func (n *Node) PeersInfo() []models.PeerInfo {
-	peers := n.host.Network().Peers()
-	result := make([]models.PeerInfo, 0, len(peers))
-	for _, p := range peers {
-		addrs := n.host.Peerstore().Addrs(p)
+	selfID := n.peerID.String()
+	dooglePeers := n.shards.AllMembers()
+	result := make([]models.PeerInfo, 0, len(dooglePeers))
+	for _, pidStr := range dooglePeers {
+		if pidStr == selfID {
+			continue
+		}
+		pid, err := peer.Decode(pidStr)
+		if err != nil {
+			continue
+		}
+		addrs := n.host.Peerstore().Addrs(pid)
 		addrStrs := make([]string, 0, len(addrs))
 		for _, a := range addrs {
 			addrStrs = append(addrStrs, a.String())
 		}
 		result = append(result, models.PeerInfo{
-			PeerID:   p.String(),
-			NodeName: n.PeerName(p.String()),
+			PeerID:   pidStr,
+			NodeName: n.PeerName(pidStr),
 			Addrs:    addrStrs,
 		})
 	}
