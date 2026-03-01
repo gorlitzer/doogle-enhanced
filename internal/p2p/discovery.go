@@ -4,29 +4,49 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
+	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 )
 
-// Discovery manages peer discovery via Kademlia DHT and mDNS.
+// DiscoveryConfig holds all discovery-related settings.
+type DiscoveryConfig struct {
+	BootstrapPeers        []string
+	EnableMDNS            bool
+	EnableDHTDiscovery    bool
+	DHTRendezvous         string
+	DHTDiscoveryInterval  time.Duration
+	DHTMaxPeers           int
+	OnDooglePeerConnected func(peer.ID) // called when a verified Doogle peer connects
+}
+
+// Discovery manages peer discovery via Kademlia DHT, mDNS, and IPFS routing discovery.
 type Discovery struct {
-	host    host.Host
-	dht     *dht.IpfsDHT
-	peerCh  chan peer.AddrInfo
-	mdnsSvc mdns.Service
+	host        host.Host
+	dht         *dht.IpfsDHT
+	peerCh      chan peer.AddrInfo
+	mdnsSvc     mdns.Service
+	routingDisc discovery.Discovery
+	cfg         DiscoveryConfig
 }
 
 // NewDiscovery creates the discovery subsystem with a Kademlia DHT.
-func NewDiscovery(ctx context.Context, h host.Host, bootstrapPeers []string, enableMDNS bool) (*Discovery, error) {
+func NewDiscovery(ctx context.Context, h host.Host, cfg DiscoveryConfig) (*Discovery, error) {
 	d := &Discovery{
 		host:   h,
 		peerCh: make(chan peer.AddrInfo, 64),
+		cfg:    cfg,
 	}
 
 	// Create Kademlia DHT
@@ -41,13 +61,34 @@ func NewDiscovery(ctx context.Context, h host.Host, bootstrapPeers []string, ena
 		return nil, fmt.Errorf("bootstrap DHT: %w", err)
 	}
 
-	// Connect to bootstrap peers
-	if len(bootstrapPeers) > 0 {
-		d.connectBootstrapPeers(ctx, bootstrapPeers)
+	// Connect to user-provided bootstrap peers
+	if len(cfg.BootstrapPeers) > 0 {
+		d.connectBootstrapPeers(ctx, cfg.BootstrapPeers)
+	}
+
+	// Connect to IPFS public DHT bootstrap peers and set up routing discovery
+	if cfg.EnableDHTDiscovery {
+		d.connectIPFSBootstrapPeers(ctx)
+
+		routingDisc := drouting.NewRoutingDiscovery(kadDHT)
+		backoffFactory := backoff.NewExponentialBackoff(
+			time.Second,
+			5*time.Minute,
+			backoff.FullJitter,
+			time.Second,
+			2.0,
+			0,
+			rand.NewSource(time.Now().UnixNano()),
+		)
+		backedOff, err := backoff.NewBackoffDiscovery(routingDisc, backoffFactory)
+		if err != nil {
+			return nil, fmt.Errorf("backoff discovery: %w", err)
+		}
+		d.routingDisc = backedOff
 	}
 
 	// Start mDNS for local discovery
-	if enableMDNS {
+	if cfg.EnableMDNS {
 		svc := mdns.NewMdnsService(h, "doogle-p2p", d)
 		if err := svc.Start(); err != nil {
 			log.Printf("mDNS start failed (non-fatal): %v", err)
@@ -70,6 +111,82 @@ func (d *Discovery) HandlePeerFound(pi peer.AddrInfo) {
 	defer cancel()
 	if err := d.host.Connect(ctx, pi); err != nil {
 		log.Printf("mDNS: failed to connect to %s: %v", pi.ID.String()[:12], err)
+	} else if d.cfg.OnDooglePeerConnected != nil {
+		d.cfg.OnDooglePeerConnected(pi.ID)
+	}
+}
+
+// StartAdvertising advertises this node on the DHT under the configured rendezvous namespace.
+// It spawns a background goroutine that re-advertises automatically.
+func (d *Discovery) StartAdvertising(ctx context.Context) {
+	if d.routingDisc == nil {
+		return
+	}
+	log.Printf("DHT discovery: advertising as %q", d.cfg.DHTRendezvous)
+	dutil.Advertise(ctx, d.routingDisc, d.cfg.DHTRendezvous)
+}
+
+// StartFindingPeers periodically searches the DHT for other Doogle nodes.
+func (d *Discovery) StartFindingPeers(ctx context.Context) {
+	if d.routingDisc == nil {
+		return
+	}
+
+	// Initial delay to let DHT bootstrap settle
+	select {
+	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
+		return
+	}
+
+	ticker := time.NewTicker(d.cfg.DHTDiscoveryInterval)
+	defer ticker.Stop()
+
+	for {
+		d.findAndConnectPeers(ctx)
+
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (d *Discovery) findAndConnectPeers(ctx context.Context) {
+	// Skip if we already have enough peers
+	if len(d.host.Network().Peers()) >= d.cfg.DHTMaxPeers {
+		return
+	}
+
+	findCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	peerCh, err := d.routingDisc.FindPeers(findCtx, d.cfg.DHTRendezvous, discovery.Limit(d.cfg.DHTMaxPeers))
+	if err != nil {
+		log.Printf("DHT discovery: FindPeers error: %v", err)
+		return
+	}
+
+	for pi := range peerCh {
+		if pi.ID == d.host.ID() {
+			continue
+		}
+		if d.host.Network().Connectedness(pi.ID) == network.Connected {
+			continue
+		}
+
+		connCtx, connCancel := context.WithTimeout(ctx, 10*time.Second)
+		err := d.host.Connect(connCtx, pi)
+		connCancel()
+		if err != nil {
+			log.Printf("DHT discovery: failed to connect to %s: %v", pi.ID.String()[:12], err)
+		} else {
+			log.Printf("DHT discovery: connected to Doogle peer %s", pi.ID.String()[:12])
+			if d.cfg.OnDooglePeerConnected != nil {
+				d.cfg.OnDooglePeerConnected(pi.ID)
+			}
+		}
 	}
 }
 
@@ -114,4 +231,38 @@ func (d *Discovery) connectBootstrapPeers(ctx context.Context, addrs []string) {
 		}(*pi)
 	}
 	wg.Wait()
+}
+
+// connectIPFSBootstrapPeers connects to the well-known IPFS DHT bootstrap nodes in parallel.
+func (d *Discovery) connectIPFSBootstrapPeers(ctx context.Context) {
+	ipfsBootstrapPeers := dht.GetDefaultBootstrapPeerAddrInfos()
+	if len(ipfsBootstrapPeers) == 0 {
+		log.Println("DHT discovery: no IPFS bootstrap peers available")
+		return
+	}
+
+	log.Printf("DHT discovery: connecting to %d IPFS bootstrap peers...", len(ipfsBootstrapPeers))
+
+	var wg sync.WaitGroup
+	var connected int
+	var mu sync.Mutex
+
+	for _, pi := range ipfsBootstrapPeers {
+		wg.Add(1)
+		go func(pi peer.AddrInfo) {
+			defer wg.Done()
+			connCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			if err := d.host.Connect(connCtx, pi); err != nil {
+				log.Printf("DHT discovery: failed to connect to IPFS bootstrap %s: %v", pi.ID.String()[:12], err)
+			} else {
+				mu.Lock()
+				connected++
+				mu.Unlock()
+			}
+		}(pi)
+	}
+	wg.Wait()
+
+	log.Printf("DHT discovery: connected to %d/%d IPFS bootstrap peers", connected, len(ipfsBootstrapPeers))
 }

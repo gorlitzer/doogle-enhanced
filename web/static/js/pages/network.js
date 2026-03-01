@@ -14,6 +14,9 @@ export function renderNetwork(container) {
   `;
   loadNetwork();
   window._pageInterval = setInterval(loadNetwork, 8000);
+  window._pageCleanup = () => {
+    if (graph) { graph.stop(); graph = null; }
+  };
 }
 
 async function loadNetwork() {
@@ -93,12 +96,16 @@ async function loadNetwork() {
         <h3>Peer Discovery</h3>
         <div class="card-grid">
           <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-blue">IPFS DHT Discovery</span> Automatic</div>
+            <div class="card-sub" style="margin-top:4px">Connects to the IPFS public DHT and advertises under <code>doogle/network/v2</code>. Finds other Doogle nodes anywhere on the internet within 30–60 seconds. Zero configuration needed.</div>
+          </div>
+          <div class="card card-sm">
             <div class="card-label"><span class="badge badge-green">mDNS</span> Local Network</div>
             <div class="card-sub" style="margin-top:4px">Automatically finds peers on the same LAN. Service name: <code>doogle-p2p</code>. Zero configuration needed.</div>
           </div>
           <div class="card card-sm">
-            <div class="card-label"><span class="badge badge-blue">Kademlia DHT</span> Internet-Wide</div>
-            <div class="card-sub" style="margin-top:4px">Distributed hash table for peer routing across the internet. Bootstrap from known peers using --bootstrap flag.</div>
+            <div class="card-label"><span class="badge badge-blue">Kademlia DHT</span> Peer Routing</div>
+            <div class="card-sub" style="margin-top:4px">Distributed hash table for peer routing across the internet. Used for both routing and IPFS-based auto-discovery.</div>
           </div>
           <div class="card card-sm">
             <div class="card-label"><span class="badge badge-green">NAT Traversal</span> Automatic</div>
@@ -106,7 +113,7 @@ async function loadNetwork() {
           </div>
           <div class="card card-sm">
             <div class="card-label"><span class="badge badge-amber">VPN / Proxy</span> Limited</div>
-            <div class="card-sub" style="margin-top:4px">Behind a VPN, mDNS discovery, NAT mapping, and hole punching are bypassed. Crawling and outbound peer connections work fine, but your node becomes unreachable for inbound P2P. Use <code>--bootstrap</code> to connect to known peers. See <a href="#/docs" style="color:var(--accent)">Docs → Troubleshooting</a> for details.</div>
+            <div class="card-sub" style="margin-top:4px">Behind a VPN, mDNS and NAT mapping are bypassed, but DHT discovery and outbound connections still work. Your node becomes unreachable for inbound P2P. See <a href="#/docs" style="color:var(--accent)">Docs → Troubleshooting</a> for details.</div>
           </div>
         </div>
       </div>
@@ -114,7 +121,7 @@ async function loadNetwork() {
       <div class="section">
         <h3>Connected Peers (${peerList.length})</h3>
         ${peerList.length === 0
-          ? '<div class="empty-state"><p>No peers connected. Use <code>--bootstrap /ip4/HOST/tcp/PORT/p2p/PEER_ID</code> to join an existing network.</p></div>'
+          ? '<div class="empty-state"><p>No peers connected yet. DHT discovery is searching for other Doogle nodes — peers usually appear within 30–60 seconds. You can also use <code>--bootstrap /ip4/HOST/tcp/PORT/p2p/PEER_ID</code> for manual connection.</p></div>'
           : `
             <div class="table-wrap">
               <table>
@@ -240,4 +247,5 @@ function buildGraph(status, peerList) {
 
   graph.setData(nodes, edges);
 }
+
 
