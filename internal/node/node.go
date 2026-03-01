@@ -177,12 +177,15 @@ func (n *Node) init() error {
 		DisconnectedF: func(_ network.Network, conn network.Conn) {
 			remotePeer := conn.RemotePeer()
 			pid := remotePeer.String()
+			if !n.shards.HasNode(pid) {
+				return // not a Doogle peer, ignore
+			}
 			h.ConnManager().Unprotect(remotePeer, "doogle")
 			n.shards.RemoveNode(pid)
 			n.peerNamesMu.Lock()
 			delete(n.peerNames, pid)
 			n.peerNamesMu.Unlock()
-			log.Printf("shard ring: removed peer %s (total: %d)", pid[:12], n.shards.NodeCount())
+			log.Printf("shard ring: removed Doogle peer %s (total: %d)", pid[:12], n.shards.NodeCount())
 		},
 	})
 

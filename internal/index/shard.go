@@ -47,6 +47,11 @@ func (sm *ShardManager) IsOwner(peerID, domain string, replicationFactor int) bo
 	return false
 }
 
+// HasNode returns true if the peer is in the ring.
+func (sm *ShardManager) HasNode(peerID string) bool {
+	return sm.ring.Has(peerID)
+}
+
 // NodeCount returns the number of nodes in the ring.
 func (sm *ShardManager) NodeCount() int {
 	return sm.ring.Size()
