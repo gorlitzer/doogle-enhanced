@@ -279,24 +279,34 @@ function renderOverview(el) {
       <p class="about-section-desc">Google indexes 5% of the web and decides what you see. We're building infrastructure to index the other 95%.</p>
       <div class="about-vision-grid">
         <div class="about-vision-card">
-          <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
+          <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 24)}</div>
           <h3>The Entire Web</h3>
-          <p>Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to.</p>
+          <p>Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet.</p>
         </div>
         <div class="about-vision-card">
-          <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
+          <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 24)}</div>
           <h3>Privacy-First</h3>
-          <p>Your searches never leave your machine. No cookies, no tracking, no user profiles. Your node, your index, your rules.</p>
+          <p>Your searches never leave your machine. No cookies, no tracking, no user profiles. Your node, your rules.</p>
         </div>
         <div class="about-vision-card">
-          <div class="about-vision-icon" style="color:var(--purple)">${icon('lock', 28)}</div>
+          <div class="about-vision-icon" style="color:var(--purple)">${icon('lock', 24)}</div>
           <h3>Censorship-Resistant</h3>
           <p>No single entity can remove results or block access. Decentralized by architecture, not just by promise.</p>
         </div>
         <div class="about-vision-card">
-          <div class="about-vision-icon" style="color:var(--blue)">${icon('users', 28)}</div>
+          <div class="about-vision-icon" style="color:var(--blue)">${icon('users', 24)}</div>
           <h3>Community-Owned</h3>
-          <p>Not a product. Infrastructure for information freedom. Open source forever, governed by the people who run it.</p>
+          <p>Open source forever. No company, no investors, no strings. Governed by the people who run it.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--amber)">${icon('zap', 24)}</div>
+          <h3>Zero Dependencies</h3>
+          <p>One binary, no external databases, no cloud accounts. Download, run, done. Works offline, on a Raspberry Pi, anywhere.</p>
+        </div>
+        <div class="about-vision-card">
+          <div class="about-vision-icon" style="color:var(--red, #ef4444)">${icon('eye', 24)}</div>
+          <h3>Transparent Ranking</h3>
+          <p>No secret algorithm. Every scoring signal is visible, auditable, and tweakable. You know exactly why a result appears.</p>
         </div>
       </div>
     </section>
