@@ -9,33 +9,38 @@ import (
 	"github.com/doogle/doogle-v2/internal/models"
 )
 
-// BuildQuery translates a ParsedQuery into a Bleve query tree.
-func BuildQuery(pq *models.ParsedQuery) query.Query {
-	var shouldClauses []query.Query
+// newAndMatchQuery creates a MatchQuery that requires ALL terms to match (AND).
+func newAndMatchQuery(terms string, field string, boost float64) *query.MatchQuery {
+	q := bleve.NewMatchQuery(terms)
+	q.SetField(field)
+	q.SetBoost(boost)
+	q.SetOperator(query.MatchQueryOperatorAnd)
+	return q
+}
 
-	// Main terms — search across title, desc, content, anchor_text
+// BuildQuery translates a ParsedQuery into a Bleve query tree.
+//
+// Architecture: BooleanQuery with two tiers:
+//   - Must: primary AND matches across fields + phrase matches.
+//     A doc MUST match at least one field with ALL query terms.
+//   - Should: fuzzy + synonym queries that BOOST matching docs
+//     but cannot produce results on their own.
+func BuildQuery(pq *models.ParsedQuery) query.Query {
+	var primaryClauses []query.Query
+	var boostClauses []query.Query
+
+	// ── Primary tier: AND match across fields ──
 	termStr := strings.Join(pq.Terms, " ")
 	if termStr != "" {
-		titleQ := bleve.NewMatchQuery(termStr)
-		titleQ.SetField("title")
-		titleQ.SetBoost(3.0)
-
-		descQ := bleve.NewMatchQuery(termStr)
-		descQ.SetField("description")
-		descQ.SetBoost(1.5)
-
-		contentQ := bleve.NewMatchQuery(termStr)
-		contentQ.SetField("content")
-		contentQ.SetBoost(1.0)
-
-		anchorQ := bleve.NewMatchQuery(termStr)
-		anchorQ.SetField("anchor_text")
-		anchorQ.SetBoost(2.0)
-
-		shouldClauses = append(shouldClauses, titleQ, descQ, contentQ, anchorQ)
+		primaryClauses = append(primaryClauses,
+			newAndMatchQuery(termStr, "title", 3.0),
+			newAndMatchQuery(termStr, "description", 1.5),
+			newAndMatchQuery(termStr, "content", 1.0),
+			newAndMatchQuery(termStr, "anchor_text", 2.0),
+		)
 	}
 
-	// Exact phrases — high boost on title and content
+	// Exact phrases — also primary (high signal)
 	for _, phrase := range pq.Phrases {
 		titlePQ := bleve.NewMatchPhraseQuery(phrase)
 		titlePQ.SetField("title")
@@ -45,10 +50,10 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		contentPQ.SetField("content")
 		contentPQ.SetBoost(4.0)
 
-		shouldClauses = append(shouldClauses, titlePQ, contentPQ)
+		primaryClauses = append(primaryClauses, titlePQ, contentPQ)
 	}
 
-	// Fuzzy queries for terms ≥ 4 chars
+	// ── Boost tier: fuzzy + synonyms (cannot produce results alone) ──
 	if pq.UseFuzzy {
 		for _, term := range pq.Terms {
 			if len(term) < 4 {
@@ -62,11 +67,10 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 			fq.SetField("content")
 			fq.SetBoost(0.5)
 			fq.SetFuzziness(fuzziness)
-			shouldClauses = append(shouldClauses, fq)
+			boostClauses = append(boostClauses, fq)
 		}
 	}
 
-	// Synonym expansion
 	for _, syns := range pq.Synonyms {
 		synStr := strings.Join(syns, " ")
 		titleSyn := bleve.NewMatchQuery(synStr)
@@ -77,29 +81,35 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		contentSyn.SetField("content")
 		contentSyn.SetBoost(0.7)
 
-		shouldClauses = append(shouldClauses, titleSyn, contentSyn)
+		boostClauses = append(boostClauses, titleSyn, contentSyn)
 	}
 
-	// If no clauses were generated, fall back to a simple query
-	if len(shouldClauses) == 0 {
+	// If no primary clauses, fall back to a simple query
+	if len(primaryClauses) == 0 {
 		if pq.CleanedQuery != "" {
 			return bleve.NewMatchQuery(pq.CleanedQuery)
 		}
 		return bleve.NewMatchAllQuery()
 	}
 
-	// Site filter: wrap in BooleanQuery with must + should
+	// Primary clauses as a disjunction (match on ANY field, but each field requires AND)
+	primaryQ := bleve.NewDisjunctionQuery(primaryClauses...)
+
+	// Build the final query
+	boolQ := bleve.NewBooleanQuery()
+	boolQ.AddMust(primaryQ)
+
+	// Add boost clauses as Should (only boost score, can't produce results alone)
+	for _, bc := range boostClauses {
+		boolQ.AddShould(bc)
+	}
+
+	// Site filter: add domain as an additional Must
 	if pq.SiteDomain != "" {
 		siteQ := bleve.NewTermQuery(pq.SiteDomain)
 		siteQ.SetField("domain")
-
-		shouldDisjunction := bleve.NewDisjunctionQuery(shouldClauses...)
-
-		boolQ := bleve.NewBooleanQuery()
 		boolQ.AddMust(siteQ)
-		boolQ.AddShould(shouldDisjunction)
-		return boolQ
 	}
 
-	return bleve.NewDisjunctionQuery(shouldClauses...)
+	return boolQ
 }

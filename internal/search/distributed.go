@@ -41,6 +41,9 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		return nil, err
 	}
 
+	// Always re-rank local results with quality signals
+	RerankResults(localResp.Results)
+
 	// Get connected peers
 	peers := ds.host.Network().Peers()
 	if len(peers) == 0 {
