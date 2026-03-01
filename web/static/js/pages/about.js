@@ -142,6 +142,10 @@ const capabilities = [
       <p>This reduces per-query fan-out from O(N) to O(sqrt(N)). Reference: <a href="https://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">Consistent Hashing (Wikipedia)</a></p>` },
   { icon: 'database', title: 'Document Replication (N=3)', desc: 'Every document is replicated to 3 nodes. Merkle root anti-entropy ensures consistency. Network survives node failures.',
     modal: `<p>Every document is replicated to N nodes (default 3) using consistent hashing. When a peer joins or leaves, the replication protocol automatically rebalances.</p><p>Consistency is maintained via Merkle root anti-entropy: every 2 minutes, nodes compare Merkle roots per domain and sync missing documents. Protocols: <code>/doogle/replicate/1.0.0</code> (push) and <code>/doogle/antientropy/1.0.0</code> (reconciliation).</p>` },
+  { icon: 'globe', title: 'Onboarding Wizard', desc: 'Guided 5-step setup that auto-triggers on new nodes. Pick seed categories, see your node identity, and launch crawling.',
+    modal: `<p>When a fresh node starts with 0 indexed documents, the <a href="#/wizard">setup wizard</a> auto-triggers. It walks users through 5 steps:</p><ol><li><strong>Welcome</strong> — intro and context</li><li><strong>Node Identity</strong> — Peer ID, addresses, connected peers</li><li><strong>Choose Focus</strong> — 8 curated seed categories (Tech, Science, News, Open Source, Education, Web Standards, DevOps, Frontend) plus custom URLs</li><li><strong>Settings Preview</strong> — crawl depth and workers overview with growth estimate</li><li><strong>Launch</strong> — submit seeds via batch API, live polling of crawl/index counters</li></ol><p>Seeds are submitted via <code>POST /api/crawl/batch</code> (up to 200 URLs). The wizard can be re-accessed anytime from the admin sidebar.</p>` },
+  { icon: 'eye', title: 'Theme Animations', desc: '5 themes with unique background animations and animated logo text. Matrix rain, bats, particle mesh, aurora, and dust motes.',
+    modal: `<p>Each of the 5 themes has a unique background canvas animation and animated "DOOGLE" logo text:</p><table style="width:100%;font-size:0.9em;margin-top:8px"><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>CRT</strong></td><td style="padding:6px">Matrix character rain</td><td style="padding:6px">Glitch text with chromatic aberration</td></tr><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>Dracula</strong></td><td style="padding:6px">Drifting bats + mist particles</td><td style="padding:6px">Blood drip letters</td></tr><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>Modern</strong></td><td style="padding:6px">Connected particle mesh</td><td style="padding:6px">Block-build assembly</td></tr><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>Light</strong></td><td style="padding:6px">Floating dust motes</td><td style="padding:6px">Ink quill write-in</td></tr><tr><td style="padding:6px"><strong>Pride</strong></td><td style="padding:6px">Aurora borealis rainbow</td><td style="padding:6px">Rainbow shimmer wave</td></tr></table><p style="margin-top:8px">All animations are rendered on a fixed canvas at z-index 0 — subtle, non-invasive, and auto-switch when you change themes.</p>` },
 ];
 
 const capabilityModalData = capabilities.map(c => ({ title: c.title, html: c.modal }));
@@ -159,10 +163,11 @@ const techStack = [
 ];
 
 const limitations = [
-  { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard.', badge: 'by design' },
+  { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard. Light nodes (planned) will bypass this by proxying to full nodes.', badge: 'by design' },
   { title: 'No PDF/doc extraction', desc: 'Binary document formats like PDF, DOCX, and PPTX are not yet parsed or indexed.', badge: 'planned' },
   { title: 'No login-gated content', desc: 'Pages behind authentication walls cannot be crawled. Only publicly accessible content is indexed.', badge: 'by design' },
   { title: 'Rate-limited by politeness', desc: 'Strict per-domain rate limiting and robots.txt compliance means some sites crawl slowly. This is intentional.', badge: 'by design' },
+  { title: 'Full nodes only (for now)', desc: 'Every node currently runs all subsystems (~1-2 GB RAM). Light node mode for edge devices is planned — relay-only, ~50 MB.', badge: 'planned' },
 ];
 
 // ---- Main Render ----
