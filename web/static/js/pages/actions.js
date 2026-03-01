@@ -63,7 +63,7 @@ export function renderActions(container) {
           ${icon('cpu', 20, 'var(--green)')}
           <h3>Node Settings</h3>
         </div>
-        <div class="actions-grid actions-grid-full">
+        <div class="actions-grid">
           <div class="action-card">
             <div class="action-card-header">
               <div class="action-icon">${icon('fileText', 24, 'var(--green)')}</div>
@@ -80,6 +80,25 @@ export function renderActions(container) {
                 </button>
               </div>
               <div id="name-result" class="action-result"></div>
+            </div>
+          </div>
+
+          <div class="action-card">
+            <div class="action-card-header">
+              <div class="action-icon">${icon('cpu', 24, 'var(--green)')}</div>
+              <div>
+                <strong>Node ID</strong>
+                <p>Your unique libp2p peer identity. Share this with others so they can connect to your node.</p>
+              </div>
+            </div>
+            <div class="action-card-body">
+              <div class="action-input-row">
+                <input type="text" id="node-id-display" class="action-input" readonly placeholder="Loading...">
+                <button class="btn btn-primary" id="copy-node-id-btn">
+                  <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                </button>
+              </div>
+              <div id="node-id-result" class="action-result"></div>
             </div>
           </div>
         </div>
@@ -135,14 +154,14 @@ export function renderActions(container) {
         </div>
         <div class="actions-grid actions-grid-full">
           <div class="action-card action-card-danger">
-            <div class="action-card-header">
-              <div class="action-icon">${icon('trash', 24, 'var(--red)')}</div>
-              <div>
-                <strong>Delete All Data</strong>
-                <p>Permanently delete <strong>all</strong> crawled data, search indexes, link graph, and peer identity. This action <strong>cannot be undone</strong>. You will need to restart the node and re-crawl everything.</p>
+            <div class="danger-card-layout">
+              <div class="danger-card-info">
+                <div class="danger-card-title">
+                  ${icon('trash', 20, 'var(--red)')}
+                  <strong>Delete All Data</strong>
+                </div>
+                <p>Permanently delete all crawled data, search indexes, link graph, and peer identity. This cannot be undone — you will need to restart the node and re-crawl everything.</p>
               </div>
-            </div>
-            <div class="action-card-body">
               <button class="btn btn-danger" id="delete-all-btn">
                 <span class="btn-label">${icon('trash', 16)} Delete All Data</span>
               </button>
@@ -162,6 +181,8 @@ async function loadCurrentName() {
     const s = await api.status();
     const input = document.getElementById('node-name-input');
     if (input && s.node_name) input.value = s.node_name;
+    const idInput = document.getElementById('node-id-display');
+    if (idInput && s.peer_id) idInput.value = s.peer_id;
   } catch { /* ignore */ }
 }
 
@@ -187,6 +208,23 @@ function setupHandlers() {
   const nameInput = document.getElementById('node-name-input');
   nameBtn.addEventListener('click', () => setNodeName(nameBtn, nameInput));
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') setNodeName(nameBtn, nameInput); });
+
+  // --- Copy Node ID ---
+  const copyIdBtn = document.getElementById('copy-node-id-btn');
+  copyIdBtn.addEventListener('click', () => {
+    const idInput = document.getElementById('node-id-display');
+    const result = document.getElementById('node-id-result');
+    if (!idInput.value || idInput.value === 'Loading...') return;
+    navigator.clipboard.writeText(idInput.value).then(() => {
+      result.innerHTML = '<span class="badge badge-green">Copied to clipboard</span>';
+      setTimeout(() => { result.innerHTML = ''; }, 2000);
+    }).catch(() => {
+      idInput.select();
+      document.execCommand('copy');
+      result.innerHTML = '<span class="badge badge-green">Copied to clipboard</span>';
+      setTimeout(() => { result.innerHTML = ''; }, 2000);
+    });
+  });
 
   // --- Backup ---
   document.getElementById('backup-btn').addEventListener('click', downloadBackup);
