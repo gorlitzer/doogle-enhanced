@@ -14,7 +14,7 @@ help:
 	@echo "    make build              Compile binary to bin/"
 	@echo "    make run                Build + launch node (API on :8080)"
 	@echo "    make run ARGS='...'     Pass extra flags to the binary"
-	@echo "    make dev                Docker detached + hot-reload UI on :3000"
+	@echo "    make dev                Docker detached on :8080 (stop with: make stop)"
 	@echo "    make stop               Stop docker containers"
 	@echo "    make test               Run all tests"
 	@echo "    make clean              Remove binary and node data"
