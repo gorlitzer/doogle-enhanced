@@ -145,6 +145,7 @@ func ParseFlags(cfg *Config) {
 	flag.StringVar(&cfg.NodeName, "name", cfg.NodeName, "Human-readable node name")
 	flag.IntVar(&cfg.P2P.Port, "port", cfg.P2P.Port, "libp2p listen port")
 	flag.IntVar(&cfg.API.Port, "api-port", cfg.API.Port, "HTTP API port")
+	flag.StringVar(&cfg.API.Bind, "bind", cfg.API.Bind, "API server bind address (default 127.0.0.1, use 0.0.0.0 for Docker)")
 	flag.StringVar(&cfg.Storage.DataDir, "data-dir", cfg.Storage.DataDir, "Data directory")
 	flag.StringVar(&bootstrap, "bootstrap", "", "Bootstrap peer multiaddr")
 	flag.StringVar(&seed, "seed", "", "Seed URL(s) to crawl (comma-separated)")
