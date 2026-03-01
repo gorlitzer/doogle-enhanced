@@ -1585,43 +1585,62 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   display: inline-block;
 }
 
-/* Architecture Layers */
-.about-arch-layers {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 24px;
-}
-.about-arch-layer {
-  background: var(--bg-card);
+/* Architecture Interactive Diagram */
+.about-arch-canvas-wrap {
+  position: relative;
+  margin-bottom: 16px;
   border: 1px solid var(--border);
-  border-left: 4px solid var(--layer-color);
   border-radius: var(--radius);
-  padding: 16px 20px;
-  transition: transform 0.2s ease;
+  overflow: hidden;
+  background: var(--bg-primary);
 }
-.about-arch-layer:hover {
-  transform: translateX(4px);
+.about-arch-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
 }
-.about-arch-layer-label {
-  font-size: 0.75em;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--layer-color);
-  font-weight: 600;
-  margin-bottom: 8px;
+.about-arch-tooltip {
+  display: none;
+  position: absolute;
+  max-width: 250px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  pointer-events: none;
+  z-index: 10;
 }
-.about-arch-layer-items {
+.about-arch-tooltip strong {
+  display: block;
+  font-size: 0.9em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.about-arch-tooltip span {
+  display: block;
+  font-size: 0.8em;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.about-arch-legend {
   display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
-  gap: 16px;
 }
-.about-arch-layer-items span {
+.about-arch-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.85em;
+  font-size: 0.8em;
   color: var(--text-secondary);
+}
+.about-arch-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
 /* Capabilities grid */
@@ -2323,6 +2342,81 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   font-size: 0.9em;
   color: var(--accent);
   font-weight: 500;
+}
+
+/* Seed accordion */
+.wizard-seed-accordion {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.wizard-seed-accordion-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.wizard-seed-accordion-toggle:hover {
+  background: var(--surface-2);
+}
+.wizard-seed-accordion-toggle svg {
+  transition: transform 0.2s ease;
+}
+.wizard-seed-accordion-toggle.open svg {
+  transform: rotate(180deg);
+}
+.wizard-seed-accordion-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.wizard-seed-accordion-body.open {
+  max-height: 600px;
+  overflow-y: auto;
+}
+.wizard-seed-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82em;
+}
+.wizard-seed-item:hover {
+  background: var(--surface-2);
+}
+.wizard-seed-url {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+}
+.wizard-seed-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color var(--transition), background var(--transition);
+}
+.wizard-seed-remove:hover {
+  color: var(--red, #ef4444);
+  background: rgba(239,68,68,0.1);
 }
 
 /* Settings step */

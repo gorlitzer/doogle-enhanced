@@ -4,6 +4,7 @@ import { icon } from '../components.js';
 
 let currentStep = 0;
 const selectedCategories = new Set();
+const removedSeeds = new Set();
 let customSeeds = '';
 let settings = { depth: 3, workers: 4 };
 let pollInterval = null;
@@ -137,7 +138,7 @@ function getAllSelectedSeeds() {
   }
   const custom = customSeeds.split('\n').map(s => s.trim()).filter(s => s.startsWith('http://') || s.startsWith('https://'));
   seeds.push(...custom);
-  return [...new Set(seeds)];
+  return [...new Set(seeds)].filter(s => !removedSeeds.has(s));
 }
 
 function countStats() {
@@ -376,6 +377,23 @@ function renderFocus(el) {
         ${stats.total} seed${stats.total !== 1 ? 's' : ''} selected from ${stats.catCount} topic${stats.catCount !== 1 ? 's' : ''}
         ${stats.customCount > 0 ? ` + ${stats.customCount} custom` : ''}
       </div>
+
+      ${stats.total > 0 ? `
+      <div class="wizard-seed-accordion">
+        <button class="wizard-seed-accordion-toggle" id="wizard-seed-toggle">
+          <span>Review seed URLs (${stats.total})</span>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 6 8 10 12 6"/></svg>
+        </button>
+        <div class="wizard-seed-accordion-body" id="wizard-seed-list">
+          ${getAllSelectedSeeds().map(url => `
+            <div class="wizard-seed-item" data-seed-url="${url.replace(/"/g, '&quot;')}">
+              <span class="wizard-seed-url">${url}</span>
+              <button class="wizard-seed-remove" data-remove-url="${url.replace(/"/g, '&quot;')}" title="Remove">&times;</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      ` : ''}
     </div>
   `;
 
@@ -417,6 +435,27 @@ function renderFocus(el) {
       totalEl.textContent = `${s.total} seed${s.total !== 1 ? 's' : ''} selected from ${s.catCount} topic${s.catCount !== 1 ? 's' : ''}${s.customCount > 0 ? ` + ${s.customCount} custom` : ''}`;
     }
     renderNav();
+  });
+
+  // Seed accordion toggle
+  const toggleBtn = document.getElementById('wizard-seed-toggle');
+  const seedList = document.getElementById('wizard-seed-list');
+  if (toggleBtn && seedList) {
+    toggleBtn.addEventListener('click', () => {
+      const open = seedList.classList.toggle('open');
+      toggleBtn.classList.toggle('open', open);
+    });
+  }
+
+  // Remove individual seeds
+  document.querySelectorAll('.wizard-seed-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const url = btn.dataset.removeUrl;
+      removedSeeds.add(url);
+      renderFocus(el);
+      renderNav();
+    });
   });
 }
 
