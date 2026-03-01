@@ -38,17 +38,35 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 			newAndMatchQuery(termStr, "content", 1.0),
 			newAndMatchQuery(termStr, "anchor_text", 2.0),
 		)
+
+		// Auto phrase boost: when query has 2+ terms, add a phrase match
+		// so pages where terms appear together rank much higher.
+		if len(pq.Terms) >= 2 {
+			titlePhrase := bleve.NewMatchPhraseQuery(termStr)
+			titlePhrase.SetField("title")
+			titlePhrase.SetBoost(8.0)
+
+			descPhrase := bleve.NewMatchPhraseQuery(termStr)
+			descPhrase.SetField("description")
+			descPhrase.SetBoost(4.0)
+
+			contentPhrase := bleve.NewMatchPhraseQuery(termStr)
+			contentPhrase.SetField("content")
+			contentPhrase.SetBoost(3.0)
+
+			boostClauses = append(boostClauses, titlePhrase, descPhrase, contentPhrase)
+		}
 	}
 
-	// Exact phrases — also primary (high signal)
+	// Explicit quoted phrases — also primary (high signal)
 	for _, phrase := range pq.Phrases {
 		titlePQ := bleve.NewMatchPhraseQuery(phrase)
 		titlePQ.SetField("title")
-		titlePQ.SetBoost(5.0)
+		titlePQ.SetBoost(10.0)
 
 		contentPQ := bleve.NewMatchPhraseQuery(phrase)
 		contentPQ.SetField("content")
-		contentPQ.SetBoost(4.0)
+		contentPQ.SetBoost(6.0)
 
 		primaryClauses = append(primaryClauses, titlePQ, contentPQ)
 	}
@@ -109,6 +127,13 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		siteQ := bleve.NewTermQuery(pq.SiteDomain)
 		siteQ.SetField("domain")
 		boolQ.AddMust(siteQ)
+	}
+
+	// Language filter: restrict to specific language
+	if pq.Language != "" {
+		langQ := bleve.NewTermQuery(pq.Language)
+		langQ.SetField("language")
+		boolQ.AddMust(langQ)
 	}
 
 	return boolQ

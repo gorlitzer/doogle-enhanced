@@ -1672,3 +1672,69 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 [data-theme="light"] .about-tech-badge:hover { background: rgba(0,0,0,0.05); }
 [data-theme="light"] .about-rank-result .about-rank-bar { box-shadow: 0 0 12px rgba(147,51,234,0.2); }
 [data-theme="light"] .skeleton { background: linear-gradient(90deg, #e8e8e3 25%, #d0d0c8 37%, #e8e8e3 63%); background-size: 400% 100%; }
+
+/* ===============================================
+   Learn Page
+   =============================================== */
+.learn-page { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
+.learn-header { margin-bottom: 32px; }
+.learn-header h1 { font-size: 2em; margin-bottom: 8px; }
+.learn-header p { color: var(--text-secondary); font-size: 1.05em; }
+
+.learn-grid { display: flex; flex-direction: column; gap: 12px; }
+.learn-card {
+  display: flex; align-items: center; gap: 16px; padding: 20px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.learn-card:hover { border-color: var(--accent); background: var(--bg-secondary); }
+.learn-card-icon { flex-shrink: 0; }
+.learn-card-body { flex: 1; }
+.learn-card-body h2 { font-size: 1.1em; margin-bottom: 6px; }
+.learn-card-body p { font-size: 0.9em; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.5; }
+.learn-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.learn-card-date { font-size: 0.8em; color: var(--text-muted); }
+.learn-card-arrow { flex-shrink: 0; opacity: 0.4; transition: opacity 0.15s; }
+.learn-card:hover .learn-card-arrow { opacity: 1; }
+
+/* Post view */
+.learn-back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid var(--border); color: var(--text-secondary);
+  padding: 8px 14px; border-radius: var(--radius-sm); cursor: pointer;
+  font-family: inherit; font-size: 0.85em; margin-bottom: 24px; transition: border-color 0.15s;
+}
+.learn-back-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+.learn-post-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+.learn-post-header h1 { font-size: 1.8em; margin-bottom: 6px; }
+.learn-post-meta { display: flex; align-items: center; gap: 8px; }
+.learn-post-body { line-height: 1.7; color: var(--text-secondary); }
+.learn-post-body h3 { color: var(--text-primary); margin: 28px 0 12px; font-size: 1.15em; }
+.learn-post-body p { margin-bottom: 14px; }
+.learn-post-body ul { margin: 0 0 16px 20px; }
+.learn-post-body li { margin-bottom: 6px; }
+.learn-post-body code { background: var(--bg-secondary); padding: 1px 5px; border-radius: 3px; font-family: var(--font-mono); font-size: 0.9em; }
+.learn-post-body strong { color: var(--text-primary); }
+.learn-post-body a { color: var(--accent); text-decoration: none; }
+.learn-post-body a:hover { text-decoration: underline; }
+
+/* Highlight cards (used in posts) */
+.learn-highlights { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; }
+.learn-highlight {
+  display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px;
+  background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.learn-highlight-icon { flex-shrink: 0; margin-top: 2px; }
+.learn-highlight p { margin: 4px 0 0; font-size: 0.88em; }
+
+/* Status grid (roadmap) */
+.learn-status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 16px 0; }
+.learn-status-card {
+  padding: 16px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); display: flex; flex-direction: column; gap: 6px;
+}
+.learn-status-card strong { color: var(--text-primary); font-size: 0.95em; }
+.learn-status-card p { font-size: 0.85em; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+.learn-status-done { border-left: 3px solid var(--green); }
+.learn-status-wip { border-left: 3px solid var(--amber); }
+.learn-status-planned { border-left: 3px solid var(--blue); }
