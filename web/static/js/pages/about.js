@@ -418,38 +418,16 @@ export function renderAbout(container) {
       <!-- Architecture -->
       <section class="about-section about-reveal">
         <h2 class="about-section-title">Architecture</h2>
-        <p class="about-section-desc">A single binary. No microservices. No external dependencies at runtime.</p>
-        <div class="about-arch-layers">
-          <div class="about-arch-layer" style="--layer-color:var(--accent)">
-            <div class="about-arch-layer-label">Application Layer</div>
-            <div class="about-arch-layer-items">
-              <span>${icon('download', 16)} Crawler</span>
-              <span>${icon('cpu', 16)} Indexer</span>
-              <span>${icon('search', 16)} Search Engine</span>
-              <span>${icon('code', 16)} HTTP API</span>
-            </div>
-          </div>
-          <div class="about-arch-layer" style="--layer-color:var(--blue)">
-            <div class="about-arch-layer-label">P2P Layer</div>
-            <div class="about-arch-layer-items">
-              <span>${icon('network', 16)} Kademlia DHT</span>
-              <span>${icon('megaphone', 16)} GossipSub</span>
-              <span>${icon('radio', 16)} Stream Protocols</span>
-              <span>${icon('database', 16)} Shard Protocol</span>
-              <span>${icon('shield', 16)} Replication</span>
-            </div>
-          </div>
-          <div class="about-arch-layer" style="--layer-color:var(--green)">
-            <div class="about-arch-layer-label">Storage Layer</div>
-            <div class="about-arch-layer-items">
-              <span>${icon('database', 16)} BadgerDB</span>
-              <span>${icon('fileText', 16)} Bleve Index</span>
-              <span>${icon('link', 16)} Link Graph</span>
-              <span>${icon('shield', 16)} DedupStore</span>
-              <span>${icon('cpu', 16)} ContentStore</span>
-              <span>${icon('trendingUp', 16)} GenerationStore</span>
-            </div>
-          </div>
+        <p class="about-section-desc">A single binary. No microservices. No external dependencies at runtime. Hover any node to see data flow.</p>
+        <div class="about-arch-canvas-wrap">
+          <canvas id="arch-diagram" width="900" height="520"></canvas>
+          <div class="about-arch-tooltip" id="arch-tooltip"></div>
+        </div>
+        <div class="about-arch-legend">
+          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--accent)"></span>Application</span>
+          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--blue)"></span>P2P Network</span>
+          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--green)"></span>Storage</span>
+          <span class="about-arch-legend-item"><span class="about-arch-legend-dot" style="background:var(--purple)"></span>Trust</span>
         </div>
         <div class="about-tech-badges">
           ${techStack.map(t => `<span class="about-tech-badge" style="border-color:${t.color};color:${t.color}">${t.name}</span>`).join('')}
@@ -681,6 +659,7 @@ docker compose up -d</code></pre>
   setupPageRankDemo();
   setupSearchDemo();
   setupCapabilityModals();
+  setupArchDiagram();
 }
 
 // ---- Capability Card Modals ----
@@ -1062,4 +1041,326 @@ function setupScrollReveal() {
   }, { threshold: 0.1 });
 
   document.querySelectorAll('.about-reveal').forEach(el => observer.observe(el));
+}
+
+// ---- Interactive Architecture Diagram ----
+function setupArchDiagram() {
+  const canvas = document.getElementById('arch-diagram');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const wrap = canvas.parentElement;
+  const W = Math.min(wrap.offsetWidth || 900, 900);
+  const H = 520;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const tooltip = document.getElementById('arch-tooltip');
+
+  // Color helpers
+  const accent = () => getCSS('--accent');
+  const blue = () => getCSS('--blue');
+  const green = () => getCSS('--green');
+  const purple = () => getCSS('--purple');
+  const amber = () => getCSS('--amber');
+  const textPri = () => getCSS('--text-primary');
+  const textSec = () => getCSS('--text-secondary');
+  const bgCard = () => getCSS('--bg-card');
+  const border = () => getCSS('--border');
+
+  // Node definitions — x/y as fractions of canvas
+  const archNodes = [
+    // Application layer (y ~ 0.12)
+    { id: 'api',     label: 'HTTP API',      sub: 'Chi Router',           x: 0.14, y: 0.10, color: accent, layer: 'app',
+      desc: 'REST API serving search, crawl, admin endpoints + embedded SPA. Rate-limited, CORS-locked.' },
+    { id: 'crawler', label: 'Crawler',        sub: '4 workers',            x: 0.38, y: 0.10, color: accent, layer: 'app',
+      desc: 'Goroutine worker pool with per-domain rate limiting, robots.txt, headless JS rendering fallback.' },
+    { id: 'indexer', label: 'Indexer',         sub: 'Batch pipeline',       x: 0.62, y: 0.10, color: accent, layer: 'app',
+      desc: 'Quality scoring (E-E-A-T, spam, readability), dedup via 4-gram shingling, batch flush to Bleve.' },
+    { id: 'search',  label: 'Search',          sub: 'BM25 + reranking',    x: 0.86, y: 0.10, color: accent, layer: 'app',
+      desc: 'Query parsing (phrases, operators, fuzzy), BM25 retrieval, StaticScore reranking, distributed fanout.' },
+
+    // P2P layer (y ~ 0.42)
+    { id: 'dht',     label: 'Kademlia DHT',   sub: 'Peer routing',         x: 0.10, y: 0.40, color: blue, layer: 'p2p',
+      desc: 'Distributed hash table for peer discovery and routing. Bootstrap from known peers or mDNS.' },
+    { id: 'gossip',  label: 'GossipSub',      sub: '3 topics',             x: 0.30, y: 0.40, color: blue, layer: 'p2p',
+      desc: 'Pub/sub broadcast: URL frontier, shard catalog, spam reports. Mesh overlay with fanout.' },
+    { id: 'streams', label: 'Streams',         sub: 'req/reply',            x: 0.50, y: 0.40, color: blue, layer: 'p2p',
+      desc: '/doogle/search, /doogle/crawl, /doogle/index — request-reply protocols over libp2p streams.' },
+    { id: 'shard',   label: 'Sharding',        sub: 'Consistent hash',     x: 0.70, y: 0.40, color: blue, layer: 'p2p',
+      desc: 'Domain-based consistent hashing assigns URLs to shard owners. Catalog exchange every 60s.' },
+    { id: 'replica',  label: 'Replication',     sub: 'N=3 replicas',        x: 0.90, y: 0.40, color: blue, layer: 'p2p',
+      desc: 'Documents replicated to N closest peers. Anti-entropy via Merkle root reconciliation.' },
+
+    // Storage layer (y ~ 0.72)
+    { id: 'badger',  label: 'BadgerDB',        sub: 'Key-value store',     x: 0.14, y: 0.72, color: green, layer: 'store',
+      desc: 'LSM-tree KV store. URL frontier, crawl metadata, dedup hashes, link graph edges, content hashes.' },
+    { id: 'bleve',   label: 'Bleve Index',     sub: 'Full-text search',    x: 0.38, y: 0.72, color: green, layer: 'store',
+      desc: 'BM25-weighted full-text index. Field boosts: title 3x, description 1.5x, anchor 2x. StaticScore per doc.' },
+    { id: 'links',   label: 'Link Graph',      sub: 'PageRank edges',      x: 0.62, y: 0.72, color: green, layer: 'store',
+      desc: 'Directed edge store for PageRank. Inbound/outbound counts. Cross-domain links weighted 1.5x.' },
+    { id: 'trust',   label: 'Trust Store',      sub: 'Reputation DB',       x: 0.86, y: 0.72, color: purple, layer: 'trust',
+      desc: 'Peer reputation scores, spam reports, domain flags. Auto-quarantine below 0.15 trust score.' },
+  ];
+
+  // Edges — data flows between nodes
+  const archEdges = [
+    // App → Storage
+    { from: 'crawler', to: 'badger',  label: 'URLs' },
+    { from: 'indexer', to: 'bleve',   label: 'docs' },
+    { from: 'indexer', to: 'links',   label: 'edges' },
+    { from: 'search',  to: 'bleve',   label: 'query' },
+    { from: 'api',     to: 'trust',   label: 'reports' },
+
+    // App ↔ App
+    { from: 'crawler', to: 'indexer', label: 'pages' },
+    { from: 'api',     to: 'search',  label: 'req' },
+    { from: 'api',     to: 'crawler', label: 'seeds' },
+
+    // App ↔ P2P
+    { from: 'crawler', to: 'gossip',  label: 'URLs' },
+    { from: 'search',  to: 'streams', label: 'fanout' },
+    { from: 'indexer', to: 'shard',   label: 'assign' },
+    { from: 'indexer', to: 'replica', label: 'push' },
+
+    // P2P internal
+    { from: 'dht',     to: 'gossip',  label: 'peers' },
+    { from: 'gossip',  to: 'streams', label: 'discover' },
+    { from: 'shard',   to: 'replica', label: 'catalog' },
+
+    // P2P → Storage
+    { from: 'gossip',  to: 'trust',   label: 'spam' },
+    { from: 'replica', to: 'badger',  label: 'sync' },
+  ];
+
+  // Compute pixel positions
+  const nodeW = 100, nodeH = 50, nodeR = 8;
+  const nodes = archNodes.map(n => ({
+    ...n,
+    px: n.x * W - nodeW / 2,
+    py: n.y * H - nodeH / 2,
+    cx: n.x * W,
+    cy: n.y * H,
+  }));
+
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+
+  // Particles for data flow animation
+  let particles = [];
+  let hoveredNode = null;
+  let time = 0;
+
+  function spawnParticles(fromId, toId, color) {
+    const a = nodeMap[fromId], b = nodeMap[toId];
+    if (!a || !b) return;
+    particles.push({
+      x: a.cx, y: a.cy,
+      tx: b.cx, ty: b.cy,
+      progress: 0,
+      speed: 0.012 + Math.random() * 0.008,
+      color: color,
+      size: 3 + Math.random() * 2,
+    });
+  }
+
+  function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    time++;
+
+    // Layer bands
+    const layers = [
+      { y: 0, h: H * 0.26, label: 'APPLICATION', color: accent() },
+      { y: H * 0.27, h: H * 0.26, label: 'P2P NETWORK', color: blue() },
+      { y: H * 0.58, h: H * 0.30, label: 'STORAGE', color: green() },
+    ];
+    for (const layer of layers) {
+      ctx.fillStyle = hexToRgba(layer.color, 0.03);
+      ctx.fillRect(0, layer.y, W, layer.h);
+      ctx.fillStyle = hexToRgba(layer.color, 0.15);
+      ctx.font = 'bold 10px system-ui';
+      ctx.textAlign = 'left';
+      ctx.fillText(layer.label, 8, layer.y + 16);
+    }
+
+    // Draw edges
+    for (const edge of archEdges) {
+      const a = nodeMap[edge.from], b = nodeMap[edge.to];
+      if (!a || !b) continue;
+
+      const isHighlighted = hoveredNode && (hoveredNode.id === edge.from || hoveredNode.id === edge.to);
+      const alpha = hoveredNode ? (isHighlighted ? 0.6 : 0.06) : 0.15;
+
+      ctx.strokeStyle = hexToRgba(isHighlighted ? accent() : border(), alpha);
+      ctx.lineWidth = isHighlighted ? 2 : 1;
+      ctx.setLineDash(isHighlighted ? [] : [4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a.cx, a.cy);
+      ctx.lineTo(b.cx, b.cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Edge label on hover
+      if (isHighlighted && edge.label) {
+        const mx = (a.cx + b.cx) / 2, my = (a.cy + b.cy) / 2;
+        ctx.fillStyle = hexToRgba(accent(), 0.7);
+        ctx.font = '9px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(edge.label, mx, my - 5);
+      }
+    }
+
+    // Draw particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.progress += p.speed;
+      if (p.progress >= 1) { particles.splice(i, 1); continue; }
+      p.x = p.x + (p.tx - p.x) * p.speed * 2;
+      p.y = p.y + (p.ty - p.y) * p.speed * 2;
+
+      const alpha = p.progress < 0.1 ? p.progress * 10 : p.progress > 0.8 ? (1 - p.progress) * 5 : 1;
+      ctx.fillStyle = hexToRgba(p.color, alpha * 0.8);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw nodes
+    for (const node of nodes) {
+      const isHovered = hoveredNode && hoveredNode.id === node.id;
+      const isConnected = hoveredNode && archEdges.some(e =>
+        (e.from === hoveredNode.id && e.to === node.id) ||
+        (e.to === hoveredNode.id && e.from === node.id)
+      );
+      const isDimmed = hoveredNode && !isHovered && !isConnected;
+
+      const alpha = isDimmed ? 0.25 : 1;
+
+      // Shadow on hover
+      if (isHovered) {
+        ctx.shadowColor = hexToRgba(node.color(), 0.4);
+        ctx.shadowBlur = 16;
+      }
+
+      // Node body
+      drawRoundedRect(node.px, node.py, nodeW, nodeH, nodeR);
+      ctx.fillStyle = hexToRgba(bgCard(), alpha);
+      ctx.fill();
+      ctx.strokeStyle = hexToRgba(node.color(), isHovered ? 0.9 : isDimmed ? 0.15 : 0.5);
+      ctx.lineWidth = isHovered ? 2.5 : 1.5;
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+
+      // Top accent line
+      ctx.fillStyle = hexToRgba(node.color(), isHovered ? 0.9 : isDimmed ? 0.15 : 0.6);
+      drawRoundedRect(node.px, node.py, nodeW, 3, nodeR);
+      ctx.fill();
+
+      // Label
+      ctx.fillStyle = hexToRgba(textPri(), alpha);
+      ctx.font = 'bold 11px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(node.label, node.cx, node.cy - 2);
+
+      // Sub-label
+      ctx.fillStyle = hexToRgba(textSec(), alpha * 0.7);
+      ctx.font = '9px system-ui';
+      ctx.fillText(node.sub, node.cx, node.cy + 12);
+    }
+
+    // Spawn ambient particles periodically
+    if (time % 40 === 0) {
+      const edge = archEdges[Math.floor(Math.random() * archEdges.length)];
+      const a = nodeMap[edge.from];
+      if (a) spawnParticles(edge.from, edge.to, a.color());
+    }
+
+    // Spawn burst on hover
+    if (hoveredNode && time % 12 === 0) {
+      const connected = archEdges.filter(e => e.from === hoveredNode.id || e.to === hoveredNode.id);
+      for (const e of connected) {
+        spawnParticles(e.from, e.to, hoveredNode.color());
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+
+  // Hit testing
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top) * (H / rect.height);
+
+    let found = null;
+    for (const node of nodes) {
+      if (mx >= node.px && mx <= node.px + nodeW && my >= node.py && my <= node.py + nodeH) {
+        found = node;
+        break;
+      }
+    }
+
+    if (found !== hoveredNode) {
+      hoveredNode = found;
+      canvas.style.cursor = found ? 'pointer' : 'default';
+
+      if (found && tooltip) {
+        tooltip.innerHTML = `<strong>${found.label}</strong><span>${found.desc}</span>`;
+        tooltip.style.display = 'block';
+        tooltip.style.left = Math.min(e.clientX - rect.left + 12, W - 260) + 'px';
+        tooltip.style.top = (e.clientY - rect.top + 12) + 'px';
+      } else if (tooltip) {
+        tooltip.style.display = 'none';
+      }
+    } else if (found && tooltip) {
+      tooltip.style.left = Math.min(e.clientX - rect.left + 12, W - 260) + 'px';
+      tooltip.style.top = (e.clientY - rect.top + 12) + 'px';
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    hoveredNode = null;
+    if (tooltip) tooltip.style.display = 'none';
+  });
+
+  // Click to show modal detail
+  canvas.addEventListener('click', () => {
+    if (!hoveredNode) return;
+    const n = hoveredNode;
+    const connected = archEdges
+      .filter(e => e.from === n.id || e.to === n.id)
+      .map(e => {
+        const other = e.from === n.id ? nodeMap[e.to] : nodeMap[e.from];
+        const dir = e.from === n.id ? '\u2192' : '\u2190';
+        return `<li>${dir} <strong>${other.label}</strong> <span style="color:var(--text-muted)">(${e.label})</span></li>`;
+      }).join('');
+
+    showModal(n.label, `
+      <p>${n.desc}</p>
+      <h4 style="margin-top:16px">Connections</h4>
+      <ul style="list-style:none;padding:0;margin:8px 0">${connected}</ul>
+    `);
+  });
+
+  draw();
+  window.addEventListener('themechange', () => {});
 }
