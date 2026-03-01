@@ -168,6 +168,9 @@ const limitations = [
   { title: 'No login-gated content', desc: 'Pages behind authentication walls cannot be crawled. Only publicly accessible content is indexed.', badge: 'by design' },
   { title: 'Rate-limited by politeness', desc: 'Strict per-domain rate limiting and robots.txt compliance means some sites crawl slowly. This is intentional.', badge: 'by design' },
   { title: 'Full nodes only (for now)', desc: 'Every node currently runs all subsystems (~1-2 GB RAM). Light node mode for edge devices is planned — relay-only, ~50 MB.', badge: 'planned' },
+  { title: 'No dark web crawling (yet)', desc: '.onion and I2P crawling is on the roadmap (Phase 3). Requires Tor/I2P integration, SOCKS5 proxy support, and content safety layers.', badge: 'planned' },
+  { title: 'No P2P anonymity layer', desc: 'Peers currently see each other\'s IPs. Optional libp2p-over-Tor transport is planned to hide peer identities.', badge: 'planned' },
+  { title: 'English-only full-text search', desc: 'Multi-language stemmers and language-aware analyzers are planned for Phase 2. Currently best results are in English.', badge: 'planned' },
 ];
 
 // ---- Main Render ----
@@ -178,9 +181,9 @@ export function renderAbout(container) {
         <div class="about-hero-bg"></div>
         <h1 class="about-title">DOOGLE</h1>
         <div class="about-tagline-wrap">
-          <p class="about-tagline" aria-label="A decentralized, peer-to-peer search engine where every node crawls, indexes, and searches together."><span class="about-tagline-text"></span><span class="about-cursor">|</span></p>
+          <p class="about-tagline" aria-label="The search engine for the entire web — surface, deep, and dark."><span class="about-tagline-text"></span><span class="about-cursor">|</span></p>
         </div>
-        <p class="about-subtitle">Open source. Zero tracking. Every node is a search engine.</p>
+        <p class="about-subtitle">Open source. Zero tracking. Censorship-resistant. Every corner of the internet, indexed by the people.</p>
         <button class="btn btn-primary about-explore-btn" onclick="document.getElementById('about-pipeline').scrollIntoView({behavior:'smooth'})">
           Explore How It Works
         </button>
@@ -202,6 +205,34 @@ export function renderAbout(container) {
         <div class="about-stat-item">
           <span class="about-stat-value" id="about-stat-uptime">--</span>
           <span class="about-stat-label">Uptime</span>
+        </div>
+      </section>
+
+      <!-- Our Vision -->
+      <section class="about-section about-reveal">
+        <h2 class="about-section-title">Our Vision</h2>
+        <p class="about-section-desc">Google indexes 5% of the web and decides what you see. We're building infrastructure to index the other 95%.</p>
+        <div class="about-vision-grid">
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
+            <h3>The Entire Web</h3>
+            <p>Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
+            <h3>Privacy-First</h3>
+            <p>Your searches never leave your machine. No cookies, no tracking, no user profiles. Your node, your index, your rules.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--purple)">${icon('lock', 28)}</div>
+            <h3>Censorship-Resistant</h3>
+            <p>No single entity can remove results or block access. Decentralized by architecture, not just by promise.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--blue)">${icon('users', 28)}</div>
+            <h3>Community-Owned</h3>
+            <p>Not a product. Infrastructure for information freedom. Open source forever, governed by the people who run it.</p>
+          </div>
         </div>
       </section>
 
@@ -439,6 +470,61 @@ export function renderAbout(container) {
         </div>
       </section>
 
+      <!-- Roadmap -->
+      <section class="about-section about-reveal">
+        <h2 class="about-section-title">Roadmap</h2>
+        <p class="about-section-desc">Five phases from foundation to ecosystem. We're in Phase 1.</p>
+        <div class="about-roadmap-timeline">
+          <div class="about-roadmap-phase about-roadmap-done">
+            <h3><span class="badge badge-green">complete</span> Phase 1 — Foundation</h3>
+            <ul>
+              <li>P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)</li>
+              <li>Crawler with rate limiting, robots.txt, headless browser, live feed</li>
+              <li>Indexer with 10+ quality signals, E-E-A-T, spam, PageRank</li>
+              <li>BM25 search with synonyms, phrases, fuzzy, site: filter, distributed fan-out</li>
+              <li>Admin dashboard with 5 themes, wizard, network graph</li>
+              <li>Docker + Compose support</li>
+            </ul>
+          </div>
+          <div class="about-roadmap-phase about-roadmap-next">
+            <h3><span class="badge badge-blue">next</span> Phase 2 — Quality & Scale</h3>
+            <ul>
+              <li>Horizontal index sharding with hash ring rebalancing</li>
+              <li>Multi-language search (15+ stemmers)</li>
+              <li>PDF & document indexing, structured data extraction</li>
+              <li>Boolean operators, search caching, peer reputation</li>
+            </ul>
+          </div>
+          <div class="about-roadmap-phase about-roadmap-dark">
+            <h3><span class="badge badge-purple">planned</span> Phase 3 — Dark Web & Privacy</h3>
+            <ul>
+              <li>Tor integration &amp; .onion crawling via SOCKS5 proxy</li>
+              <li>I2P support via SAM bridge for eepsite crawling</li>
+              <li>Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)</li>
+              <li>Content safety layer (CSAM hash matching, configurable blocklists)</li>
+            </ul>
+          </div>
+          <div class="about-roadmap-phase about-roadmap-next">
+            <h3><span class="badge badge-blue">planned</span> Phase 4 — Intelligence</h3>
+            <ul>
+              <li>Semantic search (sentence embeddings, hybrid BM25 + vector)</li>
+              <li>Knowledge graph with entity cards</li>
+              <li>ML-based ranking, query intent classification</li>
+              <li>Automatic summarization, topic clustering</li>
+            </ul>
+          </div>
+          <div class="about-roadmap-phase about-roadmap-next">
+            <h3><span class="badge badge-blue">planned</span> Phase 5 — Ecosystem</h3>
+            <ul>
+              <li>CLI search tool, browser extension, mobile client</li>
+              <li>Light nodes (~50 MB RAM, relay-only)</li>
+              <li>Plugin system, multi-platform releases</li>
+              <li>Public bootstrap network, community governance</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <!-- Get Started -->
       <section class="about-section about-reveal">
         <h2 class="about-section-title">Get Started</h2>
@@ -449,11 +535,10 @@ export function renderAbout(container) {
               <span class="about-terminal-dot" style="background:var(--red)"></span>
               <span class="about-terminal-dot" style="background:var(--amber)"></span>
               <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Native Go</span>
+              <span class="about-terminal-title">Docker (recommended)</span>
             </div>
-            <pre class="about-terminal-body"><code>cd doogle-v2
-make build
-./bin/doogle --seed "https://example.com"
+            <pre class="about-terminal-body"><code># Single node with seeds
+docker compose up -d node1
 
 # Open http://localhost:8080</code></pre>
           </div>
@@ -462,24 +547,25 @@ make build
               <span class="about-terminal-dot" style="background:var(--red)"></span>
               <span class="about-terminal-dot" style="background:var(--amber)"></span>
               <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Docker</span>
+              <span class="about-terminal-title">Cluster</span>
             </div>
-            <pre class="about-terminal-body"><code>docker build -t doogle .
-docker run -p 8080:8080 -p 4001:4001 \\
-  doogle --seed "https://example.com"</code></pre>
+            <pre class="about-terminal-body"><code># Full 3-node cluster
+docker compose up -d
+
+# Ports: 8080, 8081, 8082
+# Auto-connected via mDNS</code></pre>
           </div>
           <div class="about-terminal">
             <div class="about-terminal-header">
               <span class="about-terminal-dot" style="background:var(--red)"></span>
               <span class="about-terminal-dot" style="background:var(--amber)"></span>
               <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Cluster</span>
+              <span class="about-terminal-title">Build from Source</span>
             </div>
-            <pre class="about-terminal-body"><code>cd doogle-v2
-make docker-up
-
-# Scales to N nodes:
-docker compose up --scale node=3</code></pre>
+            <pre class="about-terminal-body"><code>git clone https://github.com/gorlitzer/doogle-enhanced.git
+cd doogle-enhanced
+make build
+./bin/doogle --seed "https://example.com"</code></pre>
           </div>
         </div>
       </section>
@@ -523,12 +609,12 @@ docker compose up --scale node=3</code></pre>
       </section>
 
       <footer class="about-footer">
-        <p>Built with purpose. Coming soon to GitHub.</p>
+        <p>Built for information freedom. Open source forever.</p>
       </footer>
     </div>
   `;
 
-  typewriter('A decentralized, peer-to-peer search engine where every node crawls, indexes, and searches together.');
+  typewriter('The search engine for the entire web — surface, deep, and dark.');
   loadStats();
   startPipelineAnimation();
   setupScrollReveal();

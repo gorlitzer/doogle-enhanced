@@ -5,8 +5,8 @@
 <h1 align="center">Doogle</h1>
 
 <p align="center">
-  <strong>A fully decentralized peer-to-peer search engine.</strong><br>
-  Every node crawls, indexes, and searches — no central servers, no tracking, no single point of failure.
+  <strong>The search engine for the entire web — surface, deep, and dark.</strong><br>
+  Open source. Zero tracking. Censorship-resistant. Every corner of the internet, indexed by the people.
 </p>
 
 <p align="center">
@@ -18,38 +18,50 @@
 
 ---
 
-Doogle ships as a **single Go binary**. Run it, connect to peers, and you become part of a distributed search network. Nodes discover URLs via GossipSub, crawl web pages with a built-in crawler, index content locally using Bleve full-text search, and answer queries by fanning out to connected peers and merging results.
+Google indexes 5% of the web and decides what you see. Doogle's mission is to index the other 95%. Surface web, `.onion` hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to. Doogle is not a product. It is infrastructure for information freedom: censorship-resistant by design, privacy-preserving by default, and community-owned forever. Your searches never leave your machine. Your node, your index, your rules.
 
-No PostgreSQL. No Redis. No Elasticsearch. Everything is embedded.
+Ships as a **single Go binary**. Run it, connect to peers, and you become part of a distributed search network. Nodes discover URLs via GossipSub, crawl web pages with a built-in crawler, index content locally using Bleve full-text search, and answer queries by fanning out to connected peers and merging results. No PostgreSQL. No Redis. No Elasticsearch. Everything is embedded.
+
+---
+
+## Vision
+
+> Google indexes 5% of the web and decides what you see. Doogle's mission is to index the other 95%. Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to.
+>
+> Doogle is not a product. It is infrastructure for information freedom: censorship-resistant by design, privacy-preserving by default, and community-owned forever. Your searches never leave your machine. Your node, your index, your rules.
 
 ---
 
 ## Quick Start
 
-### Prerequisites
+### Docker (recommended)
 
-- [Go 1.22+](https://go.dev/dl/)
+```bash
+# Single node with seeds
+docker compose up -d node1
+```
 
-### Build
+Open [http://localhost:8080](http://localhost:8080) — the setup wizard will guide you.
+
+```bash
+# Full 3-node cluster
+docker compose up -d
+```
+
+Three nodes on ports 8080, 8081, 8082 — auto-connected via mDNS.
+
+### Build from Source
+
+**Prerequisites:** [Go 1.22+](https://go.dev/dl/)
 
 ```bash
 git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-go mod tidy
 make build
+./bin/doogle --seed "https://example.com"
 ```
 
-This produces `bin/doogle`.
-
-### Run Your First Node
-
-```bash
-./bin/doogle --api-port 8080 --seed "https://example.com"
-```
-
-Open [http://localhost:8080](http://localhost:8080) — the admin dashboard and search UI are built in.
-
-### Connect a Second Node
+### Connect Nodes
 
 ```bash
 ./bin/doogle --port 4002 --api-port 8081 \
@@ -101,6 +113,15 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 - BadgerDB for metadata, URL queue, and backlink graph (crash-safe WAL)
 - Bleve for full-text index (self-repairs on restart)
 - Everything in a single `--data-dir`, survives machine sleep and power loss
+
+**Coming Soon**
+- `.onion` crawling via Tor SOCKS5 proxy
+- I2P eepsite support via SAM bridge
+- Privacy-preserving P2P (libp2p-over-Tor transport)
+- Encrypted search queries (end-to-end encrypted peer queries)
+- Semantic search (sentence embeddings, hybrid BM25 + vector scoring)
+- Knowledge graph with entity cards
+- CLI search tool, browser extension, mobile client
 
 ---
 
@@ -308,26 +329,60 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 
 ## Roadmap
 
-### Done
-- [x] P2P networking (libp2p, DHT, mDNS, GossipSub, NAT traversal)
-- [x] Crawler (worker pool, rate limiting, robots.txt, headless fallback)
-- [x] Indexer (quality scoring, spam detection, deduplication, PageRank)
-- [x] Local + distributed search (BM25, fan-out, re-ranking, query understanding)
-- [x] HTTP API + embedded admin dashboard with setup wizard
-- [x] Live crawl feed with FIFO animation
-- [x] 5 themes with animated logos and backgrounds
-- [x] Node naming (`--name` flag)
-- [x] VPN/NAT documentation and troubleshooting
+### Phase 1 — Foundation ✅
+- [x] P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)
+- [x] Crawler (workers, rate limiting, robots.txt, headless browser, live feed)
+- [x] Indexer (10+ quality signals, E-E-A-T, spam, PageRank, readability, freshness)
+- [x] BM25 search (synonyms, phrases, fuzzy, site: filter, distributed fan-out)
+- [x] 6 P2P protocols, shard routing, replication N=3, Merkle anti-entropy
+- [x] Admin dashboard (5 themes, wizard, live feed, network graph)
+- [x] Docker + Compose support
 
-### Next
-- [ ] Cross-node index shard forwarding via `/doogle/index/1.0.0`
-- [ ] Consistent hash ring rebalancing on peer join/leave
-- [ ] Peer reputation system
-- [ ] NLP pipeline (readability, freshness, entity extraction)
-- [ ] CLI query tool (`doogle search "query"`)
-- [ ] Multi-platform binary releases (goreleaser)
-- [ ] Browser extension for query obfuscation
-- [ ] Tor integration for .onion crawling
+### Phase 2 — Quality & Scale
+- [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
+- [ ] Hash ring rebalancing on peer join/leave
+- [ ] Multi-language search (15+ language stemmers, language-aware analyzers)
+- [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)
+- [ ] Structured data extraction (Schema.org, JSON-LD, microdata → rich snippets)
+- [ ] PDF & document indexing (PDF, DOCX, EPUB via tika/pdftotext)
+- [ ] Boolean query operators (AND, OR, NOT, grouping with parentheses)
+- [ ] Search result caching (LRU with TTL invalidation)
+- [ ] Peer reputation system (trust scoring based on response quality and uptime)
+- [ ] Content verification (Ed25519-signed documents for tamper detection)
+- [ ] Image search by alt text, caption, surrounding context
+
+### Phase 3 — Dark Web & Privacy
+- [ ] SOCKS5 proxy support in crawler (configurable per-transport)
+- [ ] Tor integration (bundled/sidecar daemon, automatic SOCKS5 routing for .onion)
+- [ ] .onion crawling (frontier accepts .onion URLs, Tor-routed fetches, per-hidden-service rate limiting)
+- [ ] I2P support (SAM bridge for .i2p eepsite crawling)
+- [ ] Privacy-preserving P2P (optional libp2p-over-Tor transport, peers never expose IPs)
+- [ ] Encrypted search queries (end-to-end encrypted peer queries, relays can't read them)
+- [ ] .onion seed directories (ahmia.fi, Haystak, Torch as built-in wizard seed categories)
+- [ ] Content safety layer (CSAM hash matching, configurable blocklists, on by default)
+- [ ] Network source tagging (clearnet/tor/i2p label on every doc, filterable in search UI)
+- [ ] Tor circuit management (connection pooling, circuit rotation, bandwidth-aware scheduling)
+
+### Phase 4 — Intelligence
+- [ ] Semantic search (sentence embeddings via ONNX, hybrid BM25 + vector scoring)
+- [ ] Knowledge graph (NER → entity graph in BadgerDB, entity cards in search results)
+- [ ] ML-based ranking (learn-to-rank from local-only click signals, XGBoost/ONNX)
+- [ ] Query intent classification (navigational / informational / transactional)
+- [ ] Automatic summarization (extractive or local LLM via llama.cpp bindings)
+- [ ] Topic clustering (group documents, surface related topics in results)
+- [ ] Trend detection (crawl velocity + query frequency across network)
+- [ ] Multilingual semantic search (cross-language retrieval via multilingual embeddings)
+
+### Phase 5 — Ecosystem
+- [ ] CLI search tool (`doogle search "query"`, pipe-friendly JSON output)
+- [ ] Browser extension (address bar search, optional query obfuscation via P2P)
+- [ ] Mobile client (read-only, connects to remote Doogle node)
+- [ ] Light nodes (~50 MB RAM, relay-only, proxy queries, optional single crawl worker)
+- [ ] Incentive layer (reputation + credit for uptime/crawl contribution — not a blockchain)
+- [ ] Governance (community proposals, node operator voting on network parameters)
+- [ ] Plugin system (pluggable analyzers, scorers, content extractors)
+- [ ] Multi-platform releases (goreleaser: Linux, macOS, Windows, amd64 + arm64)
+- [ ] Public bootstrap network (maintained entry nodes for zero-config onboarding)
 
 ---
 
