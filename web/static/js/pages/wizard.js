@@ -1,8 +1,10 @@
 // Doogle v2 — Onboarding Wizard
 import { api } from '../api.js';
 import { icon } from '../components.js';
+import { animateElement } from '../logo-animation.js';
 
 let currentStep = 0;
+let cleanupDoogleAnim = null;
 const selectedSubs = new Set();
 const removedSeeds = new Set();
 let customSeeds = '';
@@ -530,6 +532,7 @@ function renderStep() {
   if (!body) return;
 
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  if (cleanupDoogleAnim) { cleanupDoogleAnim(); cleanupDoogleAnim = null; }
 
   switch (currentStep) {
     case 0: renderWelcome(body); break;
@@ -561,13 +564,16 @@ function renderWelcome(el) {
           <path d="M44 98 L60 106 L76 98" stroke="var(--accent)" stroke-width="1.2" opacity="0.3"/>
         </svg>
       </div>
-      <h1>Welcome to Doogle</h1>
+      <h1>Welcome to <a href="#/" class="wizard-doogle-link" id="wizard-doogle">Doogle</a></h1>
       <p>Your node is ready to join the decentralized web. Pick the topics you care about, and Doogle will build a search index tailored to your interests. Each node specializes — together, the network covers everything.</p>
       <p class="wizard-append-note" id="wizard-append-note" style="display:none">You already have indexed data. Running the wizard again will <strong>add</strong> new topics to your existing index — nothing gets deleted.</p>
       <button class="btn btn-primary wizard-begin-btn" id="wizard-begin">Begin Setup</button>
     </div>
   `;
   document.getElementById('wizard-begin').addEventListener('click', () => { currentStep = 1; update(); });
+
+  const doogleEl = document.getElementById('wizard-doogle');
+  if (doogleEl) cleanupDoogleAnim = animateElement(doogleEl, 'Doogle');
 
   api.status().then(s => {
     if (s && s.indexed_docs > 0) {

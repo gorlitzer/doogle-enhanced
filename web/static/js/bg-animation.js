@@ -60,9 +60,9 @@ function matrixRain() {
 
   // Three layers with different densities, speeds, and opacities
   const layers = [
-    { fontSize: 18, spacing: 5, speed: [0.15, 0.3],  opacity: [0.06, 0.12] },  // far bg, slow, dim
-    { fontSize: 14, spacing: 4, speed: [0.25, 0.5],  opacity: [0.10, 0.18] },  // mid layer
-    { fontSize: 11, spacing: 6, speed: [0.35, 0.65], opacity: [0.14, 0.22] },  // near, faster, still subtle
+    { fontSize: 18, spacing: 5, speed: [0.06, 0.12], opacity: [0.06, 0.12] },  // far bg, slow, dim
+    { fontSize: 14, spacing: 4, speed: [0.10, 0.22], opacity: [0.10, 0.18] },  // mid layer
+    { fontSize: 11, spacing: 6, speed: [0.15, 0.30], opacity: [0.14, 0.22] },  // near, faster, still subtle
   ];
 
   let columns = [];
