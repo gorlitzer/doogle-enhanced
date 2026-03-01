@@ -141,7 +141,7 @@ const capabilities = [
       </ul>
       <p>This reduces per-query fan-out from O(N) to O(sqrt(N)). Reference: <a href="https://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">Consistent Hashing (Wikipedia)</a></p>` },
   { icon: 'database', title: 'Document Replication (N=3)', desc: 'Every document is replicated to 3 nodes. Merkle root anti-entropy ensures consistency. Network survives node failures.',
-    modal: `<p>Every document is replicated to N nodes (default 3) using consistent hashing. When a peer joins or leaves, the replication protocol automatically rebalances.</p><p>Consistency is maintained via Merkle root anti-entropy: nodes periodically compare tree roots and sync missing documents. Protocol: <code>/doogle/replicate/1.0.0</code>.</p>` },
+    modal: `<p>Every document is replicated to N nodes (default 3) using consistent hashing. When a peer joins or leaves, the replication protocol automatically rebalances.</p><p>Consistency is maintained via Merkle root anti-entropy: every 2 minutes, nodes compare Merkle roots per domain and sync missing documents. Protocols: <code>/doogle/replicate/1.0.0</code> (push) and <code>/doogle/antientropy/1.0.0</code> (reconciliation).</p>` },
 ];
 
 const capabilityModalData = capabilities.map(c => ({ title: c.title, html: c.modal }));

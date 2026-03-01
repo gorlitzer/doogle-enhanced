@@ -37,8 +37,8 @@ func (sm *ShardManager) Owners(domain string, n int) []string {
 }
 
 // IsOwner checks if the given peer is responsible for the domain.
-func (sm *ShardManager) IsOwner(peerID, domain string) bool {
-	owners := sm.ring.GetN(domain, 2) // primary + 1 replica
+func (sm *ShardManager) IsOwner(peerID, domain string, replicationFactor int) bool {
+	owners := sm.ring.GetN(domain, replicationFactor)
 	for _, o := range owners {
 		if o == peerID {
 			return true

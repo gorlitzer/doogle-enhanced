@@ -84,6 +84,13 @@ a:hover { text-decoration: underline; }
   letter-spacing: 3px;
   margin-right: 32px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.navbar .logo-icon {
+  width: 28px;
+  height: 28px;
 }
 .navbar .nav-links { display: flex; gap: 4px; }
 .navbar .nav-links a {

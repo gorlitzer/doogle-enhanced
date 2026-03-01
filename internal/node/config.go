@@ -52,6 +52,7 @@ type IndexConfig struct {
 	BatchFlushInterval   time.Duration `yaml:"batch_flush_interval"`
 	IncrementalInterval  time.Duration `yaml:"incremental_interval"`
 	ReplicationFactor    int           `yaml:"replication_factor"`
+	AntiEntropyInterval  time.Duration `yaml:"anti_entropy_interval"`
 }
 
 type StorageConfig struct {
@@ -95,6 +96,7 @@ func DefaultConfig() *Config {
 			BatchFlushInterval:  5 * time.Second,
 			IncrementalInterval: 10 * time.Minute,
 			ReplicationFactor:   3,
+			AntiEntropyInterval: 2 * time.Minute,
 		},
 		Storage: StorageConfig{
 			DataDir:   "./data/doogle",

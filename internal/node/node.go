@@ -200,6 +200,7 @@ func (n *Node) init() error {
 	p2p.RegisterIndexProtocol(h, n.handlePeerIndexDoc)
 	p2p.RegisterShardProtocol(h, n.handleShardCatalog)
 	p2p.RegisterReplicateProtocol(h, n.handleReplicateRequest)
+	p2p.RegisterAntiEntropyProtocol(h, n.handleAntiEntropyRequest)
 
 	// 14. HTTP API
 	n.apiServer = api.NewServer(n.cfg.API.Bind, n.cfg.API.Port, &api.Deps{
@@ -233,6 +234,7 @@ func (n *Node) Run() error {
 	go n.gossipLoop()
 	go n.shardCatalogLoop()
 	go n.shardCatalogPublisher()
+	go n.antiEntropyLoop()
 
 	// Add seed URLs
 	for _, seed := range n.cfg.SeedURLs {

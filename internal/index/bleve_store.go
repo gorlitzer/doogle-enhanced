@@ -309,6 +309,65 @@ func (bs *BleveStore) ListAll(callback func(doc *IndexDocument) bool) error {
 	return nil
 }
 
+// ListIDsByDomain returns all document IDs belonging to the given domain.
+func (bs *BleveStore) ListIDsByDomain(domain string) ([]string, error) {
+	q := bleve.NewTermQuery(domain)
+	q.SetField("domain")
+
+	var ids []string
+	pageSize := 500
+	offset := 0
+
+	for {
+		req := bleve.NewSearchRequestOptions(q, pageSize, offset, false)
+		req.Fields = []string{} // we only need IDs
+		req.SortBy([]string{"_id"})
+
+		result, err := bs.index.Search(req)
+		if err != nil {
+			return nil, fmt.Errorf("bleve list IDs by domain: %w", err)
+		}
+		if len(result.Hits) == 0 {
+			break
+		}
+
+		for _, hit := range result.Hits {
+			ids = append(ids, hit.ID)
+		}
+
+		offset += len(result.Hits)
+		if uint64(offset) >= result.Total {
+			break
+		}
+	}
+	return ids, nil
+}
+
+// ListDomains returns all distinct domains in the index using a term facet.
+func (bs *BleveStore) ListDomains() ([]string, error) {
+	q := bleve.NewMatchAllQuery()
+	req := bleve.NewSearchRequestOptions(q, 0, 0, false)
+
+	facet := bleve.NewFacetRequest("domain", 100000)
+	req.AddFacet("domains", facet)
+
+	result, err := bs.index.Search(req)
+	if err != nil {
+		return nil, fmt.Errorf("bleve list domains: %w", err)
+	}
+
+	domainFacet, ok := result.Facets["domains"]
+	if !ok {
+		return nil, nil
+	}
+
+	domains := make([]string, 0, len(domainFacet.Terms.Terms()))
+	for _, term := range domainFacet.Terms.Terms() {
+		domains = append(domains, term.Term)
+	}
+	return domains, nil
+}
+
 // Close closes the Bleve index.
 func (bs *BleveStore) Close() error {
 	log.Println("bleve: closing index")
