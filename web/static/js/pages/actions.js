@@ -152,7 +152,7 @@ export function renderActions(container) {
           ${icon('alertTriangle', 20, 'var(--red)')}
           <h3>Danger Zone</h3>
         </div>
-        <div class="actions-grid actions-grid-full">
+        <div class="actions-grid">
           <div class="action-card action-card-danger">
             <div class="danger-card-layout">
               <div class="danger-card-info">

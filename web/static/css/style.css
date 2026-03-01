@@ -2833,11 +2833,8 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 }
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
-}
-.actions-grid-full {
-  grid-template-columns: 1fr;
 }
 .action-card {
   background: var(--bg-card);

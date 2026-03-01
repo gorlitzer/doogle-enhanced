@@ -285,7 +285,7 @@ const archCardDetails = [
   // Application layer
   { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 10 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
   { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
-  { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, synonyms, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
+  { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>` },
   // P2P layer
   { title: 'Kademlia DHT', html: `<p>Distributed peer routing via <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a>. Enables internet-wide peer discovery and routing. Bootstrap from known peers or rely on mDNS for LAN discovery. Part of <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
@@ -373,7 +373,7 @@ function renderArchitecture(el) {
               ${icon('search', 18, 'var(--accent)')}
               <div>
                 <strong>Search</strong>
-                <p>BM25 full-text. Query parsing (phrases, synonyms, fuzzy). Shard-aware distributed routing.</p>
+                <p>BM25 full-text. Query parsing (phrases, fuzzy). Shard-aware distributed routing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="3" style="cursor:pointer">
@@ -578,7 +578,7 @@ function renderArchitecture(el) {
     { title: 'PageRank', html: '<p>Graph-based link authority computed via iterative power method (damping factor = 0.85, 15 iterations). Cross-domain links receive 1.5x weight. Recomputed every 5 minutes via background goroutine. Reference: <a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">PageRank (Wikipedia)</a></p>' },
     { title: 'StaticScore Pre-computation', html: '<p>All quality signals are combined into a single <strong>StaticScore</strong> at index time:</p><code style="display:block;padding:8px;background:var(--bg-code);border-radius:4px;margin:8px 0">StaticScore = (0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code><p>Range: [0.1, 2.5]. This moves scoring work from query-time to index-time. The incremental re-scorer updates stale StaticScores every 10 minutes. <em>ref: ranker.go</em></p>' },
     { title: 'Batch Indexer', html: '<p>Documents are buffered in memory and flushed to <a href="https://blevesearch.com/" target="_blank">Bleve</a> in batches of 100 (configurable via <code>--batch-size</code>) or every 5 seconds (<code>--batch-flush-interval</code>). Bleve\'s batch API provides 10-50x faster write throughput compared to single-document indexing. <em>ref: Bleve batch API</em></p>' },
-    { title: 'Bleve Index', html: '<p>Full-text search index via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. BM25 weighting with field boosts: title (3x), description (1.5x), content (1x), anchor text (2x). Pre-computed StaticScore stored as a numeric field per document. Supports phrase matching, fuzzy queries, and synonym expansion.</p>' },
+    { title: 'Bleve Index', html: '<p>Full-text search index via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. BM25 weighting with field boosts: title (3x), description (1.5x), content (1x), anchor text (2x). Pre-computed StaticScore stored as a numeric field per document. Supports phrase matching and fuzzy queries.</p>' },
   ];
 
   el.querySelectorAll('.docs-scoring-step[data-scoring-idx]').forEach(step => {

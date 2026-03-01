@@ -93,7 +93,6 @@ const posts = [
         <li><strong>Boolean operators</strong> — <code>-term</code> excludes documents, <code>OR</code> creates disjunctions</li>
         <li><strong>Filters parsed</strong> — <code>site:example.com</code> restricts to a domain, <code>lang:de</code> filters by language (15 stemmers)</li>
         <li><strong>Search dorks</strong> — <code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code></li>
-        <li><strong>Synonyms expanded</strong> — "js" also searches for "javascript", "k8s" for "kubernetes"</li>
         <li><strong>Fuzzy matching</strong> — for short queries, typo-tolerant matching is enabled</li>
       </ul>
 
@@ -120,7 +119,7 @@ Parsed:
           <div class="learn-highlight-icon" style="color:var(--amber)">${icon('trendingUp', 20)}</div>
           <div>
             <strong>Should tier (boost)</strong>
-            <p>Phrase matches, fuzzy matches, and synonyms. These can't produce results alone — they only boost the score
+            <p>Phrase matches and fuzzy matches. These can't produce results alone — they only boost the score
             of documents that already matched the Must tier.</p>
           </div>
         </div>
@@ -418,7 +417,7 @@ make build
         <div class="learn-status-card learn-status-done">
           <span class="badge badge-green">working</span>
           <strong>Full-Text Search</strong>
-          <p>BM25 ranking with boolean operators (-exclude, OR), search dorks (intitle:, inurl:, filetype:, date range, has:https), 15 language stemmers, phrase matching, synonym expansion, and fuzzy queries.</p>
+          <p>BM25 ranking with boolean operators (-exclude, OR), search dorks (intitle:, inurl:, filetype:, date range, has:https), 15 language stemmers, phrase matching, and fuzzy queries.</p>
         </div>
         <div class="learn-status-card learn-status-done">
           <span class="badge badge-green">working</span>
