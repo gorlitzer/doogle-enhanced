@@ -70,7 +70,7 @@ const posts = [
 
       <h3>Current Status</h3>
       <p>Doogle is a <strong>work in progress</strong>. The core engine works — crawling, indexing, searching, and P2P networking are all functional.
-      Recent infrastructure upgrades added batch indexing, persistent deduplication, pre-computed StaticScore, shard-aware routing, and document replication.</p>
+      Recent infrastructure upgrades added batch indexing, persistent deduplication, pre-computed StaticScore, shard-aware routing, document replication, a backlink graph for PageRank, and a guided <a href="#/wizard">onboarding wizard</a> with batch seed submission.</p>
       <p>Think of it as an early-stage experiment in what search could look like if it wasn't controlled by a single company.</p>
     `,
   },
@@ -361,9 +361,11 @@ make build
       <p>Seeds are the starting points for crawling. The crawler follows links from these pages to discover new content.
       You can add seeds via:</p>
       <ul>
+        <li>The <a href="#/wizard">onboarding wizard</a> (auto-triggers on first launch — 8 curated categories)</li>
         <li>The <code>--seed</code> CLI flag (comma-separated)</li>
         <li>The <a href="#/admin/crawler">Crawler dashboard</a> in the web UI</li>
-        <li>The <code>POST /api/crawl</code> API endpoint</li>
+        <li>The <code>POST /api/crawl/batch</code> API endpoint (up to 200 URLs at once)</li>
+        <li>The <code>POST /api/crawl</code> API endpoint (single URL)</li>
       </ul>
       <p>Good seeds are high-quality sites with lots of outbound links — Wikipedia, MDN, documentation sites,
       news aggregators like Hacker News.</p>
@@ -427,7 +429,22 @@ make build
         <div class="learn-status-card learn-status-done">
           <span class="badge badge-green">working</span>
           <strong>Web UI</strong>
-          <p>Search page, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>
+          <p>Search page, admin dashboard, crawler/indexer/network monitoring, docs, 5 switchable themes with unique background animations and animated logo text.</p>
+        </div>
+        <div class="learn-status-card learn-status-done">
+          <span class="badge badge-green">working</span>
+          <strong>Onboarding Wizard</strong>
+          <p>5-step guided setup that auto-triggers on fresh nodes. Pick seed categories, see your node identity, and launch crawling with live progress counters.</p>
+        </div>
+        <div class="learn-status-card learn-status-done">
+          <span class="badge badge-green">working</span>
+          <strong>Batch Crawl API</strong>
+          <p><code>POST /api/crawl/batch</code> accepts up to 200 URLs at once. Used by the wizard and available for programmatic seed management.</p>
+        </div>
+        <div class="learn-status-card learn-status-done">
+          <span class="badge badge-green">working</span>
+          <strong>Backlink Graph</strong>
+          <p>LinkStore persists inbound links in BadgerDB. Feeds PageRank computation and anchor text indexing for authority-aware ranking.</p>
         </div>
         <div class="learn-status-card learn-status-done">
           <span class="badge badge-green">working</span>
@@ -506,6 +523,11 @@ make build
           <span class="badge badge-blue">planned</span>
           <strong>Personalized Ranking</strong>
           <p>Local-only preference learning — your node adapts to your interests without sharing data.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">planned</span>
+          <strong>Light Nodes</strong>
+          <p>Lightweight mode (~50-100 MB RAM) for edge devices. No local index — relay queries to full nodes, cache results, optionally contribute 1 crawl worker. More nodes = stronger mesh.</p>
         </div>
       </div>
 

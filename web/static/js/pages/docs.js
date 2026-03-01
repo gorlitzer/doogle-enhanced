@@ -98,11 +98,11 @@ function renderQuickstart(el) {
         <h2>First Steps After Launch</h2>
       </div>
       <div class="docs-steps">
-        ${stepCard(1, 'Add seed URLs', `
-          <p>Seed URLs are the starting points for crawling. Add them via the <a href="#/admin/crawler">Crawler dashboard</a> or via API:</p>
-          ${codeBlock(`curl -X POST http://localhost:8080/api/crawl \\
+        ${stepCard(1, 'Run the setup wizard', `
+          <p>On first launch, the <a href="#/wizard">onboarding wizard</a> auto-triggers and guides you through picking seed categories (Tech, Science, News, etc.), previewing settings, and launching the crawler. Alternatively, add seeds manually via the <a href="#/admin/crawler">Crawler dashboard</a> or API:</p>
+          ${codeBlock(`curl -X POST http://localhost:8080/api/crawl/batch \\
   -H 'Content-Type: application/json' \\
-  -d '{"url":"https://example.com"}'`, 'bash')}
+  -d '{"urls":["https://go.dev","https://en.wikipedia.org"]}'`, 'bash')}
         `)}
         ${stepCard(2, 'Watch it crawl', `
           <p>Head to <a href="#/admin">Admin Overview</a> to see URLs being discovered and indexed in real time. The crawler follows links and broadcasts discoveries to peers via GossipSub.</p>
@@ -612,6 +612,21 @@ function renderAPI(el) {
   -d '{"url":"https://example.com"}'`, 'bash')}
           <h4>Response</h4>
           ${codeBlock(`{"status": "queued", "url": "https://example.com"}`, 'json')}
+        `)}
+        ${endpoint('POST', '/api/crawl/batch', 'Submit multiple seed URLs at once (max 200)', `
+          <div class="docs-params">
+            <h4>Body Parameters</h4>
+            <div class="docs-param-grid">
+              ${param('urls', 'string[]', 'required', 'Array of URLs to crawl. Each must start with http:// or https://. Capped at 200.')}
+            </div>
+          </div>
+          <h4>Example</h4>
+          ${codeBlock(`curl -X POST http://localhost:8080/api/crawl/batch \\
+  -H 'Content-Type: application/json' \\
+  -d '{"urls":["https://go.dev","https://arxiv.org","https://en.wikipedia.org"]}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "queued", "queued": 3, "total": 3}`, 'json')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Used by the <a href="#/wizard">onboarding wizard</a> to submit seed categories in bulk.</p>
         `)}
         ${endpoint('GET', '/api/admin/crawler', 'Crawler configuration and stats', `
           ${codeBlock(`{
