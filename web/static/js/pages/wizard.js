@@ -157,6 +157,14 @@ function growthEstimate() {
 }
 
 export function renderWizard(container) {
+  // Reset state so re-running the wizard starts fresh
+  currentStep = 0;
+  selectedCategories.clear();
+  removedSeeds.clear();
+  customSeeds = '';
+  settings = { depth: 3, workers: 4 };
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+
   container.innerHTML = `
     <div class="wizard-container">
       <div class="wizard-progress" id="wizard-progress"></div>
@@ -251,10 +259,19 @@ function renderWelcome(el) {
       </div>
       <h1>Welcome to Doogle</h1>
       <p>Your node is ready to join the decentralized web. Pick the topics you care about, and Doogle will build a search index tailored to your interests. Each node specializes — together, the network covers everything.</p>
+      <p class="wizard-append-note" id="wizard-append-note" style="display:none">You already have indexed data. Running the wizard again will <strong>add</strong> new topics to your existing index — nothing gets deleted.</p>
       <button class="btn btn-primary wizard-begin-btn" id="wizard-begin">Begin Setup</button>
     </div>
   `;
   document.getElementById('wizard-begin').addEventListener('click', () => { currentStep = 1; update(); });
+
+  // Show append note if node already has data
+  api.status().then(s => {
+    if (s && s.indexed_docs > 0) {
+      const note = document.getElementById('wizard-append-note');
+      if (note) note.style.display = 'block';
+    }
+  }).catch(() => {});
 }
 
 // ─── Step 1: Node Identity ────────────────────────────
@@ -568,7 +585,7 @@ async function renderLaunch(el) {
     <div class="wizard-launch">
       <h2>Launch</h2>
       ${topicNames.length > 0 ? `<p class="wizard-launch-topics">Specializing in: <strong>${topicNames.join(', ')}</strong></p>` : ''}
-      <div class="wizard-launch-status" id="wizard-launch-status">Submitting ${seeds.length} seeds...</div>
+      <div class="wizard-launch-status" id="wizard-launch-status">Adding ${seeds.length} seeds to crawl queue...</div>
       <div class="wizard-progress-bar"><div class="wizard-progress-fill" id="wizard-progress-fill" style="width:0%"></div></div>
       <div class="wizard-counters" id="wizard-counters">
         <div class="wizard-counter">
