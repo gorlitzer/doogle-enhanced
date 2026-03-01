@@ -17,7 +17,7 @@ p2p:
 api:
   port: 8080
   # Bind address (0.0.0.0 for all interfaces)
-  bind: "0.0.0.0"
+  bind: "127.0.0.1"
 
 # Crawler settings
 crawler:

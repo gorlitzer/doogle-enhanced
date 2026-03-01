@@ -32,36 +32,43 @@ Ships as a **single Go binary**. Run it, connect to peers, and you become part o
 
 ---
 
+## Your Role
+
+Doogle works because different people care about different things. No sign-up, no commitment — you contribute just by being yourself.
+
+**The Explorer** — Pick the topics that interest you in the setup wizard. Your node crawls and indexes those corners of the web. You build a specialized index just by following your curiosity.
+
+**The Guardian** — When you spot spam, phishing, or junk in search results, flag it. Reports propagate across the network and bad actors get quarantined. The more people who flag, the cleaner the index for everyone.
+
+**The Connector** — Keep your node running. The longer it stays online, the more peers it serves. Just leave it on and the network gets stronger.
+
+**The Specialist** — Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Stale nodes get replaced by fresh ones — people who care about a topic keep that corner alive.
+
+**The Curator** — Your browsing patterns, flags, and topic choices train the network's quality signals. Good pages rise, junk fades. You shape relevance without writing a single rule.
+
+**The Amplifier** — You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics and new corners of the web to the collective index.
+
+**The Archivist** — You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your node becomes a time capsule — preserving knowledge that would otherwise be lost.
+
+**The Builder** — You see what's missing and build it. A better crawler, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.
+
+These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point.
+
+---
+
 ## Quick Start
 
-### Docker (recommended)
-
-```bash
-# Single node with seeds
-docker compose up -d node1
-```
-
-Open [http://localhost:8080](http://localhost:8080) — the setup wizard will guide you.
-
-```bash
-# Full 3-node cluster
-docker compose up -d
-```
-
-Three nodes on ports 8080, 8081, 8082 — auto-connected via mDNS.
-
-### Build from Source
-
-**Prerequisites:** [Go 1.22+](https://go.dev/dl/)
+### 1. Build & Run
 
 ```bash
 git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-make build
-./bin/doogle --seed "https://example.com"
+make start                      # production build + run
 ```
 
-### Connect Nodes
+Open [http://localhost:8080](http://localhost:8080) — the setup wizard guides you through seeding and configuration.
+
+### 2. Connect a Second Node
 
 ```bash
 ./bin/doogle --port 4002 --api-port 8081 \
@@ -70,6 +77,27 @@ make build
 ```
 
 Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discovers URLs via GossipSub and starts crawling. Search on either node returns results from both.
+
+### Docker (alternative)
+
+```bash
+# Single node
+docker compose up -d node1
+
+# Full 3-node cluster
+docker compose up -d
+```
+
+Three nodes on ports 8080, 8081, 8082 — auto-connected via mDNS.
+
+### Build from Source (manual)
+
+**Prerequisites:** [Go 1.22+](https://go.dev/dl/)
+
+```bash
+make build
+./bin/doogle --seed "https://example.com"
+```
 
 ---
 
@@ -109,8 +137,16 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 - Batch indexing with configurable flush interval
 - Content-size and depth-based filtering
 
+**Trust & Safety**
+- Spam reporting: flag URLs as spam, malware, phishing, or low quality
+- Peer reputation tracking: trust scores evolve with behavior
+- Automatic quarantine: peers with too many spam reports are blocked
+- Domain flagging: domains reported by multiple peers are filtered
+- P2P report propagation: spam reports broadcast via GossipSub
+- Gossip-level filtering: URLs from quarantined peers and flagged domains are dropped
+
 **Web UI**
-- Setup wizard with guided onboarding
+- Setup wizard with 16 topic categories across 4 groups (Knowledge, Lifestyle, Creative, Tech)
 - Network topology graph (interactive canvas)
 - Crawler management with live feed, analytics, seed URLs
 - Indexer stats, document browser
@@ -131,6 +167,18 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 - Semantic search (sentence embeddings, hybrid BM25 + vector scoring)
 - Knowledge graph with entity cards
 - Browser extension, mobile client
+
+---
+
+## Tested On
+
+| Platform | Chip | Status |
+|----------|------|--------|
+| macOS Sequoia 15.x | Apple M3 (arm64) | Verified |
+| macOS Sequoia 15.x | Apple M4 (arm64) | Verified |
+| macOS | Intel x64 | Planned |
+| Linux (Ubuntu/Debian) | x64 / arm64 | Planned |
+| Windows 10/11 | x64 | Planned |
 
 ---
 
@@ -215,6 +263,35 @@ Flags:
   --size N             Results per page (default: 10)
 ```
 
+### Backup & Restore
+
+```
+Usage: doogle dump [flags]
+  --data-dir PATH      Data directory to back up (default: ./data/doogle)
+  --output FILE        Output archive path (default: doogle-backup-<timestamp>.tar.gz)
+
+Usage: doogle restore [flags] <archive.tar.gz>
+  --data-dir PATH      Data directory to restore into (default: ./data/doogle)
+  --force              Overwrite existing data directory
+```
+
+Dump and restore are **standalone** — they operate on raw data directories and do not require a running node. Stop the node first for consistency.
+
+### Makefile Reference
+
+```bash
+make help                       # show all commands
+make start                      # production build + run
+make prod                       # optimized binary (stripped, trimpath)
+make build                      # development build
+make test                       # run all tests
+make backup                     # snapshot data to timestamped archive
+make restore BACKUP=<file>      # restore from backup
+make status                     # check running node health
+make dev-node1                  # local node 1 (port 4001/8080)
+make dev-node2                  # local node 2 (port 4002/8081)
+```
+
 ### Examples
 
 ```bash
@@ -240,6 +317,10 @@ Flags:
 ./bin/doogle search "golang -tutorial"           # exclude "tutorial"
 ./bin/doogle search "python OR ruby"             # OR operator
 ./bin/doogle search '"machine learning" basics'  # quoted phrase
+
+# Backup and restore
+./bin/doogle dump --output my-backup.tar.gz
+./bin/doogle restore --force my-backup.tar.gz
 ```
 
 ---
@@ -252,12 +333,14 @@ Flags:
 | `GET` | `/api/status` | Node status, peer count, uptime |
 | `POST` | `/api/crawl` | Queue a single URL `{"url": "..."}` |
 | `POST` | `/api/crawl/batch` | Queue up to 200 URLs `{"urls": [...]}` |
+| `POST` | `/api/report` | Report spam/malware `{"url": "...", "reason": "spam"}` |
 | `GET` | `/api/admin/crawler` | Crawler stats and config |
 | `GET` | `/api/admin/crawler/feed?after=N` | Live crawl event stream |
 | `GET` | `/api/admin/indexer` | Indexer statistics |
 | `GET` | `/api/admin/peers` | Connected peer list |
 | `GET` | `/api/admin/documents?offset=&limit=` | Recently indexed documents |
 | `GET` | `/api/admin/documents/{id}` | Document detail by ID |
+| `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
 
 ---
 
@@ -376,14 +459,27 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 - [x] Multi-language search (15 language stemmers via Bleve analyzers, `lang:` filter)
 - [x] Search result caching (LRU with TTL invalidation, configurable size/TTL)
 - [x] CLI search tool (`doogle search "query"`, `--json`, `--api`, remote node support)
+- [x] Spam reporting and peer trust system (report URLs, peer reputation, auto-quarantine)
+- [x] Domain flagging (multi-peer report consensus, gossip-level filtering)
+- [x] Backup & restore (`doogle dump`/`doogle restore`, Makefile targets)
+- [x] Production build target (`make prod` with stripped binary, `make start`)
 - [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
 - [ ] Hash ring rebalancing on peer join/leave
 - [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)
 - [ ] Structured data extraction (Schema.org, JSON-LD, microdata → rich snippets)
 - [ ] PDF & document indexing (PDF, DOCX, EPUB via tika/pdftotext)
-- [ ] Peer reputation system (trust scoring based on response quality and uptime)
 - [ ] Content verification (Ed25519-signed documents for tamper detection)
 - [ ] Image search by alt text, caption, surrounding context
+
+### Phase 2.5 — Trust & Safety (next)
+- [ ] Sybil resistance (proof-of-work challenge for new peers, rate-limited trust escalation)
+- [ ] Consensus-based domain blocklist (N-of-M peer agreement to global-block a domain)
+- [ ] Trust decay (idle peers slowly lose trust, active peers maintain or gain it)
+- [ ] Reputation-weighted search (results from high-trust peers ranked higher)
+- [ ] Malicious crawl defense (detect and reject poisoned index documents)
+- [ ] Report audit trail (tamper-proof log of all reports with cryptographic signatures)
+- [ ] Admin UI for trust dashboard (visualize peer trust, manage quarantine, review reports)
+- [ ] Allowlist/denylist per node (operator-defined URL/domain overrides)
 
 ### Phase 3 — Dark Web & Privacy
 - [ ] SOCKS5 proxy support in crawler (configurable per-transport)

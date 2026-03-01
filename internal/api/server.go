@@ -47,6 +47,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		r.Get("/status", StatusHandler(deps))
 		r.Post("/crawl", CrawlHandler(deps))
 		r.Post("/crawl/batch", BatchCrawlHandler(deps))
+		r.Post("/report", ReportHandler(deps))
 
 		// Admin endpoints
 		r.Route("/admin", func(r chi.Router) {
@@ -56,6 +57,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Get("/peers", PeersHandler(deps))
 			r.Get("/documents", DocumentsHandler(deps))
 			r.Get("/documents/{id}", DocumentDetailHandler(deps))
+			r.Get("/trust", TrustHandler(deps))
 		})
 	})
 

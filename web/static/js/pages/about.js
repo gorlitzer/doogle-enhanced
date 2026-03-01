@@ -27,19 +27,18 @@ const pipelineSteps = [
         <li>Follows redirects up to 5 hops</li>
         <li>Falls back to headless Chromium (via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a>) for JS-heavy SPAs</li>
       </ul>
-      <p>Extracted content is passed to the NLP enrichment pipeline before indexing.</p>`,
+      <p>Extracted content — title, meta tags, headings, links, images — is passed to the quality scoring pipeline before indexing.</p>`,
   },
   {
-    icon: 'cpu', title: 'Understand', color: 'var(--purple)',
+    icon: 'cpu', title: 'Analyze', color: 'var(--purple)',
     eli5: 'Doogle figures out what the page is about — is it about cats? Coding? Pizza recipes?',
-    detail: 'NLP pipeline: language detection, keyword extraction, readability scoring, category classification, and content enrichment.',
-    modal: `<p>The NLP enrichment pipeline analyzes every crawled document:</p>
+    detail: 'Content extraction pulls title, meta, headings, links, and images. Duplicate detection catches near-identical pages. Quality signals are computed for ranking.',
+    modal: `<p>Every crawled document goes through content analysis:</p>
       <ul>
-        <li><strong>Language Detection</strong> — identifies 14+ languages</li>
-        <li><strong>Keyword Extraction</strong> — TF-IDF based term importance</li>
-        <li><strong>Readability Scoring</strong> — Flesch-Kincaid readability grade</li>
-        <li><strong>Category Classification</strong> — assigns topic categories</li>
-        <li><strong>Content Dedup</strong> — 4-gram shingling + Jaccard similarity (&gt;80% = duplicate)</li>
+        <li><strong>Content Extraction</strong> — title, meta description, headings (H1-H6), links, images, OG tags, canonical URLs</li>
+        <li><strong>Content Dedup</strong> — SHA-256 content hash to detect near-identical pages</li>
+        <li><strong>Link Graph</strong> — internal and external links are recorded for PageRank computation</li>
+        <li><strong>Word Count &amp; Structure</strong> — used by the quality scorer to evaluate content depth</li>
       </ul>`,
   },
   {
@@ -116,8 +115,8 @@ const capabilities = [
     modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. Queries support boolean operators (<code>-exclude</code>, <code>OR</code>), search dorks (<code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code>), phrase matching, synonym expansion (20+ mappings), fuzzy matching for typo tolerance, <code>site:</code> and <code>lang:</code> filters (15 language stemmers). Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
   { icon: 'star', title: 'Quality Scoring (E-E-A-T)', desc: '10+ scoring signals including expertise, authority, trustworthiness, readability, freshness, and citation analysis.',
     modal: `<p>E-E-A-T scoring evaluates pages across 10+ dimensions, mirroring Google's quality rater guidelines. Signals include expertise, authority, trustworthiness, content depth, heading structure, media richness, citation count, and readability (Flesch-Kincaid).</p>` },
-  { icon: 'cpu', title: 'NLP Analysis Pipeline', desc: 'Language detection, keyword extraction, category classification, and readability scoring for every crawled document.',
-    modal: `<p>Every crawled document passes through language detection (14+ languages), TF-IDF keyword extraction, category classification, and Flesch-Kincaid readability scoring. Results feed into the quality scoring pipeline.</p>` },
+  { icon: 'cpu', title: 'Content Analysis', desc: 'Rich extraction of title, meta tags, headings, links, images, OG tags, and canonical URLs from every crawled page.',
+    modal: `<p>Every crawled document goes through content extraction: title, meta description, headings (H1-H6), outbound links (internal/external, nofollow), images with alt text, Open Graph tags, and canonical URLs. The extracted structure feeds into quality scoring, PageRank link graph, and anchor text indexing.</p>` },
   { icon: 'shield', title: 'Spam Detection', desc: 'Keyword stuffing detection, cloaking analysis, and quality threshold filtering to keep the index clean.',
     modal: `<p>Spam detection catches keyword stuffing, cloaking patterns, thin content, and link farms. Documents with spam score &gt; 0.7 are rejected before indexing. Below that threshold, spam scores are baked into the StaticScore penalty.</p>` },
   { icon: 'monitor', title: 'Headless JS Rendering', desc: 'go-rod powered headless Chromium fallback for React, Next.js, Angular, and Vue single-page applications.',
@@ -145,8 +144,8 @@ const capabilities = [
       <p>This reduces per-query fan-out from O(N) to O(sqrt(N)). Reference: <a href="https://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">Consistent Hashing (Wikipedia)</a></p>` },
   { icon: 'database', title: 'Document Replication (N=3)', desc: 'Every document is replicated to 3 nodes. Merkle root anti-entropy ensures consistency. Network survives node failures.',
     modal: `<p>Every document is replicated to N nodes (default 3) using consistent hashing. When a peer joins or leaves, the replication protocol automatically rebalances.</p><p>Consistency is maintained via Merkle root anti-entropy: every 2 minutes, nodes compare Merkle roots per domain and sync missing documents. Protocols: <code>/doogle/replicate/1.0.0</code> (push) and <code>/doogle/antientropy/1.0.0</code> (reconciliation).</p>` },
-  { icon: 'globe', title: 'Onboarding Wizard', desc: 'Guided 5-step setup that auto-triggers on new nodes. Pick seed categories, see your node identity, and launch crawling.',
-    modal: `<p>When a fresh node starts with 0 indexed documents, the <a href="#/wizard">setup wizard</a> auto-triggers. It walks users through 5 steps:</p><ol><li><strong>Welcome</strong> — intro and context</li><li><strong>Node Identity</strong> — Peer ID, addresses, connected peers</li><li><strong>Choose Focus</strong> — 8 curated seed categories (Tech, Science, News, Open Source, Education, Web Standards, DevOps, Frontend) plus custom URLs</li><li><strong>Settings Preview</strong> — crawl depth and workers overview with growth estimate</li><li><strong>Launch</strong> — submit seeds via batch API, live polling of crawl/index counters</li></ol><p>Seeds are submitted via <code>POST /api/crawl/batch</code> (up to 200 URLs). The wizard can be re-accessed anytime from the admin sidebar.</p>` },
+  { icon: 'globe', title: 'Onboarding Wizard', desc: 'Guided 5-step setup that auto-triggers on new nodes. Pick from 16 topic categories, see your node identity, and launch crawling.',
+    modal: `<p>When a fresh node starts with 0 indexed documents, the <a href="#/wizard">setup wizard</a> auto-triggers. It walks users through 5 steps:</p><ol><li><strong>Welcome</strong> — intro and context</li><li><strong>Node Identity</strong> — Peer ID, addresses, connected peers</li><li><strong>Choose Focus</strong> — 16 topic categories across 4 groups (Knowledge, Lifestyle, Creative, Technology) plus custom URLs. Each group has a select-all toggle.</li><li><strong>Settings Preview</strong> — crawl depth and workers overview with growth estimate</li><li><strong>Launch</strong> — submit seeds via batch API, live polling of crawl/index counters</li></ol><p>Seeds are submitted via <code>POST /api/crawl/batch</code> (up to 200 URLs). The wizard can be re-accessed anytime from the admin sidebar.</p>` },
   { icon: 'eye', title: 'Theme Animations', desc: '5 themes with unique background animations and animated logo text. Matrix rain, bats, particle mesh, aurora, and dust motes.',
     modal: `<p>Each of the 5 themes has a unique background canvas animation and animated "DOOGLE" logo text:</p><table style="width:100%;font-size:0.9em;margin-top:8px"><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>CRT</strong></td><td style="padding:6px">Matrix character rain</td><td style="padding:6px">Glitch text with chromatic aberration</td></tr><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>Dracula</strong></td><td style="padding:6px">Drifting bats + mist particles</td><td style="padding:6px">Blood drip letters</td></tr><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>Modern</strong></td><td style="padding:6px">Connected particle mesh</td><td style="padding:6px">Block-build assembly</td></tr><tr style="border-bottom:1px solid var(--border)"><td style="padding:6px"><strong>Light</strong></td><td style="padding:6px">Floating dust motes</td><td style="padding:6px">Ink quill write-in</td></tr><tr><td style="padding:6px"><strong>Pride</strong></td><td style="padding:6px">Aurora borealis rainbow</td><td style="padding:6px">Rainbow shimmer wave</td></tr></table><p style="margin-top:8px">All animations are rendered on a fixed canvas at z-index 0 — subtle, non-invasive, and auto-switch when you change themes.</p>` },
 ];
@@ -237,6 +236,55 @@ export function renderAbout(container) {
             <p>Not a product. Infrastructure for information freedom. Open source forever, governed by the people who run it.</p>
           </div>
         </div>
+      </section>
+
+      <!-- Your Role -->
+      <section class="about-section about-reveal" id="about-your-role">
+        <h2 class="about-section-title">Your Role</h2>
+        <p class="about-section-desc">Doogle works because different people care about different things. Your interests shape the network — no commitment needed, just be yourself.</p>
+        <div class="about-vision-grid">
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
+            <h3>The Explorer</h3>
+            <p>You pick topics in the wizard that interest you — cooking, science, gaming, whatever. Your node crawls those corners of the web and shares what it finds. You're building a specialized index just by browsing what you love.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
+            <h3>The Guardian</h3>
+            <p>You flag spam, phishing, and garbage when you see it. Reports spread across the network and bad actors get quarantined. The more people who flag, the cleaner the index gets for everyone.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--blue)">${icon('network', 28)}</div>
+            <h3>The Connector</h3>
+            <p>You keep your node running and connected. The longer your node is online, the more peers it serves, the more resilient the network becomes. Just leave it on — that's the whole contribution.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--purple)">${icon('search', 28)}</div>
+            <h3>The Specialist</h3>
+            <p>Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Nodes naturally specialize — some cover science, others cover local news, others cover niche hobbies.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--amber)">${icon('eye', 28)}</div>
+            <h3>The Curator</h3>
+            <p>You notice what's good and what's noise. Your browsing patterns, flags, and topic choices train the network's quality signals. The pages you keep coming back to rise; the junk you skip fades. You shape relevance without writing a single rule.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--red, #ef4444)">${icon('megaphone', 28)}</div>
+            <h3>The Amplifier</h3>
+            <p>You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics, new perspectives, and new corners of the web to the collective index.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--green)">${icon('trendingUp', 28)}</div>
+            <h3>The Archivist</h3>
+            <p>You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your long-running node becomes a time capsule — preserving knowledge that would otherwise be lost.</p>
+          </div>
+          <div class="about-vision-card">
+            <div class="about-vision-icon" style="color:var(--accent)">${icon('code', 28)}</div>
+            <h3>The Builder</h3>
+            <p>You see what's missing and build it. A better crawler for a specific content type, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.</p>
+          </div>
+        </div>
+        <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point: a system that adapts to the people who use it, not the other way around.</p>
       </section>
 
       <!-- Pipeline: How It Works -->
@@ -476,7 +524,7 @@ export function renderAbout(container) {
       <!-- Roadmap -->
       <section class="about-section about-reveal">
         <h2 class="about-section-title">Roadmap</h2>
-        <p class="about-section-desc">Five phases from foundation to ecosystem. We're in Phase 1.</p>
+        <p class="about-section-desc">Six phases from foundation to ecosystem. We're finishing Phase 2.</p>
         <div class="about-roadmap-timeline">
           <div class="about-roadmap-phase about-roadmap-done">
             <h3><span class="badge badge-green">complete</span> Phase 1 — Foundation</h3>
@@ -484,18 +532,27 @@ export function renderAbout(container) {
               <li>P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)</li>
               <li>Crawler with rate limiting, robots.txt, headless browser, live feed</li>
               <li>Indexer with 10+ quality signals, E-E-A-T, spam, PageRank</li>
-              <li>BM25 search with boolean operators, search dorks (intitle:, inurl:, filetype:, date range, has:https), 15 language stemmers, synonyms, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
+              <li>BM25 search with boolean operators, search dorks, 15 language stemmers, synonyms, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
               <li>Admin dashboard with 5 themes, wizard, network graph</li>
               <li>Docker + Compose support</li>
             </ul>
           </div>
-          <div class="about-roadmap-phase about-roadmap-next">
-            <h3><span class="badge badge-blue">next</span> Phase 2 — Quality & Scale</h3>
+          <div class="about-roadmap-phase about-roadmap-done">
+            <h3><span class="badge badge-green">complete</span> Phase 2 — Quality & Scale</h3>
             <ul>
-              <li>Horizontal index sharding with hash ring rebalancing</li>
-              <li>PDF & document indexing, structured data extraction</li>
-              <li>Peer reputation & content verification</li>
-              <li>Image search (alt text, caption, surrounding context)</li>
+              <li>Spam reporting, peer trust scoring, auto-quarantine, domain flagging</li>
+              <li>16-topic onboarding wizard (Knowledge, Lifestyle, Creative, Technology)</li>
+              <li>CLI search tool, backup & restore, production builds</li>
+              <li>Search result caching, multi-language search, CLI tools</li>
+            </ul>
+          </div>
+          <div class="about-roadmap-phase about-roadmap-next">
+            <h3><span class="badge badge-blue">next</span> Phase 2.5 — Trust & Safety</h3>
+            <ul>
+              <li>Sybil resistance and consensus-based domain blocklists</li>
+              <li>Reputation-weighted search ranking</li>
+              <li>Trust dashboard UI, admin allowlist/denylist</li>
+              <li>Horizontal sharding, PDF/doc indexing, image search</li>
             </ul>
           </div>
           <div class="about-roadmap-phase about-roadmap-dark">
@@ -519,7 +576,7 @@ export function renderAbout(container) {
           <div class="about-roadmap-phase about-roadmap-next">
             <h3><span class="badge badge-blue">planned</span> Phase 5 — Ecosystem</h3>
             <ul>
-              <li>CLI search tool, browser extension, mobile client</li>
+              <li>Browser extension, mobile client</li>
               <li>Light nodes (~50 MB RAM, relay-only)</li>
               <li>Plugin system, multi-platform releases</li>
               <li>Public bootstrap network, community governance</li>
@@ -538,10 +595,11 @@ export function renderAbout(container) {
               <span class="about-terminal-dot" style="background:var(--red)"></span>
               <span class="about-terminal-dot" style="background:var(--amber)"></span>
               <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Docker (recommended)</span>
+              <span class="about-terminal-title">Quick Start</span>
             </div>
-            <pre class="about-terminal-body"><code># Single node with seeds
-docker compose up -d node1
+            <pre class="about-terminal-body"><code>git clone https://github.com/gorlitzer/doogle-enhanced.git
+cd doogle-enhanced
+make start
 
 # Open http://localhost:8080</code></pre>
           </div>
@@ -550,25 +608,24 @@ docker compose up -d node1
               <span class="about-terminal-dot" style="background:var(--red)"></span>
               <span class="about-terminal-dot" style="background:var(--amber)"></span>
               <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Cluster</span>
+              <span class="about-terminal-title">Docker</span>
             </div>
-            <pre class="about-terminal-body"><code># Full 3-node cluster
-docker compose up -d
+            <pre class="about-terminal-body"><code># Single node
+docker compose up -d node1
 
-# Ports: 8080, 8081, 8082
-# Auto-connected via mDNS</code></pre>
+# Full 3-node cluster
+docker compose up -d</code></pre>
           </div>
           <div class="about-terminal">
             <div class="about-terminal-header">
               <span class="about-terminal-dot" style="background:var(--red)"></span>
               <span class="about-terminal-dot" style="background:var(--amber)"></span>
               <span class="about-terminal-dot" style="background:var(--green)"></span>
-              <span class="about-terminal-title">Build from Source</span>
+              <span class="about-terminal-title">Second Node</span>
             </div>
-            <pre class="about-terminal-body"><code>git clone https://github.com/gorlitzer/doogle-enhanced.git
-cd doogle-enhanced
-make build
-./bin/doogle --seed "https://example.com"</code></pre>
+            <pre class="about-terminal-body"><code>./bin/doogle --port 4002 --api-port 8081 \\
+  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/&lt;PEER_ID&gt; \\
+  --data-dir ./data/node2</code></pre>
           </div>
         </div>
       </section>

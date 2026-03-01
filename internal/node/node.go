@@ -49,6 +49,10 @@ type Node struct {
 	batchIndexer  *index.BatchIndexer
 	incremental   *indexer.IncrementalIndexer
 
+	// Trust & safety
+	trustStore   *store.TrustStore
+	trustManager *TrustManager
+
 	startedAt time.Time
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -124,6 +128,10 @@ func (n *Node) init() error {
 		return fmt.Errorf("generation store: %w", err)
 	}
 	n.genStore = genStore
+
+	// 5b. Trust store and manager
+	n.trustStore = store.NewTrustStore(bs)
+	n.trustManager = NewTrustManager(n.trustStore, peerID.String())
 
 	// 6. Bleve index
 	blevePath := filepath.Join(dataDir, n.cfg.Index.BleveDir)
@@ -214,6 +222,8 @@ func (n *Node) init() error {
 		IndexerStats: n.IndexerStats,
 		PeersInfo:    n.PeersInfo,
 		IndexStore:   bleveIdx,
+		ReportURL:    n.ReportURL,
+		TrustSummary: n.trustManager.Summary,
 	})
 
 	return nil
@@ -238,6 +248,7 @@ func (n *Node) Run() error {
 	go n.shardCatalogLoop()
 	go n.shardCatalogPublisher()
 	go n.antiEntropyLoop()
+	go n.spamReportLoop()
 
 	// Add seed URLs
 	for _, seed := range n.cfg.SeedURLs {
@@ -453,10 +464,22 @@ func (n *Node) gossipLoop() {
 			continue
 		}
 
+		// Skip announcements from quarantined peers
+		if n.trustManager.IsQuarantined(ann.PeerID) {
+			continue
+		}
+
 		for _, u := range ann.URLs {
+			domain := urlutil.ExtractDomain(u)
+
+			// Skip URLs from flagged domains
+			if n.trustManager.IsDomainFlagged(domain) {
+				continue
+			}
+
 			task := &models.CrawlTask{
 				URL:       u,
-				Domain:    urlutil.ExtractDomain(u),
+				Domain:    domain,
 				Depth:     ann.Depth,
 				Priority:  ann.Depth + 1,
 				SourceURL: ann.SourceURL,
@@ -535,6 +558,11 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 func (n *Node) handleReplicateRequest(req *p2p.ReplicateRequest) (*p2p.ReplicateResponse, error) {
 	accepted := 0
 	for _, doc := range req.Documents {
+		// Skip documents from flagged domains
+		if n.trustManager.IsDomainFlagged(doc.Domain) {
+			continue
+		}
+
 		if err := n.indexer.Index(doc); err != nil {
 			log.Printf("replicate: index error for %s: %v", doc.URL, err)
 			continue
@@ -545,6 +573,63 @@ func (n *Node) handleReplicateRequest(req *p2p.ReplicateRequest) (*p2p.Replicate
 		Status:   "ok",
 		Accepted: accepted,
 	}, nil
+}
+
+// ReportURL handles a local spam report, stores it, and broadcasts to peers.
+func (n *Node) ReportURL(rawURL, reason, detail string) error {
+	domain := urlutil.ExtractDomain(rawURL)
+	reportID := store.ReportID(n.peerID.String(), rawURL)
+
+	report := &models.SpamReport{
+		ID:         reportID,
+		URL:        rawURL,
+		Domain:     domain,
+		ReporterID: n.peerID.String(),
+		Reason:     reason,
+		Detail:     detail,
+		Timestamp:  time.Now(),
+	}
+
+	isNew, err := n.trustManager.HandleReport(report)
+	if err != nil {
+		return err
+	}
+	if !isNew {
+		return nil // duplicate, don't broadcast
+	}
+
+	// Broadcast to peers
+	if err := n.gossip.PublishSpamReport(n.ctx, report); err != nil {
+		log.Printf("node: spam report publish error: %v", err)
+	}
+
+	return nil
+}
+
+// spamReportLoop listens for incoming spam reports from peers.
+func (n *Node) spamReportLoop() {
+	for {
+		report, err := n.gossip.SubscribeSpamReport(n.ctx)
+		if err != nil {
+			if n.ctx.Err() != nil {
+				return
+			}
+			continue
+		}
+		if report == nil {
+			continue
+		}
+
+		// Don't accept reports from quarantined peers
+		if n.trustManager.IsQuarantined(report.ReporterID) {
+			log.Printf("trust: ignoring report from quarantined peer %s", report.ReporterID[:12])
+			continue
+		}
+
+		if _, err := n.trustManager.HandleReport(report); err != nil {
+			log.Printf("trust: error handling peer report: %v", err)
+		}
+	}
 }
 
 func multiaddrsToStrings(h host.Host) []string {
