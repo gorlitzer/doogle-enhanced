@@ -7,13 +7,13 @@ services:
     container_name: doogle-node1
     command:
       - doogle
-      - --port=4001
-      - --api-port=8080
+      - --port=7001
+      - --api-port=7002
       - --bind=0.0.0.0
       - --data-dir=/data
     ports:
-      - "4001:4001"   # P2P
-      - "8080:8080"   # API + Web UI
+      - "7001:7001"   # P2P
+      - "7002:7002"   # API + Web UI
     volumes:
       - node1-data:/data
     restart: unless-stopped
@@ -26,14 +26,14 @@ services:
       - node1
     command:
       - doogle
-      - --port=4001
-      - --api-port=8080
+      - --port=7001
+      - --api-port=7002
       - --bind=0.0.0.0
       - --data-dir=/data
-      - --bootstrap=/ip4/node1/tcp/4001
+      - --bootstrap=/ip4/node1/tcp/7001
     ports:
-      - "4002:4001"   # P2P (mapped to host 4002)
-      - "8081:8080"   # API + Web UI
+      - "7003:7001"   # P2P (mapped to host 7003)
+      - "7004:7002"   # API + Web UI
     volumes:
       - node2-data:/data
     restart: unless-stopped
@@ -46,14 +46,14 @@ services:
       - node1
     command:
       - doogle
-      - --port=4001
-      - --api-port=8080
+      - --port=7001
+      - --api-port=7002
       - --bind=0.0.0.0
       - --data-dir=/data
-      - --bootstrap=/ip4/node1/tcp/4001
+      - --bootstrap=/ip4/node1/tcp/7001
     ports:
-      - "4003:4001"
-      - "8082:8080"
+      - "7005:7001"
+      - "7006:7002"
     volumes:
       - node3-data:/data
     restart: unless-stopped

@@ -70,7 +70,7 @@ func main() {
 
 func runSearch(args []string) {
 	fs := flag.NewFlagSet("search", flag.ExitOnError)
-	apiURL := fs.String("api", "http://localhost:8080", "API base URL")
+	apiURL := fs.String("api", "http://localhost:7002", "API base URL")
 	jsonOut := fs.Bool("json", false, "Output raw JSON")
 	page := fs.Int("page", 0, "Result page (0-indexed)")
 	size := fs.Int("size", 10, "Results per page")

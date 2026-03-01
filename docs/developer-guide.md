@@ -35,8 +35,8 @@ make test
 make lint
 
 # Run two nodes locally (two terminals)
-make run                                           # Terminal 1 — node on :4001/:8080
-make run ARGS='--port 4002 --api-port 8081 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/4001'   # Terminal 2
+make run                                           # Terminal 1 — node on :7001/:7002
+make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/7001'   # Terminal 2
 ```
 
 ---
@@ -403,14 +403,14 @@ func TestThreeNodeSearch(t *testing.T) {
 
 ```bash
 # Terminal 1 — bootstrap node
-./bin/doogle --port 4001 --api-port 8080 --seed "https://example.com" --data-dir ./data/node1
+./bin/doogle --port 7001 --api-port 7002 --seed "https://example.com" --data-dir ./data/node1
 
 # Terminal 2 — second node
-./bin/doogle --port 4002 --api-port 8081 --data-dir ./data/node2 \
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID>
+./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2 \
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID>
 
 # Wait 10-15 seconds, then:
-curl "http://localhost:8081/api/search?q=example"
+curl "http://localhost:7004/api/search?q=example"
 # Should return results crawled by node 1
 ```
 
@@ -476,7 +476,7 @@ GOOS=windows GOARCH=amd64 go build -o bin/doogle.exe ./cmd/doogle
 
 ```go
 import _ "net/http/pprof"
-// pprof is available at http://localhost:8080/debug/pprof/
+// pprof is available at http://localhost:7002/debug/pprof/
 ```
 
 ### Reset local data

@@ -74,7 +74,7 @@ make setup                      # checks/installs Go, Docker, all prereqs
 make run                        # build + launch node
 ```
 
-Open [http://localhost:8080](http://localhost:8080) — the setup wizard guides you through seeding and configuration.
+Open [http://localhost:7002](http://localhost:7002) — the setup wizard guides you through seeding and configuration.
 
 **No `make`?** Run directly with Go:
 ```bash
@@ -84,8 +84,8 @@ go build -o bin/doogle ./cmd/doogle && ./bin/doogle
 ### 3. Connect a Second Node
 
 ```bash
-./bin/doogle --port 4002 --api-port 8081 \
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID> \
+./bin/doogle --port 7003 --api-port 7004 \
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID> \
   --data-dir ./data/node2
 ```
 
@@ -101,7 +101,7 @@ docker compose up -d node1
 docker compose up -d
 ```
 
-Three nodes on ports 8080, 8081, 8082 — auto-connected via mDNS.
+Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 
 ### Build from Source (manual)
 
@@ -253,8 +253,8 @@ Usage: doogle [flags]
 Flags:
   --config FILE        Path to YAML config file
   --name STRING        Human-readable node name (e.g. "Tokyo-Relay-01")
-  --port N             libp2p listen port (default: 4001)
-  --api-port N         HTTP API port (default: 8080)
+  --port N             libp2p listen port (default: 7001)
+  --api-port N         HTTP API port (default: 7002)
   --data-dir PATH      Data directory (default: ./data/doogle)
   --bootstrap ADDR     Bootstrap peer multiaddr (repeatable)
   --seed URL           Seed URL(s) to crawl (comma-separated)
@@ -269,7 +269,7 @@ Flags:
 Usage: doogle search [flags] <query>
 
 Flags:
-  --api URL            API base URL (default: http://localhost:8080)
+  --api URL            API base URL (default: http://localhost:7002)
   --json               Output raw JSON instead of formatted text
   --page N             Result page, 0-indexed (default: 0)
   --size N             Results per page (default: 10)
@@ -293,8 +293,8 @@ Dump and restore are **standalone** — they operate on raw data directories and
 
 ```bash
 make setup                      # install Go, Docker checks, all prerequisites
-make run                        # build + launch node (API on :8080)
-make run ARGS='--port 4002'     # pass extra flags
+make run                        # build + launch node (API on :7002)
+make run ARGS='--port 7003'     # pass extra flags
 make test                       # run all tests
 make dev                        # Docker backend + hot-reload UI on :3000
 make docker                     # build + start 3-node cluster
@@ -312,7 +312,7 @@ make clean                      # remove build artifacts
 ./bin/doogle --name "My Node" --port 5001 --api-port 9090
 
 # Join an existing network
-./bin/doogle --bootstrap /ip4/203.0.113.10/tcp/4001/p2p/12D3KooW...
+./bin/doogle --bootstrap /ip4/203.0.113.10/tcp/7001/p2p/12D3KooW...
 
 # Multiple seeds
 ./bin/doogle --seed "https://example.com,https://golang.org,https://wikipedia.org"
@@ -323,7 +323,7 @@ make clean                      # remove build artifacts
 # CLI search (requires a running node)
 ./bin/doogle search "golang tutorial"
 ./bin/doogle search --json "python OR ruby"
-./bin/doogle search --api http://remote:8080 "distributed systems"
+./bin/doogle search --api http://remote:7002 "distributed systems"
 ./bin/doogle search "golang -tutorial"           # exclude "tutorial"
 ./bin/doogle search "python OR ruby"             # OR operator
 ./bin/doogle search '"machine learning" basics'  # quoted phrase
@@ -405,11 +405,11 @@ Full YAML configuration with defaults:
 node_name: ""                  # Human-readable name (or use --name flag)
 
 p2p:
-  port: 4001
+  port: 7001
   mdns: true
 
 api:
-  port: 8080
+  port: 7002
   bind: "0.0.0.0"
 
 crawler:
@@ -449,7 +449,7 @@ storage:
 | [API Reference](docs/api-reference.md) | HTTP endpoints, request/response formats |
 | [Developer Guide](docs/developer-guide.md) | Code structure, building, testing |
 
-The admin dashboard at `http://localhost:8080` also has built-in docs covering configuration, troubleshooting, VPN/NAT behavior, and shutdown/recovery semantics.
+The admin dashboard at `http://localhost:7002` also has built-in docs covering configuration, troubleshooting, VPN/NAT behavior, and shutdown/recovery semantics.
 
 ---
 

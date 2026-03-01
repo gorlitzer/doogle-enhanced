@@ -1,8 +1,8 @@
 # API Reference
 
-Doogle v2 exposes a JSON HTTP API for search, status monitoring, and crawl management. All endpoints are served on the configured `--api-port` (default `8080`).
+Doogle v2 exposes a JSON HTTP API for search, status monitoring, and crawl management. All endpoints are served on the configured `--api-port` (default `7002`).
 
-Base URL: `http://localhost:8080`
+Base URL: `http://localhost:7002`
 
 ---
 
@@ -32,7 +32,7 @@ Search across the local index and connected peers.
 ### Example Request
 
 ```bash
-curl "http://localhost:8080/api/search?q=distributed+systems&page=1&size=5"
+curl "http://localhost:7002/api/search?q=distributed+systems&page=1&size=5"
 ```
 
 ### Response — `200 OK`
@@ -129,7 +129,7 @@ Returns the current state of the node.
 ### Example Request
 
 ```bash
-curl http://localhost:8080/api/status
+curl http://localhost:7002/api/status
 ```
 
 ### Response — `200 OK`
@@ -138,9 +138,9 @@ curl http://localhost:8080/api/status
 {
   "peer_id": "12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
   "addrs": [
-    "/ip4/192.168.1.100/tcp/4001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
-    "/ip4/192.168.1.100/udp/4001/quic-v1/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
-    "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"
+    "/ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
+    "/ip4/192.168.1.100/udp/7001/quic-v1/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
+    "/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"
   ],
   "connected_peers": 5,
   "peer_list": [
@@ -193,7 +193,7 @@ Submit a URL for crawling. The URL is added to the crawl queue and processed by 
 ### Example Request
 
 ```bash
-curl -X POST http://localhost:8080/api/crawl \
+curl -X POST http://localhost:7002/api/crawl \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com"}'
 ```
@@ -221,7 +221,7 @@ The URL is queued and will be crawled asynchronously. Discovered links from this
 
 ## `GET /`
 
-Serves the embedded web search interface. Open `http://localhost:8080` in a browser.
+Serves the embedded web search interface. Open `http://localhost:7002` in a browser.
 
 Features:
 - Search box with keyboard support (Enter to search)
@@ -280,14 +280,14 @@ The **crawler** has per-domain rate limiting (default: 10 requests/minute/domain
 
 ```bash
 # Get top 3 results for "golang"
-curl -s "http://localhost:8080/api/search?q=golang&size=3" | jq '.results[] | {title, url, score}'
+curl -s "http://localhost:7002/api/search?q=golang&size=3" | jq '.results[] | {title, url, score}'
 ```
 
 ### Monitor node health
 
 ```bash
 # Watch status every 5 seconds
-watch -n 5 'curl -s http://localhost:8080/api/status | jq "{peers: .connected_peers, docs: .indexed_docs, queue: .urls_in_queue}"'
+watch -n 5 'curl -s http://localhost:7002/api/status | jq "{peers: .connected_peers, docs: .indexed_docs, queue: .urls_in_queue}"'
 ```
 
 ### Bulk seed URLs
@@ -295,7 +295,7 @@ watch -n 5 'curl -s http://localhost:8080/api/status | jq "{peers: .connected_pe
 ```bash
 # Seed multiple URLs
 for url in "https://example.com" "https://golang.org" "https://wikipedia.org"; do
-  curl -s -X POST http://localhost:8080/api/crawl \
+  curl -s -X POST http://localhost:7002/api/crawl \
     -H "Content-Type: application/json" \
     -d "{\"url\": \"$url\"}"
   echo
@@ -308,12 +308,12 @@ done
 import requests
 
 # Search
-resp = requests.get("http://localhost:8080/api/search", params={"q": "privacy", "size": 5})
+resp = requests.get("http://localhost:7002/api/search", params={"q": "privacy", "size": 5})
 results = resp.json()
 
 for r in results["results"]:
     print(f"{r['title']} — {r['url']} (score: {r['score']:.2f})")
 
 # Submit URL for crawling
-requests.post("http://localhost:8080/api/crawl", json={"url": "https://example.com"})
+requests.post("http://localhost:7002/api/crawl", json={"url": "https://example.com"})
 ```

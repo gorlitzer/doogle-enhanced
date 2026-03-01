@@ -9,7 +9,7 @@
  *
  * Usage:
  *   node dev-server.mjs                                # frontend only (API calls will 502)
- *   node dev-server.mjs --api http://localhost:8080     # proxy API to running backend
+ *   node dev-server.mjs --api http://localhost:7002     # proxy API to running backend
  *
  * Or via Makefile:
  *   make dev-fe       # frontend only
@@ -25,7 +25,7 @@ const PORT = parseInt(process.env.PORT || '3000');
 const STATIC_DIR = path.resolve(import.meta.dirname, 'web', 'static');
 const API_TARGET = process.argv.find(a => a.startsWith('--api='))?.split('=')[1]
   || process.argv[process.argv.indexOf('--api') + 1]
-  || 'http://localhost:8080';
+  || 'http://localhost:7002';
 
 // SSE clients for live reload
 const clients = new Set();

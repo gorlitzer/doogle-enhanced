@@ -5,7 +5,7 @@ node_name: ""
 
 # P2P networking
 p2p:
-  port: 4001
+  port: 7001
   # Bootstrap peers (multiaddr format)
   bootstrap_peers: []
   # Enable mDNS for local network discovery
@@ -15,7 +15,7 @@ p2p:
 
 # HTTP API
 api:
-  port: 8080
+  port: 7002
   # Bind address (0.0.0.0 for all interfaces)
   bind: "127.0.0.1"
 

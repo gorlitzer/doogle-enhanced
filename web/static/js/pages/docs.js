@@ -104,7 +104,7 @@ function renderQuickstart(el) {
       <div class="docs-steps">
         ${stepCard(1, 'Run the setup wizard', `
           <p>On first launch, the <a href="#/wizard">onboarding wizard</a> auto-triggers and guides you through picking seed categories (Tech, Science, News, etc.), previewing settings, and launching the crawler. Alternatively, add seeds manually via the <a href="#/admin/crawler">Crawler dashboard</a> or API:</p>
-          ${codeBlock(`curl -X POST http://localhost:8080/api/crawl/batch \\
+          ${codeBlock(`curl -X POST http://localhost:7002/api/crawl/batch \\
   -H 'Content-Type: application/json' \\
   -d '{"urls":["https://go.dev","https://en.wikipedia.org"]}'`, 'bash')}
         `)}
@@ -113,12 +113,12 @@ function renderQuickstart(el) {
         `)}
         ${stepCard(3, 'Search', `
           <p>Once pages are crawled and indexed, go to the <a href="#/search">Search page</a> or use the API:</p>
-          ${codeBlock(`curl 'http://localhost:8080/api/search?q=example&page=1&size=10'`, 'bash')}
+          ${codeBlock(`curl 'http://localhost:7002/api/search?q=example&page=1&size=10'`, 'bash')}
         `)}
         ${stepCard(4, 'Connect peers', `
           <p>Run more nodes and they discover each other automatically via mDNS (same LAN) or bootstrap explicitly:</p>
-          ${codeBlock(`./bin/doogle --port 4002 --api-port 8081 \\
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID>`, 'bash')}
+          ${codeBlock(`./bin/doogle --port 7003 --api-port 7004 \\
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID>`, 'bash')}
         `)}
       </div>
     </div>
@@ -151,7 +151,7 @@ function renderQuickstart(el) {
         <div class="docs-collapsible">
           <button class="docs-collapse-trigger">Port already in use</button>
           <div class="docs-collapse-body">
-            <p>Change the ports with <code>--port</code> and <code>--api-port</code> flags. Default: 4001 (libp2p) and 8080 (HTTP).</p>
+            <p>Change the ports with <code>--port</code> and <code>--api-port</code> flags. Default: 7001 (libp2p) and 7002 (HTTP).</p>
           </div>
         </div>
         <div class="docs-collapsible">
@@ -227,22 +227,22 @@ function renderQuickstart(el) {
         <div class="docs-steps">
           ${stepCard(1, 'Start a single node', codeBlock(`docker compose up -d node1`, 'bash'))}
           ${stepCard(2, 'Open the dashboard', `
-            <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking seeds and launching the crawler.</p>
+            <p>Open <a href="http://localhost:7002" target="_blank">http://localhost:7002</a> — the setup wizard will guide you through picking seeds and launching the crawler.</p>
           `)}
           ${stepCard(3, 'Optional: full 3-node cluster', `
             ${codeBlock('docker compose up -d', 'bash')}
             <div class="docs-port-grid" style="margin-top:12px">
               <div class="docs-port-card">
                 <span class="docs-port-label">Node 1</span>
-                <code>http://localhost:8080</code>
+                <code>http://localhost:7002</code>
               </div>
               <div class="docs-port-card">
                 <span class="docs-port-label">Node 2</span>
-                <code>http://localhost:8081</code>
+                <code>http://localhost:7004</code>
               </div>
               <div class="docs-port-card">
                 <span class="docs-port-label">Node 3</span>
-                <code>http://localhost:8082</code>
+                <code>http://localhost:7006</code>
               </div>
             </div>
             <p style="margin-top:8px;font-size:0.85em;color:var(--text-muted)">Three nodes auto-connected via mDNS.</p>
@@ -260,10 +260,10 @@ make setup`, 'bash')}
           `)}
           ${stepCard(2, 'Start the node', codeBlock(`make run`, 'bash'))}
           ${stepCard(3, 'Open the dashboard', `
-            <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
+            <p>Open <a href="http://localhost:7002" target="_blank">http://localhost:7002</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
           `)}
-          ${stepCard(4, 'Connect a second node (another terminal)', codeBlock(`./bin/doogle --port 4002 --api-port 8081 \\
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/<PEER_ID> \\
+          ${stepCard(4, 'Connect a second node (another terminal)', codeBlock(`./bin/doogle --port 7003 --api-port 7004 \\
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID> \\
   --data-dir ./data/node2`, 'bash'))}
         </div>
         ${infoCard('zap', 'Tip', 'The peer ID is printed to the console on startup. Copy it from Node 1\'s log output.', 'var(--amber)')}
@@ -638,7 +638,7 @@ function renderAPI(el) {
             </div>
           </div>
           <h4>Example</h4>
-          ${codeBlock(`curl 'http://localhost:8080/api/search?q=golang+tutorial&page=1&size=10'`, 'bash')}
+          ${codeBlock(`curl 'http://localhost:7002/api/search?q=golang+tutorial&page=1&size=10'`, 'bash')}
           <h4>Response</h4>
           ${codeBlock(`{
   "query": "golang tutorial",
@@ -664,11 +664,11 @@ function renderAPI(el) {
 }`, 'json')}
         `)}
         ${endpoint('GET', '/api/status', 'Node health and statistics', `
-          ${codeBlock(`curl http://localhost:8080/api/status`, 'bash')}
+          ${codeBlock(`curl http://localhost:7002/api/status`, 'bash')}
           <h4>Response</h4>
           ${codeBlock(`{
   "peer_id": "12D3KooW...",
-  "addrs": ["/ip4/127.0.0.1/tcp/4001/p2p/12D3KooW..."],
+  "addrs": ["/ip4/127.0.0.1/tcp/7001/p2p/12D3KooW..."],
   "connected_peers": 3,
   "peer_list": ["12D3KooW..."],
   "indexed_docs": 1542,
@@ -679,7 +679,7 @@ function renderAPI(el) {
 }`, 'json')}
         `)}
         ${endpoint('POST', '/api/crawl', 'Submit a seed URL for crawling', `
-          ${codeBlock(`curl -X POST http://localhost:8080/api/crawl \\
+          ${codeBlock(`curl -X POST http://localhost:7002/api/crawl \\
   -H 'Content-Type: application/json' \\
   -d '{"url":"https://example.com"}'`, 'bash')}
           <h4>Response</h4>
@@ -693,7 +693,7 @@ function renderAPI(el) {
             </div>
           </div>
           <h4>Example</h4>
-          ${codeBlock(`curl -X POST http://localhost:8080/api/crawl/batch \\
+          ${codeBlock(`curl -X POST http://localhost:7002/api/crawl/batch \\
   -H 'Content-Type: application/json' \\
   -d '{"urls":["https://go.dev","https://arxiv.org","https://en.wikipedia.org"]}'`, 'bash')}
           <h4>Response</h4>
@@ -727,7 +727,7 @@ function renderAPI(el) {
           ${codeBlock(`[
   {
     "peer_id": "12D3KooWAbCdEf...",
-    "addrs": ["/ip4/192.168.1.5/tcp/4001"]
+    "addrs": ["/ip4/192.168.1.5/tcp/7001"]
   }
 ]`, 'json')}
         `)}
@@ -1064,10 +1064,10 @@ function demoParseQuery(raw) {
 
 const configDetails = [
   { title: '--name', html: '<p>Human-readable name for this node. Shown in the navbar, admin dashboard, and wizard. Persists via config (not DB).</p><p>YAML: <code>node_name: "My Node"</code></p>' },
-  { title: '--port', html: '<p>libp2p listen port for P2P communication. Uses TCP and UDP (QUIC-v1). Default: 4001.</p><p>Environment variable: <code>DOOGLE_PORT</code></p><p>YAML: <code>p2p.port: 4001</code></p>' },
-  { title: '--api-port', html: '<p>HTTP API and web UI port. Serves the REST API and embedded SPA. Default: 8080.</p><p>Environment variable: <code>DOOGLE_API_PORT</code></p><p>YAML: <code>api.port: 8080</code></p>' },
+  { title: '--port', html: '<p>libp2p listen port for P2P communication. Uses TCP and UDP (QUIC-v1). Default: 7001.</p><p>Environment variable: <code>DOOGLE_PORT</code></p><p>YAML: <code>p2p.port: 7001</code></p>' },
+  { title: '--api-port', html: '<p>HTTP API and web UI port. Serves the REST API and embedded SPA. Default: 7002.</p><p>Environment variable: <code>DOOGLE_API_PORT</code></p><p>YAML: <code>api.port: 7002</code></p>' },
   { title: '--data-dir', html: '<p>Directory for Bleve index, BadgerDB databases, identity keys, and all persistent state. Default: ./data</p><p>Environment variable: <code>DOOGLE_DATA_DIR</code></p><p>YAML: <code>storage.data_dir: "./data"</code></p>' },
-  { title: '--bootstrap', html: '<p>Bootstrap peer multiaddr for joining an existing network. Format: <code>/ip4/&lt;IP&gt;/tcp/4001/p2p/&lt;PEER_ID&gt;</code></p><p>If not provided, relies on mDNS for local peer discovery.</p><p>YAML: <code>p2p.bootstrap_peers: ["/ip4/.../tcp/4001/p2p/..."]</code></p>' },
+  { title: '--bootstrap', html: '<p>Bootstrap peer multiaddr for joining an existing network. Format: <code>/ip4/&lt;IP&gt;/tcp/7001/p2p/&lt;PEER_ID&gt;</code></p><p>If not provided, relies on mDNS for local peer discovery.</p><p>YAML: <code>p2p.bootstrap_peers: ["/ip4/.../tcp/7001/p2p/..."]</code></p>' },
   { title: '--seed', html: '<p>Seed URL(s) to start crawling on launch. Comma-separated for multiple URLs.</p><p>YAML: <code>seed_urls: ["https://..."]</code></p>' },
   { title: '--workers', html: '<p>Number of concurrent crawler workers. More workers = faster crawling but higher CPU/memory. Default: 4.</p><p>YAML: <code>crawler.workers: 4</code></p>' },
   { title: '--max-depth', html: '<p>Maximum link depth the crawler will follow from a seed URL. Higher values discover more pages but take longer. Default: 3.</p><p>YAML: <code>crawler.max_depth: 3</code></p>' },
@@ -1098,8 +1098,8 @@ function renderConfig(el) {
             <tr><td>CPU</td><td>1 core</td><td>2-4 cores</td><td>More cores = faster crawling</td></tr>
             <tr><td>RAM</td><td>256 MB</td><td>512 MB - 1 GB</td><td>Scales with index size + workers</td></tr>
             <tr><td>Disk</td><td>30 MB (empty)</td><td>~50 MB per 1K pages</td><td>BadgerDB + Bleve index</td></tr>
-            <tr><td>P2P Port</td><td colspan="2">4001 (TCP + UDP)</td><td>QUIC-v1 on UDP, configurable</td></tr>
-            <tr><td>API Port</td><td colspan="2">8080 (TCP)</td><td>Web UI + REST API, configurable</td></tr>
+            <tr><td>P2P Port</td><td colspan="2">7001 (TCP + UDP)</td><td>QUIC-v1 on UDP, configurable</td></tr>
+            <tr><td>API Port</td><td colspan="2">7002 (TCP)</td><td>Web UI + REST API, configurable</td></tr>
             <tr><td>Ext. deps</td><td colspan="2">None</td><td>Single binary, zero runtime deps</td></tr>
             <tr><td>Chromium</td><td colspan="2">Optional</td><td>Only if <code>--enable-headless</code> is set</td></tr>
           </tbody>
@@ -1117,8 +1117,8 @@ function renderConfig(el) {
       <h3>CLI Flags</h3>
       <div class="docs-config-grid">
         ${configCard('--name', '(none)', 'Human-readable node name shown in UI and to peers.', 'monitor', 0)}
-        ${configCard('--port', '4001', 'libp2p listen port for P2P communication.', 'network', 1)}
-        ${configCard('--api-port', '8080', 'HTTP API and web UI port.', 'monitor', 2)}
+        ${configCard('--port', '7001', 'libp2p listen port for P2P communication.', 'network', 1)}
+        ${configCard('--api-port', '7002', 'HTTP API and web UI port.', 'monitor', 2)}
         ${configCard('--data-dir', './data', 'Directory for Bleve index, BadgerDB, and identity keys.', 'database', 3)}
         ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network', 4)}
         ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe', 5)}
@@ -1142,12 +1142,12 @@ function renderConfig(el) {
       ${codeBlock(`node_name: ""              # human-readable name (shown in UI)
 
 p2p:
-  port: 4001
+  port: 7001
   mdns: true
   bootstrap_peers: []
 
 api:
-  port: 8080
+  port: 7002
   bind: "0.0.0.0"
 
 crawler:
@@ -1225,7 +1225,7 @@ doogle restore [--data-dir PATH] [--force] <archive.tar.gz>`, 'bash')}
       <div class="docs-env-grid">
         ${infoCard('database', 'Data Persistence', 'All data is stored in --data-dir. Back up this directory to preserve your index, crawl history, and identity key.', 'var(--blue)')}
         ${infoCard('shield', 'Identity', 'A libp2p identity key is auto-generated on first run and stored in data-dir/identity.key. This key determines your Peer ID.', 'var(--green)')}
-        ${infoCard('network', 'Firewall', 'Ensure the libp2p port (default 4001) is reachable if you want peers from outside your LAN to connect.', 'var(--amber)')}
+        ${infoCard('network', 'Firewall', 'Ensure the libp2p port (default 7001) is reachable if you want peers from outside your LAN to connect.', 'var(--amber)')}
         ${infoCard('shield', 'VPN / Proxy', 'Crawling and local search work fine behind a VPN. However, mDNS discovery breaks (broadcasts stay on the physical LAN), NAT port-mapping and hole-punching are bypassed, and your node becomes unreachable for inbound P2P connections. You can still connect outbound to bootstrap peers. See Troubleshooting for details.', 'var(--red)')}
         ${infoCard('monitor', 'Headless Chrome', 'If enable_headless is true, Chromium will be downloaded automatically on first use via go-rod. Requires ~300MB disk space.', 'var(--purple)')}
         ${infoCard('zap', 'Graceful Shutdown (Ctrl+C)', 'On SIGINT/SIGTERM the node flushes the batch indexer, closes the Bleve index and BadgerDB cleanly. Crawler workers finish their current page. Zero data loss — safe to stop and restart anytime.', 'var(--green)')}

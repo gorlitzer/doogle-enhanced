@@ -651,8 +651,8 @@ function renderGetStarted(el) {
           <div class="about-req-icon" style="color:var(--blue)">${icon('radio', 24)}</div>
           <h3>Network</h3>
           <ul class="about-req-list">
-            <li><strong>Port 4001</strong> — P2P (TCP + UDP/QUIC)</li>
-            <li><strong>Port 8080</strong> — HTTP API &amp; Web UI</li>
+            <li><strong>Port 7001</strong> — P2P (TCP + UDP/QUIC)</li>
+            <li><strong>Port 7002</strong> — HTTP API &amp; Web UI</li>
             <li>Auto NAT traversal (UPnP / hole punching)</li>
             <li>mDNS for local peer discovery</li>
           </ul>
@@ -695,7 +695,7 @@ function renderGetStarted(el) {
 cd doogle-enhanced
 make run
 
-# Open http://localhost:8080</code></pre>
+# Open http://localhost:7002</code></pre>
         </div>
         <div class="about-terminal">
           <div class="about-terminal-header">
@@ -717,8 +717,8 @@ docker compose up -d</code></pre>
             <span class="about-terminal-dot" style="background:var(--green)"></span>
             <span class="about-terminal-title">Second Node</span>
           </div>
-          <pre class="about-terminal-body"><code>./bin/doogle --port 4002 --api-port 8081 \\
-  --bootstrap /ip4/127.0.0.1/tcp/4001/p2p/&lt;PEER_ID&gt; \\
+          <pre class="about-terminal-body"><code>./bin/doogle --port 7003 --api-port 7004 \\
+  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/&lt;PEER_ID&gt; \\
   --data-dir ./data/node2</code></pre>
         </div>
       </div>
