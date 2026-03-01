@@ -1,5 +1,6 @@
 // Doogle v2 — SPA Router & App Shell
 import { api } from './api.js';
+import { initTheme, createThemePicker } from './theme-switcher.js';
 import { renderSearch } from './pages/search.js';
 import { renderNode } from './pages/node.js';
 import { renderCrawler } from './pages/crawler.js';
@@ -83,6 +84,8 @@ function startStatusPolling() {
 // Boot
 window.addEventListener('hashchange', render);
 window.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  createThemePicker();
   render();
   startStatusPolling();
 });

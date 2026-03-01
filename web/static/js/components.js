@@ -1,5 +1,34 @@
 // Doogle v2 — Shared UI Components
-// Modal, Skeleton loaders, Canvas charts, Force-directed graph
+// Icons, Modal, Skeleton loaders, Canvas charts, Force-directed graph
+
+// ============================================================
+// SVG ICON SYSTEM (24x24, 2px stroke, consistent across app)
+// ============================================================
+export const icons = {
+  globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  cpu: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>`,
+  star: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  shield: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  database: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  radio: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 16.24a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+  monitor: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+  network: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><path d="M12 8v4"/><path d="M6 16l3-4h6l3 4"/></svg>`,
+  megaphone: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 0 1-5.8-1.6"/></svg>`,
+  zap: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  code: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
+  arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+  fileText: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  trendingUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+  alertTriangle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+};
+
+export function icon(name, size = 24, color = 'currentColor') {
+  return `<span class="icon" style="width:${size}px;height:${size}px;color:${color};display:inline-flex;align-items:center;justify-content:center">${icons[name] || ''}</span>`;
+}
 
 // ============================================================
 // MODAL
@@ -443,12 +472,12 @@ export class NetworkGraph {
       ctx.shadowBlur = 0;
 
       // Border
-      ctx.strokeStyle = n === this.hovered ? '#fff' : 'rgba(255,255,255,0.2)';
+      ctx.strokeStyle = n === this.hovered ? getCSS('--canvas-node-border-hover') : getCSS('--canvas-node-border');
       ctx.lineWidth = n === this.hovered ? 2 : 1;
       ctx.stroke();
 
       // Label
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = getCSS('--canvas-text');
       ctx.font = `${n.type === 'self' ? 'bold ' : ''}${n.radius > 14 ? 11 : 9}px system-ui`;
       ctx.textAlign = 'center';
       ctx.fillText(n.label || '', n.x, n.y + n.radius + 14);
@@ -458,11 +487,11 @@ export class NetworkGraph {
     if (this.hovered) {
       const n = this.hovered;
       const text = n.tooltip || n.id;
-      ctx.fillStyle = 'rgba(0,0,0,0.85)';
+      ctx.fillStyle = getCSS('--canvas-tooltip-bg');
       const tw = ctx.measureText(text).width + 16;
       roundRect(ctx, n.x - tw / 2, n.y - n.radius - 32, tw, 24, 4);
       ctx.fill();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = getCSS('--canvas-text-bold');
       ctx.font = '11px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText(text, n.x, n.y - n.radius - 16);
@@ -496,8 +525,18 @@ export function scoreBadge(label, value, thresholds = { good: 0.6, warn: 0.3 }) 
 // ============================================================
 // HELPERS
 // ============================================================
-function getCSS(prop) {
+export function getCSS(prop) {
   return getComputedStyle(document.documentElement).getPropertyValue(prop).trim() || '#888';
+}
+
+export function hexToRgba(hex, alpha = 1) {
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(128,128,128,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -528,4 +567,62 @@ export function timeAgo(dateStr) {
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
   return `${Math.floor(secs / 86400)}d ago`;
+}
+
+// ============================================================
+// SHARED DOC COMPONENTS (used by docs.js and other pages)
+// ============================================================
+
+/** Render a code block with copy button. */
+export function codeBlock(code, lang = '') {
+  const id = 'cb-' + Math.random().toString(36).slice(2, 8);
+  return `
+    <div class="docs-code-block">
+      <div class="docs-code-header">
+        ${lang ? `<span class="docs-code-lang">${lang}</span>` : '<span></span>'}
+        <button class="docs-copy-btn" data-target="${id}" title="Copy to clipboard">
+          ${icon('fileText', 14)} Copy
+        </button>
+      </div>
+      <pre id="${id}"><code>${escapeHtml(code.trim())}</code></pre>
+    </div>
+  `;
+}
+
+/** Render an info card with icon. */
+export function infoCard(iconName, title, desc, color = 'var(--accent)') {
+  return `
+    <div class="docs-info-card">
+      <div class="docs-info-icon" style="color:${color}">${icon(iconName, 22)}</div>
+      <div>
+        <strong>${title}</strong>
+        <p>${desc}</p>
+      </div>
+    </div>
+  `;
+}
+
+/** Bind copy-to-clipboard handlers on .docs-copy-btn elements. */
+export function bindCopyButtons(el) {
+  el.querySelectorAll('.docs-copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (!target) return;
+      const text = target.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.innerHTML = `${icon('shield', 14)} Copied!`;
+        setTimeout(() => { btn.innerHTML = `${icon('fileText', 14)} Copy`; }, 1500);
+      });
+    });
+  });
+}
+
+/** Bind collapsible toggle handlers on .docs-collapse-trigger elements. */
+export function bindCollapsibles(el) {
+  el.querySelectorAll('.docs-collapse-trigger').forEach(trigger => {
+    trigger.addEventListener('click', () => {
+      const target = trigger.closest('.docs-collapsible');
+      target.classList.toggle('open');
+    });
+  });
 }

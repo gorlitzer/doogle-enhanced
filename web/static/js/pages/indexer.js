@@ -1,6 +1,6 @@
 // Doogle v2 — Indexer Dashboard (enhanced with document browser + detail modals)
 import { api } from '../api.js';
-import { showModal, scoreBar, renderBarChart, cardSkeleton, escapeHtml } from '../components.js';
+import { showModal, scoreBar, renderBarChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
 
 let activeTab = 'overview';
 let docOffset = 0;
@@ -515,6 +515,3 @@ function formatBytes(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-function getCSS(prop) {
-  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim() || '#888';
-}

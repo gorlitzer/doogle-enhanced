@@ -1,6 +1,6 @@
 // Doogle v2 — P2P Network with interactive graph visualization
 import { api } from '../api.js';
-import { NetworkGraph, cardSkeleton, escapeHtml } from '../components.js';
+import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba } from '../components.js';
 
 let graph = null;
 
@@ -199,7 +199,7 @@ function buildGraph(status, peerList) {
     edges.push({
       from: status.peer_id,
       to: id,
-      color: 'rgba(16,185,129,0.4)',
+      color: hexToRgba(getCSS('--green'), 0.4),
       width: 2,
     });
   });
@@ -219,7 +219,7 @@ function buildGraph(status, peerList) {
       edges.push({
         from: status.peer_id,
         to: id,
-        color: 'rgba(100,100,120,0.2)',
+        color: hexToRgba(getCSS('--border'), 0.2),
         width: 1,
         dashed: true,
       });
@@ -229,6 +229,3 @@ function buildGraph(status, peerList) {
   graph.setData(nodes, edges);
 }
 
-function getCSS(prop) {
-  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim() || '#888';
-}
