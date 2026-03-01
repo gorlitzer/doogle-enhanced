@@ -482,20 +482,6 @@ function renderHowItWorks(el) {
 function renderFeatures(el) {
   el.innerHTML = `
     <section class="about-section about-reveal">
-      <h2 class="about-section-title">Capabilities</h2>
-      <p class="about-section-desc">Everything packed into a single Go binary. Click any card for details.</p>
-      <div class="about-capabilities-grid">
-        ${capabilities.map((cap, i) => `
-          <div class="about-cap-card" data-cap-idx="${i}" style="cursor:pointer">
-            <div class="about-cap-icon" style="color:var(--accent)">${icon(cap.icon, 28)}</div>
-            <h3>${cap.title}</h3>
-            <p>${cap.desc}</p>
-          </div>
-        `).join('')}
-      </div>
-    </section>
-
-    <section class="about-section about-reveal">
       <h2 class="about-section-title">Architecture</h2>
       <p class="about-section-desc">A single binary. No microservices. No external dependencies at runtime. Hover any node to see data flow.</p>
       <div class="about-arch-canvas-wrap">
@@ -510,6 +496,20 @@ function renderFeatures(el) {
       </div>
       <div class="about-tech-badges">
         ${techStack.map(t => `<span class="about-tech-badge" style="border-color:${t.color};color:${t.color}">${t.name}</span>`).join('')}
+      </div>
+    </section>
+
+    <section class="about-section about-reveal">
+      <h2 class="about-section-title">Capabilities</h2>
+      <p class="about-section-desc">Everything packed into a single Go binary. Click any card for details.</p>
+      <div class="about-capabilities-grid">
+        ${capabilities.map((cap, i) => `
+          <div class="about-cap-card" data-cap-idx="${i}" style="cursor:pointer">
+            <div class="about-cap-icon" style="color:var(--accent)">${icon(cap.icon, 28)}</div>
+            <h3>${cap.title}</h3>
+            <p>${cap.desc}</p>
+          </div>
+        `).join('')}
       </div>
     </section>
   `;
