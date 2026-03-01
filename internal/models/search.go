@@ -65,6 +65,7 @@ type SearchResult struct {
 // NodeStatus represents the current state of a node.
 type NodeStatus struct {
 	PeerID         string    `json:"peer_id"`
+	NodeName       string    `json:"node_name,omitempty"`
 	Addrs          []string  `json:"addrs"`
 	ConnectedPeers int       `json:"connected_peers"`
 	PeerList       []string  `json:"peer_list,omitempty"`
@@ -96,6 +97,20 @@ type IndexerInfo struct {
 	SpamRejected      int64   `json:"spam_rejected"`
 	DuplicatesSkipped int64   `json:"duplicates_skipped"`
 	EmptySkipped      int64   `json:"empty_skipped"`
+}
+
+// CrawlEvent represents a single crawl action for the live feed.
+type CrawlEvent struct {
+	Seq         uint64    `json:"seq"`
+	URL         string    `json:"url"`
+	Domain      string    `json:"domain"`
+	Title       string    `json:"title,omitempty"`
+	Status      string    `json:"status"`
+	Error       string    `json:"error,omitempty"`
+	StatusCode  int       `json:"status_code,omitempty"`
+	ContentSize int       `json:"content_size,omitempty"`
+	Depth       int       `json:"depth"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 // PeerInfo holds detailed info about a connected peer.

@@ -22,6 +22,11 @@ async function loadStatus() {
 
     content.innerHTML = `
       <div class="card-grid">
+        ${s.node_name ? `
+        <div class="card">
+          <div class="card-label">Node Name</div>
+          <div class="card-value">${escapeHtml(s.node_name)}</div>
+        </div>` : ''}
         <div class="card">
           <div class="card-label">Peer ID</div>
           <div class="card-value" style="font-size:0.9em;word-break:break-all;font-family:monospace">${s.peer_id}</div>

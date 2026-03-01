@@ -650,6 +650,93 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   font-weight: 500;
 }
 
+/* ---- Live Crawl Feed ---- */
+.crawl-feed-header {
+  display: grid;
+  grid-template-columns: 8px 1fr 100px 120px 60px 70px;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.75em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.crawl-feed-container {
+  max-height: 600px;
+  overflow-y: auto;
+}
+.crawl-event {
+  display: grid;
+  grid-template-columns: 8px 1fr 100px 120px 60px 70px;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 10px;
+  font-size: 0.82em;
+  border-bottom: 1px solid var(--border);
+  animation: crawlEventEnter 0.35s ease-out;
+  transition: background 0.15s;
+}
+.crawl-event:hover {
+  background: var(--bg-hover);
+  animation-play-state: paused;
+  opacity: 1 !important;
+}
+.crawl-event.fading {
+  animation: crawlEventFade 8s ease-in forwards;
+}
+.crawl-event.fading:hover {
+  animation-play-state: paused;
+  opacity: 1 !important;
+}
+.crawl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.crawl-dot.dot-ok { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.crawl-dot.dot-fail { background: var(--red); box-shadow: 0 0 4px var(--red); }
+.crawl-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: 0.85em;
+}
+.crawl-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.crawl-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+.crawl-size {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  text-align: right;
+}
+.crawl-time {
+  color: var(--text-muted);
+  font-size: 0.8em;
+  text-align: right;
+}
+@keyframes crawlEventEnter {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes crawlEventFade {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 /* ---- Network graph ---- */
 .graph-container {
   background: var(--bg-card);
@@ -1054,13 +1141,20 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   to   { text-shadow: 0 0 30px rgba(0,212,255,0.5), 0 0 80px rgba(0,212,255,0.2); }
 }
 .about-tagline-wrap {
-  display: flex;
-  align-items: center;
+  display: grid;
   justify-content: center;
-  min-height: 2em;
   margin: 16px 0 8px;
 }
+/* Reserve space: invisible duplicate prevents CLS during typewriter */
+.about-tagline-wrap::after {
+  content: "A decentralized, peer-to-peer search engine where every node crawls, indexes, and searches together.\00a0";
+  grid-area: 1 / 1;
+  font-size: 1.15em;
+  max-width: 600px;
+  visibility: hidden;
+}
 .about-tagline {
+  grid-area: 1 / 1;
   font-size: 1.15em;
   color: var(--text-secondary);
   max-width: 600px;

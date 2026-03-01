@@ -4,6 +4,8 @@ import { renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } fro
 
 let activeTab = 'status';
 let crawlHistory = []; // track crawl counts for chart
+let feedLastSeq = 0;
+let feedInterval = null;
 
 export function renderCrawler(container) {
   container.innerHTML = `
@@ -13,6 +15,7 @@ export function renderCrawler(container) {
     </div>
     <div class="tabs" id="crawler-tabs">
       <button class="tab active" data-tab="status">Status</button>
+      <button class="tab" data-tab="feed">Live Feed</button>
       <button class="tab" data-tab="analytics">Analytics</button>
       <button class="tab" data-tab="seeds">Seeds</button>
       <button class="tab" data-tab="features">Features</button>
@@ -33,13 +36,28 @@ export function renderCrawler(container) {
   window._pageInterval = setInterval(() => {
     if (activeTab === 'status' || activeTab === 'analytics') renderTab();
   }, 5000);
+
+  // Cleanup feed interval when page changes
+  const origInterval = window._pageInterval;
+  const origClear = () => {
+    clearInterval(origInterval);
+    if (feedInterval) { clearInterval(feedInterval); feedInterval = null; }
+  };
+  window.addEventListener('hashchange', origClear, { once: true });
 }
 
 async function renderTab() {
   const content = document.getElementById('crawler-content');
   if (!content) return;
 
+  // Stop feed polling when switching away
+  if (activeTab !== 'feed' && feedInterval) {
+    clearInterval(feedInterval);
+    feedInterval = null;
+  }
+
   if (activeTab === 'status') await renderStatus(content);
+  else if (activeTab === 'feed') renderFeed(content);
   else if (activeTab === 'analytics') await renderAnalytics(content);
   else if (activeTab === 'seeds') renderSeeds(content);
   else if (activeTab === 'features') renderFeatures(content);
@@ -118,6 +136,117 @@ async function renderStatus(el) {
   } catch (err) {
     el.innerHTML = `<div class="empty-state"><p>Failed to load crawler status: ${err.message}</p></div>`;
   }
+}
+
+function renderFeed(el) {
+  // Only create skeleton once
+  if (!el.querySelector('.crawl-feed-container')) {
+    feedLastSeq = 0;
+    el.innerHTML = `
+      <div class="section">
+        <h3>Live Crawl Feed</h3>
+        <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">
+          Real-time stream of URLs being crawled. Hover a row to pause its fade.
+        </p>
+        <div class="crawl-feed-header">
+          <span></span>
+          <span>URL</span>
+          <span>Domain</span>
+          <span>Title</span>
+          <span>Size</span>
+          <span>Time</span>
+        </div>
+        <div class="crawl-feed-container" id="crawl-feed"></div>
+      </div>
+    `;
+  }
+
+  pollFeed();
+  if (feedInterval) clearInterval(feedInterval);
+  feedInterval = setInterval(pollFeed, 5000);
+}
+
+async function pollFeed() {
+  try {
+    const data = await api.crawlerFeed(feedLastSeq);
+    const events = data.events || [];
+    if (events.length === 0) return;
+
+    const container = document.getElementById('crawl-feed');
+    if (!container) return;
+
+    // Events come newest-first; insert in reverse so newest ends up on top
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      if (ev.seq > feedLastSeq) feedLastSeq = ev.seq;
+
+      const row = document.createElement('div');
+      row.className = 'crawl-event';
+      const dotCls = ev.status === 'ok' ? 'dot-ok' : 'dot-fail';
+      const title = ev.title ? escapeHtml(ev.title).slice(0, 40) : '';
+      const size = ev.content_size ? formatBytes(ev.content_size) : '';
+      const url = escapeHtml(ev.url).slice(0, 80);
+      const domain = escapeHtml(ev.domain || '');
+      const ago = relativeTime(ev.timestamp);
+
+      row.innerHTML = `
+        <span class="crawl-dot ${dotCls}"></span>
+        <span class="crawl-url mono" title="${escapeHtml(ev.url)}">${url}</span>
+        <span class="crawl-domain">${domain}</span>
+        <span class="crawl-title">${title}</span>
+        <span class="crawl-size">${size}</span>
+        <span class="crawl-time">${ago}</span>
+      `;
+
+      if (ev.status === 'failed' && ev.error) {
+        row.title = ev.error;
+      }
+
+      container.prepend(row);
+
+      // Start fade timer
+      scheduleFade(row);
+    }
+
+    // Cap visible items
+    while (container.children.length > 25) {
+      container.removeChild(container.lastChild);
+    }
+  } catch { /* ignore polling errors */ }
+}
+
+function scheduleFade(row) {
+  const timer = setTimeout(() => {
+    if (!row.parentNode) return;
+    row.classList.add('fading');
+    row.addEventListener('animationend', () => {
+      if (row.parentNode) row.parentNode.removeChild(row);
+    }, { once: true });
+  }, 10000);
+
+  // Pause on hover
+  row.addEventListener('mouseenter', () => {
+    clearTimeout(timer);
+    row.classList.remove('fading');
+  });
+  row.addEventListener('mouseleave', () => {
+    scheduleFade(row);
+  });
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function relativeTime(ts) {
+  if (!ts) return '';
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 5) return 'just now';
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  return Math.floor(diff / 3600) + 'h ago';
 }
 
 async function renderAnalytics(el) {

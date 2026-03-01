@@ -189,6 +189,7 @@ async function renderIdentity(el) {
     const s = await api.status();
     const peerId = s.peer_id || 'unknown';
     const truncated = peerId.length > 16 ? peerId.slice(0, 16) + '...' : peerId;
+    const nodeName = s.node_name || '';
     const addrs = s.listen_addresses || [];
     const peers = s.connected_peers || 0;
 
@@ -198,6 +199,10 @@ async function renderIdentity(el) {
         <p class="wizard-subtitle">This is your node's identity on the P2P network.</p>
 
         <div class="wizard-id-card">
+          <div class="wizard-id-row">
+            <span class="wizard-id-label">Node Name</span>
+            <span class="wizard-id-value">${nodeName ? nodeName : '<span style="color:var(--text-muted)">Unnamed Node</span> <span style="font-size:0.8em;color:var(--text-muted)">(set with --name flag)</span>'}</span>
+          </div>
           <div class="wizard-id-row">
             <span class="wizard-id-label">Peer ID</span>
             <span class="wizard-id-value mono">

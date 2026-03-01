@@ -53,45 +53,71 @@ function css(prop) {
 }
 
 // ─────────────────────────────────────────────────
-// CRT: Matrix Rain
+// CRT: Matrix Rain — multi-layer, varied speed/opacity, subtle background
 // ─────────────────────────────────────────────────
 function matrixRain() {
-  const fontSize = 16;
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZアイウエオカキクケコサシスセソ0123456789';
-  // Sparse: use every 3rd column
-  const colSpacing = fontSize * 3;
-  let columnCount = Math.floor(canvas.width / colSpacing);
-  let drops = new Array(columnCount).fill(0).map(() => Math.random() * -50);
+
+  // Three layers with different densities, speeds, and opacities
+  const layers = [
+    { fontSize: 18, spacing: 5, speed: [0.15, 0.3],  opacity: [0.06, 0.12] },  // far bg, slow, dim
+    { fontSize: 14, spacing: 4, speed: [0.25, 0.5],  opacity: [0.10, 0.18] },  // mid layer
+    { fontSize: 11, spacing: 6, speed: [0.35, 0.65], opacity: [0.14, 0.22] },  // near, faster, still subtle
+  ];
+
+  let columns = [];
+
+  function initColumns() {
+    columns = [];
+    for (const layer of layers) {
+      const colSpacing = layer.fontSize * layer.spacing;
+      const count = Math.floor(canvas.width / colSpacing);
+      const cols = [];
+      for (let i = 0; i < count; i++) {
+        const speed = layer.speed[0] + Math.random() * (layer.speed[1] - layer.speed[0]);
+        const opacity = layer.opacity[0] + Math.random() * (layer.opacity[1] - layer.opacity[0]);
+        cols.push({
+          x: i * colSpacing + colSpacing * 0.5,
+          y: Math.random() * -80,
+          speed,
+          opacity,
+          fontSize: layer.fontSize,
+        });
+      }
+      columns.push(cols);
+    }
+  }
+
+  initColumns();
 
   function draw() {
-    // Faster fade = shorter trails, subtler look
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+    // Slow fade — creates soft trails
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.font = fontSize + 'px monospace';
+    for (const layer of columns) {
+      for (const col of layer) {
+        const char = chars[Math.floor(Math.random() * chars.length)];
+        const yPx = col.y * col.fontSize;
 
-    for (let i = 0; i < drops.length; i++) {
-      const char = chars[Math.floor(Math.random() * chars.length)];
-      const x = i * colSpacing + colSpacing * 0.5;
-      const y = drops[i] * fontSize;
+        ctx.font = col.fontSize + 'px monospace';
+        ctx.fillStyle = `rgba(51, 255, 51, ${col.opacity})`;
+        ctx.fillText(char, col.x, yPx);
 
-      // Soft head — lower opacity
-      ctx.fillStyle = 'rgba(51, 255, 51, 0.35)';
-      ctx.fillText(char, x, y);
+        col.y += col.speed;
 
-      if (y > canvas.height && Math.random() > 0.98) {
-        drops[i] = 0;
+        if (yPx > canvas.height && Math.random() > 0.975) {
+          col.y = Math.random() * -30;
+          // Re-randomize speed slightly for organic feel
+          col.speed *= 0.85 + Math.random() * 0.3;
+        }
       }
-      drops[i] += 0.35;
     }
 
     animId = requestAnimationFrame(draw);
   }
 
-  const onResize = () => {
-    columnCount = Math.floor(canvas.width / colSpacing);
-    drops = new Array(columnCount).fill(0).map(() => Math.random() * -50);
-  };
+  const onResize = () => initColumns();
   window.addEventListener('resize', onResize);
 
   draw();

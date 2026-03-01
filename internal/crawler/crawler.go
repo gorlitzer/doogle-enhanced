@@ -46,6 +46,13 @@ type Crawler struct {
 	activeWorkers atomic.Int64
 	jsRendered    atomic.Int64
 
+	// Live crawl feed ring buffer
+	events  [50]models.CrawlEvent
+	evHead  int
+	evCount int
+	evMu    sync.RWMutex
+	nextSeq atomic.Uint64
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -131,6 +138,36 @@ func (c *Crawler) Stats() (crawled, failed, active, jsRendered int64) {
 	return c.totalCrawled.Load(), c.totalFailed.Load(), c.activeWorkers.Load(), c.jsRendered.Load()
 }
 
+// recordEvent appends a crawl event to the ring buffer.
+func (c *Crawler) recordEvent(ev models.CrawlEvent) {
+	ev.Seq = c.nextSeq.Add(1)
+	ev.Timestamp = time.Now()
+
+	c.evMu.Lock()
+	c.events[c.evHead] = ev
+	c.evHead = (c.evHead + 1) % len(c.events)
+	if c.evCount < len(c.events) {
+		c.evCount++
+	}
+	c.evMu.Unlock()
+}
+
+// RecentEvents returns crawl events with Seq > afterSeq, newest first.
+func (c *Crawler) RecentEvents(afterSeq uint64) []models.CrawlEvent {
+	c.evMu.RLock()
+	defer c.evMu.RUnlock()
+
+	result := make([]models.CrawlEvent, 0, c.evCount)
+	for i := 0; i < c.evCount; i++ {
+		idx := (c.evHead - 1 - i + len(c.events)) % len(c.events)
+		ev := c.events[idx]
+		if ev.Seq > afterSeq {
+			result = append(result, ev)
+		}
+	}
+	return result
+}
+
 // AddSeed schedules a seed URL for crawling.
 func (c *Crawler) AddSeed(rawURL string) {
 	normalized := urlutil.Normalize(rawURL)
@@ -198,12 +235,28 @@ func (c *Crawler) processTask(workerID int, task *models.CrawlTask) {
 	doc, discoveredURLs, err := c.fetch(task.URL)
 	if err != nil {
 		c.totalFailed.Add(1)
+		c.recordEvent(models.CrawlEvent{
+			URL:    task.URL,
+			Domain: domain,
+			Status: "failed",
+			Error:  err.Error(),
+			Depth:  task.Depth,
+		})
 		log.Printf("worker %d: fetch failed %s: %v", workerID, task.URL, err)
 		return
 	}
 
 	c.totalCrawled.Add(1)
 	doc.Depth = task.Depth
+	c.recordEvent(models.CrawlEvent{
+		URL:         task.URL,
+		Domain:      domain,
+		Title:       doc.Title,
+		Status:      "ok",
+		StatusCode:  doc.StatusCode,
+		ContentSize: doc.ContentSize,
+		Depth:       task.Depth,
+	})
 	log.Printf("worker %d: crawled %s (depth=%d, links=%d)", workerID, task.URL, task.Depth, len(discoveredURLs))
 
 	if c.onCrawled != nil {

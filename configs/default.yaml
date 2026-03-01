@@ -1,5 +1,8 @@
 # Doogle v2 - Default Node Configuration
 
+# Human-readable node name (shown in UI and to peers)
+node_name: ""
+
 # P2P networking
 p2p:
   port: 4001

@@ -34,6 +34,9 @@ export const api = {
   crawlerStatus() {
     return fetchJSON('/api/admin/crawler');
   },
+  crawlerFeed(afterSeq = 0) {
+    return fetchJSON(`/api/admin/crawler/feed?after=${afterSeq}`);
+  },
   indexerStats() {
     return fetchJSON('/api/admin/indexer');
   },
