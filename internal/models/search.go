@@ -10,6 +10,7 @@ type ParsedQuery struct {
 	Terms        []string            // cleaned, stop-words removed
 	Phrases      []string            // from "quoted strings"
 	SiteDomain   string              // from site:example.com
+	Language     string              // from lang:xx filter (empty = any)
 	Synonyms     map[string][]string // term → expansions
 	UseFuzzy     bool                // true for short queries (≤3 terms)
 	CleanedQuery string              // fallback plain string
@@ -39,6 +40,7 @@ type SearchResult struct {
 	Title        string  `json:"title"`
 	Description  string  `json:"description"`
 	Domain       string  `json:"domain"`
+	Language     string  `json:"language,omitempty"`
 	Score        float64 `json:"score"`
 	PeerID       string  `json:"peer_id,omitempty"`
 
@@ -54,6 +56,7 @@ type SearchResult struct {
 	FreshnessScore    float64   `json:"freshness_score,omitempty"`
 	AuthorCredibility float64   `json:"author_credibility,omitempty"`
 	RelevanceScore    float64   `json:"relevance_score,omitempty"`
+	StaticScore       float64   `json:"static_score,omitempty"`
 	CrawledAt         time.Time `json:"crawled_at,omitempty"`
 	IsTimeSensitive   bool      `json:"is_time_sensitive,omitempty"`
 	IsEvergreen       bool      `json:"is_evergreen,omitempty"`

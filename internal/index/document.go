@@ -38,6 +38,10 @@ type IndexDocument struct {
 	FreshnessScore     float64 `json:"freshness_score"`
 	AuthorCredibility  float64 `json:"author_credibility"`
 	RelevanceScore     float64 `json:"relevance_score"`
+	StaticScore        float64 `json:"static_score"`
+
+	// Index generation (for incremental reindexing)
+	Generation uint64 `json:"generation"`
 
 	// Flags
 	IsHTTPS         bool `json:"is_https"`

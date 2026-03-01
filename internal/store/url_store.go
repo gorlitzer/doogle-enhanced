@@ -3,7 +3,6 @@ package store
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,31 +14,26 @@ import (
 // URLStore manages the URL frontier and tracks seen URLs.
 type URLStore struct {
 	db      *badger.DB
-	seen    map[string]bool
-	mu      sync.RWMutex
+	dedup   *DedupStore
 	counter atomic.Int64
 }
 
-// NewURLStore creates a URL store backed by BadgerDB.
-func NewURLStore(bs *BadgerStore) *URLStore {
+// NewURLStore creates a URL store backed by BadgerDB with persistent dedup.
+func NewURLStore(bs *BadgerStore, dedup *DedupStore) *URLStore {
 	return &URLStore{
-		db:   bs.db,
-		seen: make(map[string]bool),
+		db:    bs.db,
+		dedup: dedup,
 	}
 }
 
 // HasSeen returns true if the URL has already been queued.
 func (u *URLStore) HasSeen(url string) bool {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return u.seen[url]
+	return u.dedup.HasSeen(url)
 }
 
-// MarkSeen marks a URL as seen.
+// MarkSeen marks a URL as seen (persisted to disk).
 func (u *URLStore) MarkSeen(url string) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.seen[url] = true
+	u.dedup.MarkSeen(url)
 }
 
 // CrawledCount returns total crawled URLs.
@@ -129,7 +123,5 @@ func (u *URLStore) QueueSize() int {
 
 // SeenCount returns number of seen URLs.
 func (u *URLStore) SeenCount() int {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return len(u.seen)
+	return u.dedup.SeenCount()
 }

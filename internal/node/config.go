@@ -46,8 +46,12 @@ type CrawlerConfig struct {
 }
 
 type IndexConfig struct {
-	BleveDir         string        `yaml:"bleve_dir"`
-	PageRankInterval time.Duration `yaml:"pagerank_interval"`
+	BleveDir             string        `yaml:"bleve_dir"`
+	PageRankInterval     time.Duration `yaml:"pagerank_interval"`
+	BatchSize            int           `yaml:"batch_size"`
+	BatchFlushInterval   time.Duration `yaml:"batch_flush_interval"`
+	IncrementalInterval  time.Duration `yaml:"incremental_interval"`
+	ReplicationFactor    int           `yaml:"replication_factor"`
 }
 
 type StorageConfig struct {
@@ -85,8 +89,12 @@ func DefaultConfig() *Config {
 			HeadlessTimeout:   30 * time.Second,
 		},
 		Index: IndexConfig{
-			BleveDir:         "bleve",
-			PageRankInterval: 5 * time.Minute,
+			BleveDir:            "bleve",
+			PageRankInterval:    5 * time.Minute,
+			BatchSize:           100,
+			BatchFlushInterval:  5 * time.Second,
+			IncrementalInterval: 10 * time.Minute,
+			ReplicationFactor:   3,
 		},
 		Storage: StorageConfig{
 			DataDir:   "./data/doogle",

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/doogle/doogle-v2/internal/api"
@@ -40,6 +41,14 @@ type Node struct {
 	pageRank  *indexer.PageRankComputer
 	apiServer *api.Server
 	shards    *index.ShardManager
+
+	// New stores and subsystems
+	dedupStore    *store.DedupStore
+	contentStore  *store.ContentStore
+	genStore      *store.GenerationStore
+	batchIndexer  *index.BatchIndexer
+	incremental   *indexer.IncrementalIndexer
+
 	startedAt time.Time
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -89,7 +98,7 @@ func (n *Node) init() error {
 	}
 	n.discovery = disc
 
-	// 4. GossipSub
+	// 4. GossipSub (URL frontier + shard catalog)
 	gossip, err := p2p.NewGossip(n.ctx, h)
 	if err != nil {
 		return fmt.Errorf("gossip: %w", err)
@@ -103,8 +112,18 @@ func (n *Node) init() error {
 		return fmt.Errorf("badger: %w", err)
 	}
 	n.badger = bs
-	n.urlStore = store.NewURLStore(bs)
+
+	// 5a. Foundation stores
+	n.dedupStore = store.NewDedupStore(bs)
+	n.urlStore = store.NewURLStore(bs, n.dedupStore)
 	n.linkStore = store.NewLinkStore(bs)
+	n.contentStore = store.NewContentStore(bs)
+
+	genStore, err := store.NewGenerationStore(bs)
+	if err != nil {
+		return fmt.Errorf("generation store: %w", err)
+	}
+	n.genStore = genStore
 
 	// 6. Bleve index
 	blevePath := filepath.Join(dataDir, n.cfg.Index.BleveDir)
@@ -114,15 +133,45 @@ func (n *Node) init() error {
 	}
 	n.bleveIdx = bleveIdx
 
-	// 7. Shard manager
+	// 7. Shard manager — add self
 	n.shards = index.NewShardManager()
 	n.shards.AddNode(peerID.String())
 
-	// 8. Indexer + PageRank
-	n.indexer = indexer.New(bleveIdx)
+	// 7a. Register network notifiee to track peer join/leave for shard ring
+	h.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(_ network.Network, conn network.Conn) {
+			pid := conn.RemotePeer().String()
+			n.shards.AddNode(pid)
+			log.Printf("shard ring: added peer %s (total: %d)", pid[:12], n.shards.NodeCount())
+		},
+		DisconnectedF: func(_ network.Network, conn network.Conn) {
+			pid := conn.RemotePeer().String()
+			n.shards.RemoveNode(pid)
+			log.Printf("shard ring: removed peer %s (total: %d)", pid[:12], n.shards.NodeCount())
+		},
+	})
+
+	// 8. Batch indexer
+	n.batchIndexer = index.NewBatchIndexer(
+		bleveIdx,
+		n.cfg.Index.BatchSize,
+		n.cfg.Index.BatchFlushInterval,
+	)
+
+	// 9. Indexer + PageRank
+	n.indexer = indexer.New(bleveIdx, n.batchIndexer, n.genStore)
 	n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
 
-	// 9. Crawler with callback
+	// 10. Incremental indexer
+	n.incremental = indexer.NewIncrementalIndexer(
+		bleveIdx,
+		n.contentStore,
+		n.genStore,
+		n.batchIndexer,
+		n.cfg.Index.IncrementalInterval,
+	)
+
+	// 11. Crawler with callback
 	n.scheduler = crawler.NewScheduler(n.urlStore, 10000)
 	n.crawler = crawler.New(crawler.Config{
 		Workers:           n.cfg.Crawler.Workers,
@@ -136,16 +185,23 @@ func (n *Node) init() error {
 		HeadlessTimeout:   n.cfg.Crawler.HeadlessTimeout,
 	}, n.scheduler, n.onDocumentCrawled)
 
-	// 10. Search engines
+	// 12. Search engines (shard-aware distributed search)
 	n.localEng = search.NewEngine(bleveIdx)
-	n.search = search.NewDistributedSearch(h, n.localEng, n.cfg.Search.PeerTimeout, n.cfg.Search.MaxPeers)
+	n.search = search.NewDistributedSearch(
+		h, n.localEng, n.shards,
+		n.cfg.Index.ReplicationFactor,
+		n.cfg.Search.PeerTimeout,
+		n.cfg.Search.MaxPeers,
+	)
 
-	// 11. Register P2P protocol handlers
+	// 13. Register P2P protocol handlers
 	p2p.RegisterSearchProtocol(h, n.handlePeerSearch)
 	p2p.RegisterCrawlProtocol(h, n.handlePeerCrawlTask)
 	p2p.RegisterIndexProtocol(h, n.handlePeerIndexDoc)
+	p2p.RegisterShardProtocol(h, n.handleShardCatalog)
+	p2p.RegisterReplicateProtocol(h, n.handleReplicateRequest)
 
-	// 12. HTTP API
+	// 14. HTTP API
 	n.apiServer = api.NewServer(n.cfg.API.Bind, n.cfg.API.Port, &api.Deps{
 		Search:       n.search,
 		StatusFn:     n.Status,
@@ -164,11 +220,19 @@ func (n *Node) Run() error {
 	// Start crawler
 	n.crawler.Start()
 
+	// Start batch indexer background flusher
+	n.batchIndexer.Start(n.ctx)
+
 	// Start PageRank background computation
 	n.pageRank.Start(n.ctx)
 
-	// Start gossip listener
+	// Start incremental re-scoring
+	n.incremental.Start(n.ctx)
+
+	// Start gossip listeners
 	go n.gossipLoop()
+	go n.shardCatalogLoop()
+	go n.shardCatalogPublisher()
 
 	// Add seed URLs
 	for _, seed := range n.cfg.SeedURLs {
@@ -189,6 +253,7 @@ func (n *Node) Shutdown() {
 
 	n.apiServer.Shutdown(ctx)
 	n.crawler.Stop()
+	n.batchIndexer.Stop()
 	n.gossip.Close()
 	n.discovery.Close()
 	n.host.Close()
@@ -262,6 +327,17 @@ func (n *Node) PeersInfo() []models.PeerInfo {
 
 // onDocumentCrawled is called by the crawler when a page is fetched.
 func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) {
+	// Track content changes for incremental reindexing
+	if n.contentStore != nil && doc.ContentHash != "" {
+		if n.contentStore.HasChanged(doc.URL, doc.ContentHash) {
+			n.contentStore.Put(doc.URL, &store.ContentRecord{
+				ContentHash: doc.ContentHash,
+				ScoredAt:    time.Now(),
+				Generation:  n.genStore.Current(),
+			})
+		}
+	}
+
 	// Index the document locally
 	if err := n.indexer.Index(doc); err != nil {
 		log.Printf("node: index error: %v", err)
@@ -271,6 +347,9 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 	n.recordLinks(doc)
 
 	n.urlStore.IncrementCrawled()
+
+	// Replicate to shard owners if we're in a multi-node setup
+	n.replicateDocument(doc)
 
 	// Schedule discovered URLs
 	for _, u := range discoveredURLs {
@@ -297,6 +376,39 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 		if err := n.gossip.Publish(n.ctx, ann); err != nil {
 			log.Printf("node: gossip publish error: %v", err)
 		}
+	}
+}
+
+// replicateDocument sends a document to its shard replica owners.
+func (n *Node) replicateDocument(doc *models.Document) {
+	if n.shards.NodeCount() <= 1 {
+		return // single node, nothing to replicate
+	}
+
+	owners := n.shards.Owners(doc.Domain, n.cfg.Index.ReplicationFactor)
+	selfID := n.peerID.String()
+
+	for _, ownerID := range owners {
+		if ownerID == selfID {
+			continue
+		}
+		pid, err := peer.Decode(ownerID)
+		if err != nil {
+			continue
+		}
+		// Check if peer is connected
+		if n.host.Network().Connectedness(pid) != network.Connected {
+			continue
+		}
+		go func(peerID peer.ID) {
+			req := &p2p.ReplicateRequest{
+				Documents:  []*models.Document{doc},
+				Generation: n.genStore.Current(),
+			}
+			if _, err := p2p.ReplicateDocuments(n.ctx, n.host, peerID, req, 10*time.Second); err != nil {
+				log.Printf("node: replicate to %s error: %v", peerID.String()[:12], err)
+			}
+		}(pid)
 	}
 }
 
@@ -349,6 +461,50 @@ func (n *Node) gossipLoop() {
 	}
 }
 
+// shardCatalogLoop listens for shard catalog updates from peers.
+func (n *Node) shardCatalogLoop() {
+	for {
+		catalog, err := n.gossip.SubscribeShardCatalog(n.ctx)
+		if err != nil {
+			if n.ctx.Err() != nil {
+				return
+			}
+			continue
+		}
+		if catalog == nil {
+			continue
+		}
+
+		// Ensure the peer is in our shard ring
+		n.shards.AddNode(catalog.PeerID)
+		log.Printf("shard catalog: received from %s (%d domains, %d docs, gen %d)",
+			catalog.PeerID[:12], len(catalog.Domains), catalog.DocCount, catalog.Generation)
+	}
+}
+
+// shardCatalogPublisher periodically publishes our shard catalog.
+func (n *Node) shardCatalogPublisher() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			docCount, _ := n.bleveIdx.DocCount()
+			catalog := &p2p.ShardCatalog{
+				PeerID:     n.peerID.String(),
+				DocCount:   docCount,
+				Generation: n.genStore.Current(),
+			}
+			if err := n.gossip.PublishShardCatalog(n.ctx, catalog); err != nil {
+				log.Printf("node: shard catalog publish error: %v", err)
+			}
+		case <-n.ctx.Done():
+			return
+		}
+	}
+}
+
 // P2P handlers
 
 func (n *Node) handlePeerSearch(req *models.SearchRequest) (*models.SearchResponse, error) {
@@ -362,6 +518,27 @@ func (n *Node) handlePeerCrawlTask(task *models.CrawlTask) error {
 
 func (n *Node) handlePeerIndexDoc(doc *models.Document) error {
 	return n.indexer.Index(doc)
+}
+
+func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
+	n.shards.AddNode(catalog.PeerID)
+	log.Printf("shard protocol: catalog from %s (%d docs)", catalog.PeerID[:12], catalog.DocCount)
+	return nil
+}
+
+func (n *Node) handleReplicateRequest(req *p2p.ReplicateRequest) (*p2p.ReplicateResponse, error) {
+	accepted := 0
+	for _, doc := range req.Documents {
+		if err := n.indexer.Index(doc); err != nil {
+			log.Printf("replicate: index error for %s: %v", doc.URL, err)
+			continue
+		}
+		accepted++
+	}
+	return &p2p.ReplicateResponse{
+		Status:   "ok",
+		Accepted: accepted,
+	}, nil
 }
 
 func multiaddrsToStrings(h host.Host) []string {
