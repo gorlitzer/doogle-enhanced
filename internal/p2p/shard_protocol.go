@@ -30,7 +30,7 @@ func RegisterShardProtocol(h host.Host, handler ShardCatalogHandler) {
 	h.SetStreamHandler(ShardProtocol, func(s network.Stream) {
 		defer s.Close()
 
-		reader := bufio.NewReader(s)
+		reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max
 		data, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Printf("shard protocol: read error: %v", err)

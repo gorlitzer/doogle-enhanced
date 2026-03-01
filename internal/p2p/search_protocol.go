@@ -25,7 +25,7 @@ func RegisterSearchProtocol(h host.Host, handler SearchHandler) {
 		defer s.Close()
 
 		// Read request
-		reader := bufio.NewReader(s)
+		reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max
 		data, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Printf("search protocol: read error: %v", err)
@@ -79,7 +79,7 @@ func QueryPeer(ctx context.Context, h host.Host, peerID peer.ID, req *models.Sea
 	s.CloseWrite()
 
 	// Read response
-	reader := bufio.NewReader(s)
+	reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 	respData, err := reader.ReadBytes('\n')
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read response: %w", err)

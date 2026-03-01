@@ -20,7 +20,7 @@ func RegisterIndexProtocol(h host.Host, handler IndexDocHandler) {
 	h.SetStreamHandler(IndexProtocol, func(s network.Stream) {
 		defer s.Close()
 
-		reader := bufio.NewReader(s)
+		reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 		data, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Printf("index protocol: read error: %v", err)
