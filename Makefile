@@ -20,6 +20,9 @@ help:
 	@echo "    make clean              Remove binary and node data"
 	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
 	@echo ""
+	@echo "  dev/docker run detached — close terminal safely. Manage with:"
+	@echo "  docker compose ps | logs -f | down"
+	@echo ""
 
 setup:
 	@echo "==> Checking prerequisites..."
