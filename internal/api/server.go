@@ -33,7 +33,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 				strings.HasPrefix(origin, "https://localhost:") ||
 				strings.HasPrefix(origin, "https://127.0.0.1:")
 		},
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           3600,
@@ -59,6 +59,9 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Get("/documents", DocumentsHandler(deps))
 			r.Get("/documents/{id}", DocumentDetailHandler(deps))
 			r.Get("/trust", TrustHandler(deps))
+			r.Get("/dump", DumpHandler(deps))
+			r.Post("/restore", RestoreHandler(deps))
+			r.Delete("/data", DeleteDataHandler(deps))
 		})
 	})
 

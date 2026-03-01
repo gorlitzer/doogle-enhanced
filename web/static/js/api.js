@@ -52,4 +52,14 @@ export const api = {
   setNodeName(name) {
     return postJSON('/api/config/name', { name });
   },
+  restore(file) {
+    const form = new FormData();
+    form.append('archive', file);
+    return fetch(BASE + '/api/admin/restore', { method: 'POST', body: form })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+  },
+  deleteData() {
+    return fetch(BASE + '/api/admin/data?confirm=yes', { method: 'DELETE' })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+  },
 };

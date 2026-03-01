@@ -1,65 +1,89 @@
-.PHONY: help build run test clean dev dev-fe docker-up docker-down docker-logs start backup restore
+.PHONY: help build run test fmt lint clean nuke dev watch docker docker-stop docker-logs backup restore
 
-BINARY_NAME=doogle
-BUILD_DIR=bin
-DATA_DIR=./data/doogle
+BINARY  = doogle
+BIN_DIR = bin
+DATA    = ./data/doogle
+
+# ---- Help ----
 
 help:
 	@echo ""
 	@echo "  Doogle — P2P Decentralized Search Engine"
 	@echo ""
-	@echo "  make build          Build binary"
-	@echo "  make run            Build + run"
-	@echo "  make start          Production build + run"
-	@echo "  make test           Run tests"
-	@echo "  make dev            Docker backend + frontend hot reload"
-	@echo "  make dev-fe         Frontend hot reload only"
-	@echo "  make docker-up      Start Docker cluster"
-	@echo "  make docker-down    Stop Docker cluster"
-	@echo "  make docker-logs    Tail Docker logs"
-	@echo "  make backup         Snapshot data to archive"
-	@echo "  make restore BACKUP=<file>"
-	@echo "  make clean          Remove build artifacts + data"
+	@echo "  Build & Run"
+	@echo "    make build              Compile optimized binary to bin/"
+	@echo "    make run                Build + launch node (API on :8080)"
+	@echo "    make run ARGS='--port 4002'  Pass extra flags to the binary"
+	@echo "    make test               Run all tests"
+	@echo "    make fmt                Format Go source files (gofmt)"
+	@echo "    make lint               Static analysis (go vet)"
+	@echo ""
+	@echo "  Frontend Development"
+	@echo "    make dev                Start Docker backend + hot-reload UI on :3000"
+	@echo "    make watch              Hot-reload UI only (run 'make run' in another terminal first)"
+	@echo ""
+	@echo "  Docker Cluster (3 nodes)"
+	@echo "    make docker             Build images + start 3-node cluster"
+	@echo "    make docker-stop        Stop cluster and free ports"
+	@echo "    make docker-logs        Tail all node logs"
+	@echo ""
+	@echo "  Data"
+	@echo "    make backup             Snapshot data/ to timestamped .tar.gz"
+	@echo "    make restore BACKUP=<file>  Restore data/ from archive"
+	@echo ""
+	@echo "  Cleanup"
+	@echo "    make clean              Remove bin/ only (data is preserved)"
+	@echo "    make nuke               Remove bin/ AND data/ (destroys index + identity)"
 	@echo ""
 
 # ---- Build & Run ----
 
 build:
-	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/doogle
+	@mkdir -p $(BIN_DIR)
+	go build -ldflags "-s -w" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
 
 run: build
-	./$(BUILD_DIR)/$(BINARY_NAME)
-
-start:
-	@mkdir -p $(BUILD_DIR)
-	go build -ldflags "-s -w" -trimpath -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/doogle
-	./$(BUILD_DIR)/$(BINARY_NAME)
+	./$(BIN_DIR)/$(BINARY) $(ARGS)
 
 test:
-	go test ./... -v -count=1
+	go test ./...
+
+fmt:
+	gofmt -w -s .
+
+lint:
+	go vet ./...
+
+# ---- Cleanup ----
 
 clean:
-	@rm -rf $(BUILD_DIR) data/
+	rm -rf $(BIN_DIR)
 
-# ---- Development ----
+nuke: clean
+	@printf "\033[31mThis will permanently delete ALL crawled data, indexes, and identity keys.\033[0m\n"
+	@printf "Type 'yes' to confirm: " && read ans && [ "$$ans" = "yes" ] || (echo "Aborted."; exit 1)
+	rm -rf data/
+	@echo "Done. All data removed."
+
+# ---- Frontend Development ----
 
 dev:
 	@echo "Starting backend in Docker..."
 	docker compose up --build -d node1
 	@sleep 3
-	@echo "Starting frontend dev server..."
+	@echo "Backend running on :8080 — starting hot-reload UI on :3000..."
 	node dev-server.mjs --api http://localhost:8080
 
-dev-fe:
+watch:
+	@echo "Starting hot-reload UI on :3000 (proxying API to :8080)..."
 	node dev-server.mjs
 
 # ---- Docker ----
 
-docker-up:
+docker:
 	docker compose up --build -d
 
-docker-down:
+docker-stop:
 	docker compose down
 
 docker-logs:
@@ -68,16 +92,20 @@ docker-logs:
 # ---- Data ----
 
 backup:
-	@if [ ! -d "$(DATA_DIR)" ]; then echo "Error: $(DATA_DIR) not found"; exit 1; fi
+	@if [ ! -d "$(DATA)" ]; then echo "Error: $(DATA) not found — nothing to back up."; exit 1; fi
 	@TIMESTAMP=$$(date +%Y%m%dT%H%M%S) && \
 		ARCHIVE="doogle-backup-$$TIMESTAMP.tar.gz" && \
-		tar -czf "$$ARCHIVE" -C $$(dirname $(DATA_DIR)) $$(basename $(DATA_DIR)) && \
+		tar -czf "$$ARCHIVE" -C $$(dirname $(DATA)) $$(basename $(DATA)) && \
 		echo "Created: $$ARCHIVE ($$(du -h "$$ARCHIVE" | cut -f1))"
 
 restore:
 	@if [ -z "$(BACKUP)" ]; then echo "Usage: make restore BACKUP=<file>"; exit 1; fi
 	@if [ ! -f "$(BACKUP)" ]; then echo "Error: $(BACKUP) not found"; exit 1; fi
-	@if [ -d "$(DATA_DIR)" ]; then echo "Overwriting $(DATA_DIR)..."; rm -rf "$(DATA_DIR)"; fi
-	@mkdir -p $$(dirname $(DATA_DIR))
-	tar -xzf "$(BACKUP)" -C $$(dirname $(DATA_DIR))
+	@if [ -d "$(DATA)" ]; then \
+		printf "\033[33mWARNING: $(DATA) exists and will be overwritten.\033[0m\n"; \
+		printf "Type 'yes' to confirm: " && read ans && [ "$$ans" = "yes" ] || (echo "Aborted."; exit 1); \
+		rm -rf "$(DATA)"; \
+	fi
+	@mkdir -p $$(dirname $(DATA))
+	tar -xzf "$(BACKUP)" -C $$(dirname $(DATA))
 	@echo "Restored from $(BACKUP)"

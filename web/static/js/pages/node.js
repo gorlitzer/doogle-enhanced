@@ -71,18 +71,7 @@ async function loadStatus() {
         <h3>Connected Peers</h3>
         ${renderPeerList(s.peer_list || [])}
       </div>
-
-      <div class="section">
-        <h3>Quick Actions</h3>
-        <div class="form-row">
-          <input type="text" id="seed-url-input" placeholder="https://example.com">
-          <button class="btn btn-primary" id="add-seed-btn">Add Seed URL</button>
-        </div>
-        <div id="seed-result" style="margin-top:8px;font-size:0.85em"></div>
-      </div>
     `;
-
-    document.getElementById('add-seed-btn').addEventListener('click', addSeed);
   } catch (err) {
     const content = document.getElementById('node-content');
     if (content) {
@@ -103,21 +92,6 @@ function renderPeerList(peers) {
       <span class="badge badge-green">connected</span>
     </div>
   `).join('');
-}
-
-async function addSeed() {
-  const input = document.getElementById('seed-url-input');
-  const result = document.getElementById('seed-result');
-  const url = input.value.trim();
-  if (!url) return;
-
-  try {
-    await api.addSeed(url);
-    result.innerHTML = `<span class="badge badge-green">Queued: ${escapeHtml(url)}</span>`;
-    input.value = '';
-  } catch (err) {
-    result.innerHTML = `<span class="badge badge-red">Error: ${err.message}</span>`;
-  }
 }
 
 function escapeHtml(s) {

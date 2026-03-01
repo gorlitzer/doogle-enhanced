@@ -225,6 +225,7 @@ func (n *Node) init() error {
 		ReportURL:    n.ReportURL,
 		TrustSummary: n.trustManager.Summary,
 		SetNodeName:  func(name string) { n.cfg.NodeName = name },
+		DataDir:      dataDir,
 	})
 
 	return nil

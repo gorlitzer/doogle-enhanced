@@ -3,15 +3,14 @@ import { api } from '../api.js';
 import { icon } from '../components.js';
 
 let currentStep = 0;
-const selectedCategories = new Set();
+const selectedSubs = new Set();
 const removedSeeds = new Set();
 let customSeeds = '';
 let settings = { depth: 3, workers: 4 };
 let pollInterval = null;
+const expandedCategories = new Set();
 
-// ─── Category Groups ─────────────────────────────────
-// Organized for everyone — not just developers.
-
+// ─── Category Groups with Subcategories ─────────────
 const CATEGORY_GROUPS = [
   {
     id: 'knowledge', name: 'Knowledge & Learning', icon: 'fileText',
@@ -19,22 +18,98 @@ const CATEGORY_GROUPS = [
       {
         id: 'education', name: 'Education', icon: 'fileText',
         desc: 'Online courses, encyclopedias, and academic resources',
-        seeds: ['https://en.wikipedia.org', 'https://www.khanacademy.org', 'https://www.britannica.com', 'https://ocw.mit.edu', 'https://www.coursera.org', 'https://stackoverflow.com'],
+        subcategories: [
+          { id: 'education-k12', name: 'K-12', seeds: [
+            { url: 'https://www.khanacademy.org', label: 'Khan Academy' },
+            { url: 'https://www.ck12.org', label: 'CK-12' },
+            { url: 'https://www.education.com', label: 'Education.com' },
+          ]},
+          { id: 'education-higher', name: 'Higher Ed', seeds: [
+            { url: 'https://ocw.mit.edu', label: 'MIT OpenCourseWare' },
+            { url: 'https://www.edx.org', label: 'edX' },
+            { url: 'https://www.britannica.com', label: 'Britannica' },
+          ]},
+          { id: 'education-online', name: 'Online Learning', seeds: [
+            { url: 'https://www.coursera.org', label: 'Coursera' },
+            { url: 'https://en.wikipedia.org', label: 'Wikipedia' },
+            { url: 'https://stackoverflow.com', label: 'Stack Overflow' },
+          ]},
+          { id: 'education-languages', name: 'Languages', seeds: [
+            { url: 'https://www.duolingo.com', label: 'Duolingo' },
+            { url: 'https://www.babbel.com', label: 'Babbel' },
+          ]},
+        ],
       },
       {
         id: 'science', name: 'Science & Research', icon: 'cpu',
         desc: 'Scientific papers, journals, and research databases',
-        seeds: ['https://arxiv.org', 'https://www.nature.com', 'https://pubmed.ncbi.nlm.nih.gov', 'https://www.science.org', 'https://www.nasa.gov', 'https://www.scientificamerican.com'],
+        subcategories: [
+          { id: 'science-physics', name: 'Physics', seeds: [
+            { url: 'https://arxiv.org', label: 'arXiv' },
+            { url: 'https://www.aps.org', label: 'APS Physics' },
+            { url: 'https://home.cern', label: 'CERN' },
+          ]},
+          { id: 'science-biology', name: 'Biology', seeds: [
+            { url: 'https://pubmed.ncbi.nlm.nih.gov', label: 'PubMed' },
+            { url: 'https://www.nature.com', label: 'Nature' },
+            { url: 'https://www.science.org', label: 'Science' },
+          ]},
+          { id: 'science-chemistry', name: 'Chemistry', seeds: [
+            { url: 'https://www.acs.org', label: 'ACS' },
+            { url: 'https://www.rsc.org', label: 'Royal Society of Chemistry' },
+          ]},
+          { id: 'science-math', name: 'Mathematics', seeds: [
+            { url: 'https://mathworld.wolfram.com', label: 'MathWorld' },
+            { url: 'https://www.ams.org', label: 'AMS' },
+          ]},
+          { id: 'science-earth', name: 'Earth Science', seeds: [
+            { url: 'https://www.nasa.gov', label: 'NASA' },
+            { url: 'https://www.scientificamerican.com', label: 'Scientific American' },
+          ]},
+        ],
       },
       {
         id: 'news', name: 'News & Journalism', icon: 'megaphone',
         desc: 'World news, investigative reporting, and current events',
-        seeds: ['https://www.reuters.com', 'https://apnews.com', 'https://www.bbc.com/news', 'https://www.npr.org', 'https://www.theguardian.com', 'https://www.aljazeera.com'],
+        subcategories: [
+          { id: 'news-world', name: 'World News', seeds: [
+            { url: 'https://www.reuters.com', label: 'Reuters' },
+            { url: 'https://apnews.com', label: 'AP News' },
+            { url: 'https://www.bbc.com/news', label: 'BBC News' },
+          ]},
+          { id: 'news-tech', name: 'Tech News', seeds: [
+            { url: 'https://www.theverge.com', label: 'The Verge' },
+            { url: 'https://arstechnica.com', label: 'Ars Technica' },
+          ]},
+          { id: 'news-business', name: 'Business', seeds: [
+            { url: 'https://www.ft.com', label: 'Financial Times' },
+            { url: 'https://www.bloomberg.com', label: 'Bloomberg' },
+          ]},
+          { id: 'news-investigative', name: 'Investigative', seeds: [
+            { url: 'https://www.theguardian.com', label: 'The Guardian' },
+            { url: 'https://www.npr.org', label: 'NPR' },
+            { url: 'https://www.aljazeera.com', label: 'Al Jazeera' },
+          ]},
+        ],
       },
       {
         id: 'history', name: 'History & Culture', icon: 'globe',
         desc: 'Museums, archives, cultural heritage, and world history',
-        seeds: ['https://www.smithsonianmag.com', 'https://www.history.com', 'https://whc.unesco.org', 'https://www.britishmuseum.org', 'https://archive.org', 'https://www.loc.gov'],
+        subcategories: [
+          { id: 'history-ancient', name: 'Ancient', seeds: [
+            { url: 'https://www.britishmuseum.org', label: 'British Museum' },
+            { url: 'https://www.metmuseum.org', label: 'Met Museum' },
+            { url: 'https://www.history.com', label: 'History.com' },
+          ]},
+          { id: 'history-modern', name: 'Modern', seeds: [
+            { url: 'https://www.smithsonianmag.com', label: 'Smithsonian' },
+            { url: 'https://www.loc.gov', label: 'Library of Congress' },
+          ]},
+          { id: 'history-heritage', name: 'Cultural Heritage', seeds: [
+            { url: 'https://whc.unesco.org', label: 'UNESCO World Heritage' },
+            { url: 'https://archive.org', label: 'Internet Archive' },
+          ]},
+        ],
       },
     ],
   },
@@ -44,22 +119,86 @@ const CATEGORY_GROUPS = [
       {
         id: 'health', name: 'Health & Medicine', icon: 'heart',
         desc: 'Medical information, wellness guides, and health research',
-        seeds: ['https://www.who.int', 'https://www.mayoclinic.org', 'https://www.nih.gov', 'https://www.healthline.com', 'https://www.webmd.com', 'https://medlineplus.gov'],
+        subcategories: [
+          { id: 'health-medical', name: 'Medical', seeds: [
+            { url: 'https://www.who.int', label: 'WHO' },
+            { url: 'https://www.mayoclinic.org', label: 'Mayo Clinic' },
+            { url: 'https://www.nih.gov', label: 'NIH' },
+          ]},
+          { id: 'health-fitness', name: 'Fitness', seeds: [
+            { url: 'https://www.healthline.com', label: 'Healthline' },
+            { url: 'https://www.runnersworld.com', label: "Runner's World" },
+          ]},
+          { id: 'health-mental', name: 'Mental Health', seeds: [
+            { url: 'https://www.nimh.nih.gov', label: 'NIMH' },
+            { url: 'https://www.psychologytoday.com', label: 'Psychology Today' },
+          ]},
+          { id: 'health-nutrition', name: 'Nutrition', seeds: [
+            { url: 'https://www.webmd.com', label: 'WebMD' },
+            { url: 'https://medlineplus.gov', label: 'MedlinePlus' },
+          ]},
+        ],
       },
       {
         id: 'food', name: 'Food & Cooking', icon: 'coffee',
         desc: 'Recipes, cooking techniques, and food culture',
-        seeds: ['https://www.allrecipes.com', 'https://www.seriouseats.com', 'https://www.epicurious.com', 'https://www.bbcgoodfood.com', 'https://www.bonappetit.com', 'https://www.simplyrecipes.com'],
+        subcategories: [
+          { id: 'food-recipes', name: 'Recipes', seeds: [
+            { url: 'https://www.allrecipes.com', label: 'AllRecipes' },
+            { url: 'https://www.seriouseats.com', label: 'Serious Eats' },
+            { url: 'https://www.simplyrecipes.com', label: 'Simply Recipes' },
+          ]},
+          { id: 'food-restaurant', name: 'Restaurant', seeds: [
+            { url: 'https://www.bonappetit.com', label: 'Bon Appétit' },
+            { url: 'https://www.epicurious.com', label: 'Epicurious' },
+          ]},
+          { id: 'food-science', name: 'Food Science', seeds: [
+            { url: 'https://www.bbcgoodfood.com', label: 'BBC Good Food' },
+            { url: 'https://www.foodnetwork.com', label: 'Food Network' },
+          ]},
+        ],
       },
       {
         id: 'sports', name: 'Sports & Fitness', icon: 'trendingUp',
         desc: 'Sports news, fitness guides, and athletic training',
-        seeds: ['https://www.espn.com', 'https://www.bbc.com/sport', 'https://olympics.com', 'https://www.runnersworld.com', 'https://www.nba.com', 'https://www.fifa.com'],
+        subcategories: [
+          { id: 'sports-team', name: 'Team Sports', seeds: [
+            { url: 'https://www.espn.com', label: 'ESPN' },
+            { url: 'https://www.nba.com', label: 'NBA' },
+            { url: 'https://www.fifa.com', label: 'FIFA' },
+          ]},
+          { id: 'sports-individual', name: 'Individual', seeds: [
+            { url: 'https://olympics.com', label: 'Olympics' },
+            { url: 'https://www.bbc.com/sport', label: 'BBC Sport' },
+          ]},
+          { id: 'sports-esports', name: 'Esports', seeds: [
+            { url: 'https://www.hltv.org', label: 'HLTV' },
+            { url: 'https://liquipedia.net', label: 'Liquipedia' },
+          ]},
+          { id: 'sports-outdoor', name: 'Outdoor', seeds: [
+            { url: 'https://www.runnersworld.com', label: "Runner's World" },
+            { url: 'https://www.outsideonline.com', label: 'Outside' },
+          ]},
+        ],
       },
       {
-        id: 'travel', name: 'Travel & Geography', icon: 'map',
+        id: 'travel', name: 'Travel & Geography', icon: 'mapPin',
         desc: 'Travel guides, destinations, and geographic exploration',
-        seeds: ['https://www.lonelyplanet.com', 'https://www.nationalgeographic.com', 'https://www.atlasobscura.com', 'https://wikitravel.org', 'https://www.tripadvisor.com', 'https://www.worldnomads.com'],
+        subcategories: [
+          { id: 'travel-destinations', name: 'Destinations', seeds: [
+            { url: 'https://www.lonelyplanet.com', label: 'Lonely Planet' },
+            { url: 'https://www.nationalgeographic.com', label: 'Nat Geo' },
+            { url: 'https://www.tripadvisor.com', label: 'TripAdvisor' },
+          ]},
+          { id: 'travel-backpacking', name: 'Backpacking', seeds: [
+            { url: 'https://www.worldnomads.com', label: 'World Nomads' },
+            { url: 'https://www.atlasobscura.com', label: 'Atlas Obscura' },
+          ]},
+          { id: 'travel-tech', name: 'Travel Tech', seeds: [
+            { url: 'https://wikitravel.org', label: 'Wikitravel' },
+            { url: 'https://www.rome2rio.com', label: 'Rome2Rio' },
+          ]},
+        ],
       },
     ],
   },
@@ -69,22 +208,89 @@ const CATEGORY_GROUPS = [
       {
         id: 'arts', name: 'Arts & Design', icon: 'image',
         desc: 'Visual arts, graphic design, illustration, and museums',
-        seeds: ['https://www.moma.org', 'https://www.behance.net', 'https://dribbble.com', 'https://www.deviantart.com', 'https://www.artsy.net', 'https://www.metmuseum.org'],
+        subcategories: [
+          { id: 'arts-visual', name: 'Visual Arts', seeds: [
+            { url: 'https://www.moma.org', label: 'MoMA' },
+            { url: 'https://www.artsy.net', label: 'Artsy' },
+            { url: 'https://www.metmuseum.org', label: 'Met Museum' },
+          ]},
+          { id: 'arts-film', name: 'Film', seeds: [
+            { url: 'https://www.imdb.com', label: 'IMDb' },
+            { url: 'https://letterboxd.com', label: 'Letterboxd' },
+          ]},
+          { id: 'arts-photography', name: 'Photography', seeds: [
+            { url: 'https://www.deviantart.com', label: 'DeviantArt' },
+            { url: 'https://500px.com', label: '500px' },
+          ]},
+          { id: 'arts-design', name: 'Design', seeds: [
+            { url: 'https://www.behance.net', label: 'Behance' },
+            { url: 'https://dribbble.com', label: 'Dribbble' },
+          ]},
+        ],
       },
       {
-        id: 'music', name: 'Music & Film', icon: 'music',
-        desc: 'Music discovery, film reviews, and entertainment media',
-        seeds: ['https://www.imdb.com', 'https://pitchfork.com', 'https://bandcamp.com', 'https://www.discogs.com', 'https://letterboxd.com', 'https://www.rollingstone.com'],
+        id: 'music', name: 'Music', icon: 'music',
+        desc: 'Music discovery, streaming, theory, and production',
+        subcategories: [
+          { id: 'music-streaming', name: 'Streaming', seeds: [
+            { url: 'https://bandcamp.com', label: 'Bandcamp' },
+            { url: 'https://soundcloud.com', label: 'SoundCloud' },
+          ]},
+          { id: 'music-theory', name: 'Theory', seeds: [
+            { url: 'https://www.musictheory.net', label: 'MusicTheory.net' },
+            { url: 'https://www.hooktheory.com', label: 'Hooktheory' },
+          ]},
+          { id: 'music-production', name: 'Production', seeds: [
+            { url: 'https://www.soundonsound.com', label: 'Sound On Sound' },
+            { url: 'https://www.gearslutz.com', label: 'Gearspace' },
+          ]},
+          { id: 'music-news', name: 'News & Reviews', seeds: [
+            { url: 'https://pitchfork.com', label: 'Pitchfork' },
+            { url: 'https://www.rollingstone.com', label: 'Rolling Stone' },
+            { url: 'https://www.discogs.com', label: 'Discogs' },
+          ]},
+        ],
       },
       {
         id: 'books', name: 'Books & Literature', icon: 'bookOpen',
         desc: 'Book reviews, literary archives, and digital libraries',
-        seeds: ['https://www.goodreads.com', 'https://www.gutenberg.org', 'https://openlibrary.org', 'https://www.loc.gov', 'https://lithub.com', 'https://www.poetryfoundation.org'],
+        subcategories: [
+          { id: 'books-reviews', name: 'Reviews', seeds: [
+            { url: 'https://www.goodreads.com', label: 'Goodreads' },
+            { url: 'https://lithub.com', label: 'Literary Hub' },
+          ]},
+          { id: 'books-authors', name: 'Authors & Poetry', seeds: [
+            { url: 'https://www.poetryfoundation.org', label: 'Poetry Foundation' },
+            { url: 'https://www.penguinrandomhouse.com', label: 'Penguin Random House' },
+          ]},
+          { id: 'books-libraries', name: 'Libraries', seeds: [
+            { url: 'https://openlibrary.org', label: 'Open Library' },
+            { url: 'https://www.gutenberg.org', label: 'Project Gutenberg' },
+            { url: 'https://www.loc.gov', label: 'Library of Congress' },
+          ]},
+        ],
       },
       {
         id: 'gaming', name: 'Gaming', icon: 'monitor',
         desc: 'Game reviews, industry news, and gaming communities',
-        seeds: ['https://www.ign.com', 'https://www.polygon.com', 'https://store.steampowered.com', 'https://www.pcgamer.com', 'https://kotaku.com', 'https://www.gamespot.com'],
+        subcategories: [
+          { id: 'gaming-pc', name: 'PC', seeds: [
+            { url: 'https://store.steampowered.com', label: 'Steam' },
+            { url: 'https://www.pcgamer.com', label: 'PC Gamer' },
+          ]},
+          { id: 'gaming-console', name: 'Console', seeds: [
+            { url: 'https://www.ign.com', label: 'IGN' },
+            { url: 'https://www.gamespot.com', label: 'GameSpot' },
+          ]},
+          { id: 'gaming-indie', name: 'Indie', seeds: [
+            { url: 'https://itch.io', label: 'itch.io' },
+            { url: 'https://www.polygon.com', label: 'Polygon' },
+          ]},
+          { id: 'gaming-dev', name: 'Game Dev', seeds: [
+            { url: 'https://www.gamedeveloper.com', label: 'Game Developer' },
+            { url: 'https://unity.com', label: 'Unity' },
+          ]},
+        ],
       },
     ],
   },
@@ -94,22 +300,96 @@ const CATEGORY_GROUPS = [
       {
         id: 'tech', name: 'Programming', icon: 'code',
         desc: 'Language docs, tutorials, and developer resources',
-        seeds: ['https://go.dev', 'https://developer.mozilla.org', 'https://docs.python.org/3/', 'https://www.rust-lang.org', 'https://www.typescriptlang.org', 'https://deno.land', 'https://bun.sh'],
+        subcategories: [
+          { id: 'tech-aiml', name: 'AI / ML', seeds: [
+            { url: 'https://huggingface.co', label: 'Hugging Face' },
+            { url: 'https://pytorch.org', label: 'PyTorch' },
+            { url: 'https://www.tensorflow.org', label: 'TensorFlow' },
+          ]},
+          { id: 'tech-security', name: 'Cybersecurity', seeds: [
+            { url: 'https://owasp.org', label: 'OWASP' },
+            { url: 'https://www.schneier.com', label: 'Schneier on Security' },
+          ]},
+          { id: 'tech-hardware', name: 'Hardware', seeds: [
+            { url: 'https://www.anandtech.com', label: 'AnandTech' },
+            { url: 'https://www.tomshardware.com', label: "Tom's Hardware" },
+          ]},
+          { id: 'tech-mobile', name: 'Mobile', seeds: [
+            { url: 'https://developer.android.com', label: 'Android Dev' },
+            { url: 'https://developer.apple.com', label: 'Apple Dev' },
+          ]},
+        ],
       },
       {
         id: 'opensource', name: 'Open Source', icon: 'network',
         desc: 'Open-source projects, communities, and foundations',
-        seeds: ['https://github.com/trending', 'https://sr.ht', 'https://codeberg.org', 'https://opensource.org', 'https://apache.org', 'https://www.linuxfoundation.org'],
+        subcategories: [
+          { id: 'opensource-projects', name: 'Projects', seeds: [
+            { url: 'https://github.com/trending', label: 'GitHub Trending' },
+            { url: 'https://sr.ht', label: 'Sourcehut' },
+            { url: 'https://codeberg.org', label: 'Codeberg' },
+          ]},
+          { id: 'opensource-communities', name: 'Communities', seeds: [
+            { url: 'https://opensource.org', label: 'OSI' },
+            { url: 'https://www.fsf.org', label: 'FSF' },
+          ]},
+          { id: 'opensource-tools', name: 'Tools', seeds: [
+            { url: 'https://gitlab.com', label: 'GitLab' },
+            { url: 'https://forgejo.org', label: 'Forgejo' },
+          ]},
+          { id: 'opensource-foundations', name: 'Foundations', seeds: [
+            { url: 'https://apache.org', label: 'Apache' },
+            { url: 'https://www.linuxfoundation.org', label: 'Linux Foundation' },
+          ]},
+        ],
       },
       {
         id: 'infra', name: 'Cloud & DevOps', icon: 'database',
         desc: 'Infrastructure, databases, containers, and monitoring',
-        seeds: ['https://kubernetes.io/docs/', 'https://redis.io/docs/', 'https://www.postgresql.org/docs/', 'https://docs.docker.com', 'https://nginx.com', 'https://prometheus.io/docs/'],
+        subcategories: [
+          { id: 'infra-cloud', name: 'Cloud', seeds: [
+            { url: 'https://kubernetes.io/docs/', label: 'Kubernetes' },
+            { url: 'https://docs.docker.com', label: 'Docker' },
+          ]},
+          { id: 'infra-devops', name: 'DevOps', seeds: [
+            { url: 'https://prometheus.io/docs/', label: 'Prometheus' },
+            { url: 'https://nginx.com', label: 'Nginx' },
+          ]},
+          { id: 'infra-networking', name: 'Networking', seeds: [
+            { url: 'https://www.cloudflare.com/learning/', label: 'Cloudflare Learning' },
+            { url: 'https://www.wireguard.com', label: 'WireGuard' },
+          ]},
+          { id: 'infra-databases', name: 'Databases', seeds: [
+            { url: 'https://redis.io/docs/', label: 'Redis' },
+            { url: 'https://www.postgresql.org/docs/', label: 'PostgreSQL' },
+          ]},
+        ],
       },
       {
         id: 'webdev', name: 'Web & Frontend', icon: 'globe',
         desc: 'Web standards, frameworks, CSS, and browser APIs',
-        seeds: ['https://web.dev', 'https://css-tricks.com', 'https://reactjs.org', 'https://vuejs.org', 'https://svelte.dev', 'https://nextjs.org', 'https://tailwindcss.com', 'https://htmx.org'],
+        subcategories: [
+          { id: 'webdev-frontend', name: 'Frontend', seeds: [
+            { url: 'https://developer.mozilla.org', label: 'MDN' },
+            { url: 'https://web.dev', label: 'web.dev' },
+            { url: 'https://css-tricks.com', label: 'CSS-Tricks' },
+          ]},
+          { id: 'webdev-backend', name: 'Backend', seeds: [
+            { url: 'https://go.dev', label: 'Go' },
+            { url: 'https://docs.python.org/3/', label: 'Python' },
+            { url: 'https://www.rust-lang.org', label: 'Rust' },
+          ]},
+          { id: 'webdev-frameworks', name: 'Frameworks', seeds: [
+            { url: 'https://reactjs.org', label: 'React' },
+            { url: 'https://vuejs.org', label: 'Vue' },
+            { url: 'https://svelte.dev', label: 'Svelte' },
+          ]},
+          { id: 'webdev-apis', name: 'APIs & Tools', seeds: [
+            { url: 'https://htmx.org', label: 'htmx' },
+            { url: 'https://tailwindcss.com', label: 'Tailwind' },
+            { url: 'https://nextjs.org', label: 'Next.js' },
+          ]},
+        ],
       },
     ],
   },
@@ -132,8 +412,10 @@ const DEPTH_DESCRIPTIONS = [
 function getAllSelectedSeeds() {
   const seeds = [];
   for (const cat of CATEGORIES) {
-    if (selectedCategories.has(cat.id)) {
-      seeds.push(...cat.seeds);
+    for (const sub of cat.subcategories) {
+      if (selectedSubs.has(sub.id)) {
+        seeds.push(...sub.seeds.map(s => s.url));
+      }
     }
   }
   const custom = customSeeds.split('\n').map(s => s.trim()).filter(s => s.startsWith('http://') || s.startsWith('https://'));
@@ -143,7 +425,7 @@ function getAllSelectedSeeds() {
 
 function countStats() {
   const seeds = getAllSelectedSeeds();
-  const catCount = selectedCategories.size;
+  const catCount = CATEGORIES.filter(c => c.subcategories.some(s => selectedSubs.has(s.id))).length;
   const customCount = customSeeds.split('\n').map(s => s.trim()).filter(s => s.startsWith('http://') || s.startsWith('https://')).length;
   return { total: seeds.length, catCount, customCount };
 }
@@ -156,11 +438,37 @@ function growthEstimate() {
   return Math.min(n * Math.pow(8, Math.min(d, 3)), w * 60 * 12);
 }
 
+// Category selection state helpers
+function catSelectionState(cat) {
+  const total = cat.subcategories.length;
+  const selected = cat.subcategories.filter(s => selectedSubs.has(s.id)).length;
+  if (selected === 0) return 'none';
+  if (selected === total) return 'full';
+  return 'partial';
+}
+
+function toggleAllSubs(cat) {
+  const state = catSelectionState(cat);
+  if (state === 'full') {
+    cat.subcategories.forEach(s => selectedSubs.delete(s.id));
+  } else {
+    cat.subcategories.forEach(s => selectedSubs.add(s.id));
+  }
+}
+
+function totalSubsInGroup(group) {
+  return group.categories.reduce((n, c) => n + c.subcategories.length, 0);
+}
+
+function selectedSubsInGroup(group) {
+  return group.categories.reduce((n, c) => n + c.subcategories.filter(s => selectedSubs.has(s.id)).length, 0);
+}
+
 export function renderWizard(container) {
-  // Reset state so re-running the wizard starts fresh
   currentStep = 0;
-  selectedCategories.clear();
+  selectedSubs.clear();
   removedSeeds.clear();
+  expandedCategories.clear();
   customSeeds = '';
   settings = { depth: 3, workers: 4 };
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
@@ -197,11 +505,7 @@ function renderProgress() {
 function renderNav() {
   const el = document.getElementById('wizard-nav');
   if (!el) return;
-  if (currentStep === 0) {
-    el.innerHTML = '';
-    return;
-  }
-  if (currentStep === 4) {
+  if (currentStep === 0 || currentStep === 4) {
     el.innerHTML = '';
     return;
   }
@@ -265,7 +569,6 @@ function renderWelcome(el) {
   `;
   document.getElementById('wizard-begin').addEventListener('click', () => { currentStep = 1; update(); });
 
-  // Show append note if node already has data
   api.status().then(s => {
     if (s && s.indexed_docs > 0) {
       const note = document.getElementById('wizard-append-note');
@@ -339,7 +642,6 @@ async function renderIdentity(el) {
       });
     });
 
-    // Node name editing
     const nameInput = document.getElementById('wizard-node-name');
     const saveBtn = document.getElementById('wizard-save-name');
     let savedName = nodeName;
@@ -369,15 +671,10 @@ async function renderIdentity(el) {
 function renderFocus(el) {
   const stats = countStats();
 
-  // Count selected per group
-  function groupSelectedCount(group) {
-    return group.categories.filter(c => selectedCategories.has(c.id)).length;
-  }
-
   el.innerHTML = `
     <div class="wizard-focus">
       <h2>What interests you?</h2>
-      <p class="wizard-subtitle">Pick the topics your node will specialize in. Other nodes in the network cover different topics — together you index the whole web.</p>
+      <p class="wizard-subtitle">Pick the topics your node will specialize in. Click a category to expand its sub-topics.</p>
 
       <div class="wizard-category-groups" id="wizard-categories">
         ${CATEGORY_GROUPS.map(group => `
@@ -386,26 +683,47 @@ function renderFocus(el) {
               <div class="wizard-group-title">
                 ${icon(group.icon, 20)}
                 <strong>${group.name}</strong>
-                <span class="wizard-group-badge">${groupSelectedCount(group)}/${group.categories.length}</span>
+                <span class="wizard-group-badge">${selectedSubsInGroup(group)}/${totalSubsInGroup(group)}</span>
               </div>
               <button class="wizard-group-toggle" data-group-toggle="${group.id}" title="Select all in group">
-                ${groupSelectedCount(group) === group.categories.length ? 'Deselect all' : 'Select all'}
+                ${selectedSubsInGroup(group) === totalSubsInGroup(group) ? 'Deselect all' : 'Select all'}
               </button>
             </div>
             <div class="wizard-group-categories">
-              ${group.categories.map(cat => `
-                <div class="wizard-category ${selectedCategories.has(cat.id) ? 'selected' : ''}" data-id="${cat.id}">
-                  <div class="wizard-category-icon">${icon(cat.icon, 24)}</div>
-                  <div class="wizard-category-info">
-                    <strong>${cat.name}</strong>
-                    <span class="wizard-category-desc">${cat.desc}</span>
-                    <span class="wizard-category-count">${cat.seeds.length} seed sites</span>
+              ${group.categories.map(cat => {
+                const state = catSelectionState(cat);
+                const isExpanded = expandedCategories.has(cat.id);
+                const selectedCount = cat.subcategories.filter(s => selectedSubs.has(s.id)).length;
+                return `
+                <div class="wizard-category ${state !== 'none' ? 'selected' : ''} ${state === 'partial' ? 'partial' : ''} ${isExpanded ? 'expanded' : ''}" data-id="${cat.id}">
+                  <div class="wizard-category-header" data-cat-id="${cat.id}">
+                    <div class="wizard-category-icon">${icon(cat.icon, 24)}</div>
+                    <div class="wizard-category-info">
+                      <strong>${cat.name}</strong>
+                      <span class="wizard-category-desc">${cat.desc}</span>
+                      <span class="wizard-category-count">${cat.subcategories.length} sub-topics · ${selectedCount} selected</span>
+                    </div>
+                    <div class="wizard-category-expand">
+                      <span class="wizard-expand-chevron ${isExpanded ? 'open' : ''}">${icon('chevronDown', 16)}</span>
+                    </div>
                   </div>
-                  <div class="wizard-category-check">
-                    ${selectedCategories.has(cat.id) ? '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2.5"><polyline points="3 8.5 6.5 12 13 4"/></svg>' : ''}
+                  ${isExpanded ? `
+                  <div class="wizard-sub-pills">
+                    ${cat.subcategories.map(sub => `
+                      <button class="wizard-sub-pill ${selectedSubs.has(sub.id) ? 'selected' : ''}" data-sub-id="${sub.id}" title="${sub.seeds.map(s => s.label).join(', ')}">
+                        ${selectedSubs.has(sub.id) ? '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2 6.5 4.5 9 10 3"/></svg>' : ''}
+                        ${sub.name}
+                        <span class="wizard-sub-pill-count">${sub.seeds.length}</span>
+                      </button>
+                    `).join('')}
                   </div>
+                  <div class="wizard-sub-sources">
+                    ${cat.subcategories.filter(s => selectedSubs.has(s.id)).flatMap(s => s.seeds.map(seed => seed.label)).join(' · ') || 'No sources selected'}
+                  </div>
+                  ` : ''}
                 </div>
-              `).join('')}
+              `;
+              }).join('')}
             </div>
           </div>
         `).join('')}
@@ -429,24 +747,34 @@ function renderFocus(el) {
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 6 8 10 12 6"/></svg>
         </button>
         <div class="wizard-seed-accordion-body" id="wizard-seed-list">
-          ${getAllSelectedSeeds().map(url => `
-            <div class="wizard-seed-item" data-seed-url="${url.replace(/"/g, '&quot;')}">
-              <span class="wizard-seed-url">${url}</span>
-              <button class="wizard-seed-remove" data-remove-url="${url.replace(/"/g, '&quot;')}" title="Remove">&times;</button>
-            </div>
-          `).join('')}
+          ${renderSeedAccordionGrouped()}
         </div>
       </div>
       ` : ''}
     </div>
   `;
 
-  // Category click handlers
-  document.querySelectorAll('.wizard-category').forEach(card => {
-    card.addEventListener('click', () => {
-      const id = card.dataset.id;
-      if (selectedCategories.has(id)) selectedCategories.delete(id);
-      else selectedCategories.add(id);
+  // Category header click → toggle expand
+  document.querySelectorAll('.wizard-category-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const catId = header.dataset.catId;
+      if (expandedCategories.has(catId)) {
+        expandedCategories.delete(catId);
+      } else {
+        expandedCategories.add(catId);
+      }
+      renderFocus(el);
+      renderNav();
+    });
+  });
+
+  // Subcategory pill click → toggle individual sub
+  document.querySelectorAll('.wizard-sub-pill').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const subId = pill.dataset.subId;
+      if (selectedSubs.has(subId)) selectedSubs.delete(subId);
+      else selectedSubs.add(subId);
       renderFocus(el);
       renderNav();
     });
@@ -459,10 +787,12 @@ function renderFocus(el) {
       const groupId = btn.dataset.groupToggle;
       const group = CATEGORY_GROUPS.find(g => g.id === groupId);
       if (!group) return;
-      const allSelected = group.categories.every(c => selectedCategories.has(c.id));
+      const allSelected = selectedSubsInGroup(group) === totalSubsInGroup(group);
       group.categories.forEach(c => {
-        if (allSelected) selectedCategories.delete(c.id);
-        else selectedCategories.add(c.id);
+        c.subcategories.forEach(s => {
+          if (allSelected) selectedSubs.delete(s.id);
+          else selectedSubs.add(s.id);
+        });
       });
       renderFocus(el);
       renderNav();
@@ -503,9 +833,44 @@ function renderFocus(el) {
   });
 }
 
+function renderSeedAccordionGrouped() {
+  const sections = [];
+  for (const cat of CATEGORIES) {
+    const activeSubs = cat.subcategories.filter(s => selectedSubs.has(s.id));
+    if (activeSubs.length === 0) continue;
+    const seedItems = activeSubs.flatMap(sub =>
+      sub.seeds.filter(s => !removedSeeds.has(s.url)).map(s => `
+        <div class="wizard-seed-item" data-seed-url="${s.url.replace(/"/g, '&quot;')}">
+          <span class="wizard-seed-url">${s.label} — ${s.url}</span>
+          <button class="wizard-seed-remove" data-remove-url="${s.url.replace(/"/g, '&quot;')}" title="Remove">&times;</button>
+        </div>
+      `)
+    );
+    if (seedItems.length > 0) {
+      sections.push(`
+        <div class="wizard-seed-group-label">${cat.name}</div>
+        ${seedItems.join('')}
+      `);
+    }
+  }
+  // Custom seeds
+  const custom = customSeeds.split('\n').map(s => s.trim()).filter(s => (s.startsWith('http://') || s.startsWith('https://')) && !removedSeeds.has(s));
+  if (custom.length > 0) {
+    sections.push(`
+      <div class="wizard-seed-group-label">Custom</div>
+      ${custom.map(url => `
+        <div class="wizard-seed-item" data-seed-url="${url.replace(/"/g, '&quot;')}">
+          <span class="wizard-seed-url">${url}</span>
+          <button class="wizard-seed-remove" data-remove-url="${url.replace(/"/g, '&quot;')}" title="Remove">&times;</button>
+        </div>
+      `).join('')}
+    `);
+  }
+  return sections.join('');
+}
+
 // ─── Step 3: Tune Settings ────────────────────────────
 async function renderSettings(el) {
-  // Pull actual config from the running node
   try {
     const info = await api.crawlerStatus();
     if (info) {
@@ -579,7 +944,7 @@ function workersDesc(n) {
 // ─── Step 4: Launch & Watch ───────────────────────────
 async function renderLaunch(el) {
   const seeds = getAllSelectedSeeds();
-  const topicNames = CATEGORIES.filter(c => selectedCategories.has(c.id)).map(c => c.name);
+  const topicNames = CATEGORIES.filter(c => c.subcategories.some(s => selectedSubs.has(s.id))).map(c => c.name);
 
   el.innerHTML = `
     <div class="wizard-launch">
@@ -608,11 +973,9 @@ async function renderLaunch(el) {
     </div>
   `;
 
-  // Submit seeds
   try {
     await api.crawlBatch(seeds);
   } catch {
-    // Fallback to individual calls
     for (const url of seeds) {
       try { await api.addSeed(url); } catch { /* skip */ }
     }
@@ -621,7 +984,6 @@ async function renderLaunch(el) {
   const statusEl = document.getElementById('wizard-launch-status');
   if (statusEl) statusEl.textContent = 'Crawling...';
 
-  // Start polling
   let ready = false;
   pollInterval = setInterval(async () => {
     try {
@@ -650,7 +1012,6 @@ async function renderLaunch(el) {
 
   window._pageInterval = pollInterval;
 
-  // Defer event binding to after DOM is rendered
   setTimeout(() => {
     const goBtn = document.getElementById('wizard-go-search');
     if (goBtn) {
