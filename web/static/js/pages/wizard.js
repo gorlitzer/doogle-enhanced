@@ -276,7 +276,12 @@ async function renderIdentity(el) {
         <div class="wizard-id-card">
           <div class="wizard-id-row">
             <span class="wizard-id-label">Node Name</span>
-            <span class="wizard-id-value">${nodeName ? nodeName : '<span style="color:var(--text-muted)">Unnamed Node</span> <span style="font-size:0.8em;color:var(--text-muted)">(set with --name flag)</span>'}</span>
+            <span class="wizard-id-value">
+              <input type="text" id="wizard-node-name" value="${nodeName}" placeholder="Give your node a name..." maxlength="64" class="wizard-name-input">
+              <button class="wizard-save-name-btn" id="wizard-save-name" title="Save name" style="display:none">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>
+              </button>
+            </span>
           </div>
           <div class="wizard-id-row">
             <span class="wizard-id-label">Peer ID</span>
@@ -315,6 +320,28 @@ async function renderIdentity(el) {
           btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>';
         }, 1500);
       });
+    });
+
+    // Node name editing
+    const nameInput = document.getElementById('wizard-node-name');
+    const saveBtn = document.getElementById('wizard-save-name');
+    let savedName = nodeName;
+    nameInput.addEventListener('input', () => {
+      saveBtn.style.display = nameInput.value.trim() !== savedName ? 'inline-flex' : 'none';
+    });
+    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveBtn.click(); });
+    saveBtn.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      if (!name) return;
+      try {
+        await api.setNodeName(name);
+        savedName = name;
+        saveBtn.style.display = 'none';
+        saveBtn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>';
+        setTimeout(() => {
+          saveBtn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>';
+        }, 1500);
+      } catch { /* ignore */ }
     });
   } catch (err) {
     el.innerHTML = `<div class="wizard-identity"><div class="wizard-error">Failed to load node info: ${err.message}</div></div>`;

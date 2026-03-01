@@ -49,4 +49,7 @@ export const api = {
   document(id) {
     return fetchJSON(`/api/admin/documents/${encodeURIComponent(id)}`);
   },
+  setNodeName(name) {
+    return postJSON('/api/config/name', { name });
+  },
 };

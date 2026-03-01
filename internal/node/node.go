@@ -224,6 +224,7 @@ func (n *Node) init() error {
 		IndexStore:   bleveIdx,
 		ReportURL:    n.ReportURL,
 		TrustSummary: n.trustManager.Summary,
+		SetNodeName:  func(name string) { n.cfg.NodeName = name },
 	})
 
 	return nil

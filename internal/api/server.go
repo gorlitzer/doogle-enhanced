@@ -48,6 +48,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		r.Post("/crawl", CrawlHandler(deps))
 		r.Post("/crawl/batch", BatchCrawlHandler(deps))
 		r.Post("/report", ReportHandler(deps))
+		r.Post("/config/name", SetNodeNameHandler(deps))
 
 		// Admin endpoints
 		r.Route("/admin", func(r chi.Router) {

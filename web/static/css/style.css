@@ -2178,6 +2178,36 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   color: var(--text-primary);
   word-break: break-all;
 }
+.wizard-name-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-input, var(--bg-primary));
+  color: var(--text-primary);
+  font-size: 0.95em;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.wizard-name-input:focus {
+  border-color: var(--accent);
+}
+.wizard-save-name-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm, 4px);
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--accent);
+  margin-left: 6px;
+  transition: background var(--transition);
+}
+.wizard-save-name-btn:hover {
+  background: rgba(0,212,255,0.1);
+}
 .wizard-copy-btn {
   display: inline-flex;
   align-items: center;
