@@ -1663,7 +1663,8 @@ function renderWelcome(el) {
         </svg>
       </div>
       <h1>Welcome to <a href="#/" class="wizard-doogle-link" id="wizard-doogle">Doogle</a></h1>
-      <p>Your node is ready to join the decentralized web. Pick the topics you care about, and Doogle will build a search index tailored to your interests. Each node specializes — together, the network covers everything.</p>
+      <p>Doogle is a decentralized search engine — no central server, no tracking, no gatekeepers. Every node crawls a slice of the web and shares what it finds with the network.</p>
+      <p>This wizard will walk you through <strong>4 quick steps</strong>: name your node, choose topics to crawl, review settings, and launch. It takes about a minute, and you can always change everything later.</p>
       <p class="wizard-append-note" id="wizard-append-note" style="display:none">You already have indexed data. Running the wizard again will <strong>add</strong> new topics to your existing index — nothing gets deleted.</p>
       <button class="btn btn-primary wizard-begin-btn" id="wizard-begin">Begin Setup</button>
     </div>
@@ -1695,7 +1696,7 @@ async function renderIdentity(el) {
     el.innerHTML = `
       <div class="wizard-identity">
         <h2>Your Node</h2>
-        <p class="wizard-subtitle">This is your node's identity on the P2P network.</p>
+        <p class="wizard-subtitle">Every Doogle node has a unique cryptographic identity that lets it communicate with peers. Give yours a name so you can recognize it. The Peer ID is generated automatically and persists across restarts.</p>
 
         <div class="wizard-id-card">
           <div class="wizard-id-row">
@@ -1731,7 +1732,7 @@ async function renderIdentity(el) {
 
         ${peers === 0 ? `
           <div class="wizard-info-note">
-            ${icon('radio', 16)} No peers connected yet. mDNS auto-discovery will find nearby nodes automatically.
+            ${icon('radio', 16)} No peers connected yet — that's normal for a fresh node. mDNS will auto-discover nearby nodes on your local network, and the DHT will find peers across the internet. Peer count will grow over time.
           </div>
         ` : ''}
       </div>
@@ -1777,8 +1778,8 @@ function renderFocus(el) {
 
   el.innerHTML = `
     <div class="wizard-focus">
-      <h2>What interests you?</h2>
-      <p class="wizard-subtitle">Pick the topics your node will specialize in. Expand a group, then select whole categories or individual sub-topics.</p>
+      <h2>What should your node crawl?</h2>
+      <p class="wizard-subtitle">Each topic you select adds seed URLs — starting points your crawler will visit and follow links from. The more topics you pick, the broader your index. Don't overthink it: you can add or remove seeds anytime from the Admin Dashboard.</p>
 
       <div class="wizard-category-groups" id="wizard-categories">
         ${CATEGORY_GROUPS.map(group => {
@@ -2035,8 +2036,8 @@ async function renderSettings(el) {
 
   el.innerHTML = `
     <div class="wizard-settings">
-      <h2>Tune Settings</h2>
-      <p class="wizard-subtitle">These reflect your node's current configuration.</p>
+      <h2>Crawl Settings</h2>
+      <p class="wizard-subtitle"><strong>Depth</strong> controls how many links deep the crawler follows from each seed. <strong>Workers</strong> is the number of parallel crawlers. Higher values mean faster crawling but use more CPU, memory, and bandwidth. These are preview-only — to change them permanently, edit your node config or use the Admin Dashboard.</p>
 
       <div class="wizard-setting">
         <label>Crawl Depth: <strong id="depth-val">${settings.depth}</strong></label>
@@ -2057,7 +2058,7 @@ async function renderSettings(el) {
       </div>
 
       <div class="wizard-info-note">
-        ${icon('alertTriangle', 16)} Settings are informational only. Changing them here does not modify the running node config.
+        ${icon('alertTriangle', 16)} These sliders show your current config but don't change it. To modify crawl depth or workers permanently, update your config file or use the Admin Dashboard after setup.
       </div>
     </div>
   `;
@@ -2100,7 +2101,8 @@ async function renderLaunch(el) {
 
   el.innerHTML = `
     <div class="wizard-launch">
-      <h2>Launch</h2>
+      <h2>Crawling</h2>
+      <p class="wizard-subtitle" style="margin-bottom:12px">Your seed URLs are being submitted to the crawl queue. The crawler will visit each page, extract content and links, score quality, and add good pages to your search index. This runs in the background — you can start searching as soon as the first pages are indexed.</p>
       ${topicNames.length > 0 ? `<p class="wizard-launch-topics">Specializing in: <strong>${topicNames.join(', ')}</strong></p>` : ''}
       <div class="wizard-launch-status" id="wizard-launch-status">Adding ${seeds.length} seeds to crawl queue...</div>
       <div class="wizard-progress-bar"><div class="wizard-progress-fill" id="wizard-progress-fill" style="width:0%"></div></div>
@@ -2119,9 +2121,9 @@ async function renderLaunch(el) {
         </div>
       </div>
       <p class="wizard-launch-note" id="wizard-launch-note" style="display:none">
-        This is just a starting point. Seeds are living things — some will grow and flourish,
-        others will go stale or disappear. You can always add new seeds, remove old ones, and
-        reshape your index from the Admin Dashboard. Your node evolves with the web.
+        These seeds are just a starting point — the crawler will discover thousands more pages by following links.
+        Over time some sites will grow, others will go stale or disappear. You can always add new seeds,
+        remove old ones, and reshape your index from the Admin Dashboard. Your node evolves with the web.
       </p>
       <div class="wizard-launch-actions" id="wizard-launch-actions" style="display:none">
         <button class="btn btn-primary" id="wizard-go-search">Go to Search</button>
