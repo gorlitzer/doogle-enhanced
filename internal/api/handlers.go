@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -168,6 +169,43 @@ func DocumentDetailHandler(deps *Deps) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, doc)
+	}
+}
+
+// BatchCrawlHandler handles POST /api/crawl/batch with JSON body {"urls": [...]}
+func BatchCrawlHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			URLs []string `json:"urls"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		if len(body.URLs) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no URLs provided"})
+			return
+		}
+
+		if len(body.URLs) > 200 {
+			body.URLs = body.URLs[:200]
+		}
+
+		queued := 0
+		for _, u := range body.URLs {
+			u = strings.TrimSpace(u)
+			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+				deps.CrawlSeed(u)
+				queued++
+			}
+		}
+
+		writeJSON(w, http.StatusAccepted, map[string]interface{}{
+			"status": "queued",
+			"queued": queued,
+			"total":  len(body.URLs),
+		})
 	}
 }
 
