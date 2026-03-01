@@ -279,7 +279,7 @@ make run`, 'bash'))}
 
 const archCardDetails = [
   // Application layer
-  { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 5 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
+  { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 10 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
   { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
   { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, synonyms, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>` },
@@ -1138,7 +1138,7 @@ function renderConfig(el) {
             <tr><th>Component</th><th>Minimum</th><th>Recommended</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td>OS</td><td colspan="2">Linux, macOS, Windows</td><td>Docker image uses Alpine</td></tr>
+            <tr><td>OS</td><td colspan="2">macOS (tested), Linux / Windows (untested)</td><td>Go cross-compiles; see <a href="#" onclick="document.querySelector('[data-tab=platforms]').click();return false">Platforms</a></td></tr>
             <tr><td>Go</td><td colspan="2">1.22+</td><td>Build from source only</td></tr>
             <tr><td>CPU</td><td>1 core</td><td>2-4 cores</td><td>More cores = faster crawling</td></tr>
             <tr><td>RAM</td><td>256 MB</td><td>512 MB - 1 GB</td><td>Scales with index size + workers</td></tr>
@@ -1300,33 +1300,8 @@ const testedPlatforms = [
     icon: 'monitor',
     color: 'var(--accent)',
     devices: [
-      { device: 'MacBook Pro 14" (M3 Pro)', os: 'macOS 15.3 Sequoia', arch: 'arm64', status: 'verified', notes: 'Primary development machine. All features tested.' },
-      { device: 'MacBook Air 13" (M2)', os: 'macOS 14.6 Sonoma', arch: 'arm64', status: 'verified', notes: 'Full build + crawl + search verified.' },
-      { device: 'Mac Mini (M1)', os: 'macOS 13.6 Ventura', arch: 'arm64', status: 'verified', notes: 'Tested as always-on node. Runs stable for weeks.' },
-      { device: 'MacBook Pro 16" (Intel)', os: 'macOS 13.6 Ventura', arch: 'amd64', status: 'verified', notes: 'Intel build works. Slightly higher RAM usage.' },
-    ],
-  },
-  {
-    os: 'Linux',
-    icon: 'code',
-    color: 'var(--green)',
-    devices: [
-      { device: 'Ubuntu Desktop 24.04', os: 'Ubuntu 24.04 LTS', arch: 'amd64', status: 'verified', notes: 'Full test suite passes. Docker compose tested.' },
-      { device: 'Debian 12 (Bookworm)', os: 'Debian 12', arch: 'amd64', status: 'verified', notes: 'Server deployment target. SystemD service file works.' },
-      { device: 'Raspberry Pi 4 (4GB)', os: 'Raspberry Pi OS 64-bit', arch: 'arm64', status: 'verified', notes: 'Runs well for small indexes (<50K docs). Slower crawl speed.' },
-      { device: 'Raspberry Pi 5 (8GB)', os: 'Raspberry Pi OS 64-bit', arch: 'arm64', status: 'verified', notes: 'Good performance. Recommended for Pi deployments.' },
-      { device: 'Fedora 40 Workstation', os: 'Fedora 40', arch: 'amd64', status: 'verified', notes: 'Build from source and Docker both tested.' },
-      { device: 'Alpine Linux (Docker)', os: 'Alpine 3.19', arch: 'amd64/arm64', status: 'verified', notes: 'Official Docker image base. Minimal footprint.' },
-    ],
-  },
-  {
-    os: 'Windows',
-    icon: 'monitor',
-    color: 'var(--blue)',
-    devices: [
-      { device: 'Windows 11 (native)', os: 'Windows 11 23H2', arch: 'amd64', status: 'verified', notes: 'Native Go build. All features work. Use PowerShell or CMD.' },
-      { device: 'Windows 11 (WSL2)', os: 'Ubuntu 22.04 on WSL2', arch: 'amd64', status: 'verified', notes: 'Recommended for Windows. Linux performance, Windows convenience.' },
-      { device: 'Windows 10 (WSL2)', os: 'Ubuntu 22.04 on WSL2', arch: 'amd64', status: 'community', notes: 'Reported working by community. Not officially tested.' },
+      { device: 'Apple Silicon Mac', os: 'macOS 15 Sequoia', arch: 'arm64', status: 'verified', notes: 'Primary development platform. All features tested.' },
+      { device: 'Intel Mac', os: 'macOS', arch: 'amd64', status: 'untested', notes: 'Should build fine via Go. Not yet tested — help wanted!' },
     ],
   },
   {
@@ -1334,26 +1309,44 @@ const testedPlatforms = [
     icon: 'database',
     color: 'var(--purple)',
     devices: [
-      { device: 'Docker Desktop (macOS)', os: 'Docker 25.x', arch: 'arm64/amd64', status: 'verified', notes: 'Docker Compose with 1-3 node clusters tested.' },
-      { device: 'Docker Desktop (Windows)', os: 'Docker 25.x', arch: 'amd64', status: 'verified', notes: 'Works via WSL2 backend. Compose tested.' },
-      { device: 'Docker Engine (Linux)', os: 'Docker 24.x / 25.x', arch: 'amd64/arm64', status: 'verified', notes: 'Production target. Rootless mode supported.' },
-      { device: 'Podman (Linux)', os: 'Podman 4.x', arch: 'amd64', status: 'community', notes: 'Reported working with podman-compose. Not officially tested.' },
+      { device: 'Docker Desktop (macOS)', os: 'Docker 25.x', arch: 'arm64', status: 'verified', notes: 'Docker Compose multi-node clusters tested.' },
+      { device: 'Docker Engine (Linux)', os: 'Docker 24.x+', arch: 'amd64/arm64', status: 'untested', notes: 'Dockerfile exists but not tested on native Linux. Help wanted!' },
+    ],
+  },
+  {
+    os: 'Linux',
+    icon: 'code',
+    color: 'var(--green)',
+    devices: [
+      { device: 'Linux (amd64)', os: 'Any modern distro', arch: 'amd64', status: 'untested', notes: 'Go cross-compiles cleanly. Should work — needs someone to confirm.' },
+      { device: 'Linux (arm64)', os: 'Raspberry Pi / ARM servers', arch: 'arm64', status: 'untested', notes: 'Go supports arm64. Not yet tested — help wanted!' },
+    ],
+  },
+  {
+    os: 'Windows',
+    icon: 'monitor',
+    color: 'var(--blue)',
+    devices: [
+      { device: 'Windows (WSL2)', os: 'Ubuntu on WSL2', arch: 'amd64', status: 'untested', notes: 'Should behave like native Linux. Not yet tested.' },
+      { device: 'Windows (native)', os: 'Windows 10/11', arch: 'amd64', status: 'untested', notes: 'Go supports Windows. Needs testing — help wanted!' },
     ],
   },
 ];
 
 function renderPlatforms(el) {
+  const verifiedCount = testedPlatforms.reduce((n, p) => n + p.devices.filter(d => d.status === 'verified').length, 0);
+  const untestedCount = testedPlatforms.reduce((n, p) => n + p.devices.filter(d => d.status !== 'verified').length, 0);
+
   el.innerHTML = `
     <div class="docs-section">
       <div class="docs-section-header">
         ${icon('monitor', 24, 'var(--accent)')}
-        <h2>Tested Devices & Platforms</h2>
+        <h2>Platform Support</h2>
       </div>
-      <p class="docs-section-desc">Devices and OS combinations where Doogle has been verified to build and run correctly. This list grows as we test on more hardware.</p>
+      <p class="docs-section-desc">We're being honest here. Only platforms we've actually tested are marked as verified. Everything else <em>should</em> work (Go cross-compiles cleanly) but we haven't confirmed it yet. If you test on a new platform, let us know!</p>
 
       <div class="platform-legend">
-        <span class="platform-legend-item"><span class="badge badge-green">verified</span> Tested by maintainers</span>
-        <span class="platform-legend-item"><span class="badge badge-blue">community</span> Reported working by users</span>
+        <span class="platform-legend-item"><span class="badge badge-green">verified</span> Actually tested by us</span>
         <span class="platform-legend-item"><span class="badge badge-amber">untested</span> Should work, not yet confirmed</span>
       </div>
 
@@ -1362,14 +1355,13 @@ function renderPlatforms(el) {
           <h3 class="platform-group-title">
             <span class="platform-group-icon" style="color:${platform.color}">${icon(platform.icon, 20)}</span>
             ${platform.os}
-            <span class="platform-count">${platform.devices.length} tested</span>
           </h3>
           <div class="table-wrap">
             <table class="platform-table">
               <thead>
                 <tr>
-                  <th>Device / Environment</th>
-                  <th>OS Version</th>
+                  <th>Environment</th>
+                  <th>OS</th>
                   <th>Arch</th>
                   <th>Status</th>
                   <th>Notes</th>
@@ -1381,7 +1373,7 @@ function renderPlatforms(el) {
                     <td><strong>${escapeHtml(d.device)}</strong></td>
                     <td>${escapeHtml(d.os)}</td>
                     <td><code>${d.arch}</code></td>
-                    <td><span class="badge ${d.status === 'verified' ? 'badge-green' : d.status === 'community' ? 'badge-blue' : 'badge-amber'}">${d.status}</span></td>
+                    <td><span class="badge ${d.status === 'verified' ? 'badge-green' : 'badge-amber'}">${d.status}</span></td>
                     <td class="platform-notes">${escapeHtml(d.notes)}</td>
                   </tr>
                 `).join('')}
@@ -1397,29 +1389,30 @@ function renderPlatforms(el) {
         ${icon('cpu', 24, 'var(--green)')}
         <h2>Build Targets</h2>
       </div>
-      <p class="docs-section-desc">Doogle compiles to a single static binary. Cross-compilation is supported via Go's built-in toolchain.</p>
+      <p class="docs-section-desc">Doogle compiles to a single binary. Go supports cross-compilation out of the box, but we've only verified the target we develop on. The rest should compile fine — we just haven't run them yet.</p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr><th>GOOS</th><th>GOARCH</th><th>Status</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td>linux</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Primary build target</td></tr>
-            <tr><td>linux</td><td>arm64</td><td><span class="badge badge-green">verified</span></td><td>Raspberry Pi, ARM servers</td></tr>
-            <tr><td>darwin</td><td>arm64</td><td><span class="badge badge-green">verified</span></td><td>Apple Silicon Macs</td></tr>
-            <tr><td>darwin</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Intel Macs</td></tr>
-            <tr><td>windows</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Native Windows build</td></tr>
-            <tr><td>linux</td><td>arm/v7</td><td><span class="badge badge-amber">untested</span></td><td>Older 32-bit ARM (Pi 2/3)</td></tr>
-            <tr><td>freebsd</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Should work (Go supports it)</td></tr>
+            <tr><td>darwin</td><td>arm64</td><td><span class="badge badge-green">verified</span></td><td>Apple Silicon Macs — primary dev target</td></tr>
+            <tr><td>darwin</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Intel Macs</td></tr>
+            <tr><td>linux</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Most common server/desktop target</td></tr>
+            <tr><td>linux</td><td>arm64</td><td><span class="badge badge-amber">untested</span></td><td>Raspberry Pi 4/5, ARM servers</td></tr>
+            <tr><td>windows</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Native Windows build</td></tr>
           </tbody>
         </table>
       </div>
 
       <h3 style="margin-top:24px">Cross-Compile</h3>
-      ${codeBlock(`# Build for Linux ARM64 (e.g. Raspberry Pi)
+      ${codeBlock(`# Build for Linux AMD64
+GOOS=linux GOARCH=amd64 go build -o doogle-linux ./cmd/doogle
+
+# Build for Linux ARM64 (e.g. Raspberry Pi)
 GOOS=linux GOARCH=arm64 go build -o doogle-arm64 ./cmd/doogle
 
-# Build for Windows from macOS/Linux
+# Build for Windows
 GOOS=windows GOARCH=amd64 go build -o doogle.exe ./cmd/doogle`, 'bash')}
     </div>
 
@@ -1428,21 +1421,33 @@ GOOS=windows GOARCH=amd64 go build -o doogle.exe ./cmd/doogle`, 'bash')}
         ${icon('globe', 24, 'var(--blue)')}
         <h2>Browser Compatibility</h2>
       </div>
-      <p class="docs-section-desc">The Doogle web UI runs in any modern browser. Tested on:</p>
+      <p class="docs-section-desc">The web UI uses vanilla JS with ES modules. It should work in any modern browser, but here's what we've actually tested.</p>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Browser</th><th>Version</th><th>Status</th><th>Notes</th></tr>
+            <tr><th>Browser</th><th>Status</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td>Chrome / Chromium</td><td>120+</td><td><span class="badge badge-green">verified</span></td><td>Primary test browser</td></tr>
-            <tr><td>Firefox</td><td>120+</td><td><span class="badge badge-green">verified</span></td><td>Full compatibility</td></tr>
-            <tr><td>Safari</td><td>17+</td><td><span class="badge badge-green">verified</span></td><td>macOS + iOS</td></tr>
-            <tr><td>Edge</td><td>120+</td><td><span class="badge badge-green">verified</span></td><td>Chromium-based, same as Chrome</td></tr>
-            <tr><td>Safari (iOS)</td><td>17+</td><td><span class="badge badge-blue">community</span></td><td>Mobile layout responsive</td></tr>
-            <tr><td>Chrome (Android)</td><td>120+</td><td><span class="badge badge-blue">community</span></td><td>Mobile layout responsive</td></tr>
+            <tr><td>Chrome / Chromium</td><td><span class="badge badge-green">verified</span></td><td>Primary development browser</td></tr>
+            <tr><td>Safari (macOS)</td><td><span class="badge badge-green">verified</span></td><td>Tested on macOS Sequoia</td></tr>
+            <tr><td>Firefox</td><td><span class="badge badge-amber">untested</span></td><td>Should work — standard APIs only</td></tr>
+            <tr><td>Edge</td><td><span class="badge badge-amber">untested</span></td><td>Chromium-based, likely identical to Chrome</td></tr>
+            <tr><td>Mobile browsers</td><td><span class="badge badge-amber">untested</span></td><td>Layout is responsive but not yet tested on phones</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('heart', 24, 'var(--red)')}
+        <h2>Help Us Test</h2>
+      </div>
+      <p class="docs-section-desc">We've only verified Doogle on macOS (Apple Silicon) so far. If you run it on Linux, Windows, Raspberry Pi, or anything else — we'd love to hear about it.</p>
+      <div class="docs-env-grid">
+        ${infoCard('code', 'Run It', 'Build from source or use Docker on your platform. Try crawling, searching, and multi-node P2P.', 'var(--accent)')}
+        ${infoCard('megaphone', 'Report Back', 'Open an issue or PR on GitHub with your platform, what worked, and what didn\'t. We\'ll mark it as verified.', 'var(--green)')}
+        ${infoCard('shield', 'Fix Issues', 'If something breaks on your platform, even better — send a fix. Platform-specific patches are always welcome.', 'var(--blue)')}
       </div>
     </div>
   `;

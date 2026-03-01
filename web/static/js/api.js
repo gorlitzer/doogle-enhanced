@@ -62,4 +62,10 @@ export const api = {
     return fetch(BASE + '/api/admin/data?confirm=yes', { method: 'DELETE' })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
   },
+  report(url, reason, detail) {
+    return postJSON('/api/report', { url, reason, detail });
+  },
+  trust() {
+    return fetchJSON('/api/admin/trust');
+  },
 };
