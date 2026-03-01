@@ -280,22 +280,13 @@ Dump and restore are **standalone** — they operate on raw data directories and
 ### Makefile Reference
 
 ```bash
-make help                       # show all commands
-make build                      # compile optimized binary to bin/
 make run                        # build + launch node (API on :8080)
-make run ARGS='--port 4002'     # build + launch with extra flags
+make run ARGS='--port 4002'     # pass extra flags
 make test                       # run all tests
-make fmt                        # format Go source files
-make lint                       # static analysis (go vet)
 make dev                        # Docker backend + hot-reload UI on :3000
-make watch                      # hot-reload UI only (backend must be running)
 make docker                     # build + start 3-node cluster
-make docker-stop                # stop cluster
-make docker-logs                # tail cluster logs
-make backup                     # snapshot data to timestamped archive
-make restore BACKUP=<file>      # restore from backup
-make clean                      # remove bin/ (keeps data)
-make nuke                       # remove bin/ AND data/ (irreversible)
+make build                      # compile binary without running
+make clean                      # remove build artifacts
 ```
 
 ### Examples
