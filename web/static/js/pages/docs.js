@@ -258,9 +258,13 @@ function renderQuickstart(el) {
 go version`, 'bash')}
             <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">You'll also need <code>make</code> and <code>git</code>. These are pre-installed on most systems. On Windows, use WSL2 or the Docker method instead.</p>
           `)}
-          ${stepCard(2, 'Clone and start', codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
+          ${stepCard(2, 'Clone and start', `
+            ${codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-make run`, 'bash'))}
+make run`, 'bash')}
+            <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">No <code>make</code>? Run directly:</p>
+            ${codeBlock(`go build -o bin/doogle ./cmd/doogle && ./bin/doogle`, 'bash')}
+          `)}
           ${stepCard(3, 'Open the dashboard', `
             <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
           `)}
