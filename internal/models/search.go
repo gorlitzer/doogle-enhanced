@@ -7,12 +7,11 @@ import (
 // ParsedQuery represents a structured, analyzed search query.
 type ParsedQuery struct {
 	Raw          string              // original query string
-	Terms        []string            // cleaned, stop-words removed
-	Phrases      []string            // from "quoted strings"
-	SiteDomain   string              // from site:example.com
-	Language     string              // from lang:xx filter (empty = any)
-	Synonyms     map[string][]string // term → expansions
-	ExcludeTerms []string            // from -term (NOT operator)
+	Terms        []string // cleaned, stop-words removed
+	Phrases      []string // from "quoted strings"
+	SiteDomain   string   // from site:example.com
+	Language     string   // from lang:xx filter (empty = any)
+	ExcludeTerms []string // from -term (NOT operator)
 	OrGroups     [][]string          // groups of OR'd terms
 	InTitle      string              // from intitle:term
 	InURL        string              // from inurl:term

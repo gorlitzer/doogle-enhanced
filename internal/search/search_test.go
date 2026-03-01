@@ -166,23 +166,6 @@ func TestParseQuery_StopWords(t *testing.T) {
 	}
 }
 
-func TestParseQuery_Synonyms(t *testing.T) {
-	pq := ParseQuery("golang")
-	syns, ok := pq.Synonyms["golang"]
-	if !ok {
-		t.Fatal("expected synonyms for 'golang'")
-	}
-	found := false
-	for _, s := range syns {
-		if s == "go" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("expected 'go' in synonyms for 'golang'")
-	}
-}
-
 func TestParseQuery_Fuzzy(t *testing.T) {
 	short := ParseQuery("go web")
 	if !short.UseFuzzy {

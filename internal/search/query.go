@@ -46,69 +46,10 @@ var stopWords = map[string]bool{
 	"it": true, "its": true, "they": true, "them": true, "their": true,
 }
 
-// synonymMap maps common abbreviations and synonyms.
-var synonymMap = map[string][]string{
-	"js":            {"javascript"},
-	"javascript":    {"js"},
-	"ts":            {"typescript"},
-	"typescript":    {"ts"},
-	"py":            {"python"},
-	"python":        {"py"},
-	"rb":            {"ruby"},
-	"ruby":          {"rb"},
-	"k8s":           {"kubernetes"},
-	"kubernetes":    {"k8s"},
-	"k3s":           {"kubernetes"},
-	"docs":          {"documentation"},
-	"documentation": {"docs"},
-	"doc":           {"documentation", "docs"},
-	"api":           {"interface", "endpoint"},
-	"db":            {"database"},
-	"database":      {"db"},
-	"sql":           {"database", "query"},
-	"nosql":         {"database", "mongodb", "redis"},
-	"ui":            {"interface", "frontend"},
-	"ux":            {"user experience", "usability"},
-	"frontend":      {"front-end", "client-side"},
-	"backend":       {"back-end", "server-side"},
-	"devops":        {"deployment", "infrastructure"},
-	"ci":            {"continuous integration"},
-	"cd":            {"continuous deployment"},
-	"ml":            {"machine learning"},
-	"ai":            {"artificial intelligence"},
-	"dl":            {"deep learning"},
-	"nlp":           {"natural language processing"},
-	"css":           {"stylesheet", "styling"},
-	"html":          {"markup", "webpage"},
-	"react":         {"reactjs"},
-	"reactjs":       {"react"},
-	"vue":           {"vuejs"},
-	"vuejs":         {"vue"},
-	"node":          {"nodejs"},
-	"nodejs":        {"node"},
-	"golang":        {"go"},
-	"go":            {"golang"},
-	"rust":          {"rustlang"},
-	"rustlang":      {"rust"},
-	"car":           {"automobile", "vehicle"},
-	"automobile":    {"car", "vehicle"},
-	"fix":           {"repair", "resolve", "patch"},
-	"error":         {"bug", "issue", "problem"},
-	"bug":           {"error", "issue", "defect"},
-	"tutorial":      {"guide", "howto", "walkthrough"},
-	"guide":         {"tutorial", "howto"},
-	"howto":         {"tutorial", "guide"},
-	"install":       {"setup", "installation"},
-	"setup":         {"install", "configure"},
-	"config":        {"configuration", "settings"},
-	"configuration": {"config", "settings"},
-}
-
 // ParseQuery processes a raw query string into a structured ParsedQuery.
 func ParseQuery(raw string) *models.ParsedQuery {
 	pq := &models.ParsedQuery{
-		Raw:      raw,
-		Synonyms: make(map[string][]string),
+		Raw: raw,
 	}
 
 	remaining := strings.TrimSpace(raw)
@@ -228,17 +169,10 @@ func ParseQuery(raw string) *models.ParsedQuery {
 		pq.Terms = append(pq.Terms, lower)
 	}
 
-	// 4. Look up synonyms
-	for _, term := range pq.Terms {
-		if syns, ok := synonymMap[term]; ok {
-			pq.Synonyms[term] = syns
-		}
-	}
-
-	// 5. Fuzzy for short queries
+	// 4. Fuzzy for short queries
 	pq.UseFuzzy = len(pq.Terms) <= 3
 
-	// 6. Build cleaned query (for fallback / backward compat)
+	// 5. Build cleaned query (for fallback / backward compat)
 	var cleanParts []string
 	cleanParts = append(cleanParts, pq.Terms...)
 	for _, p := range pq.Phrases {
