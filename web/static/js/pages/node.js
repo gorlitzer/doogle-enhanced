@@ -1,5 +1,6 @@
 // Doogle v2 — Node Status (Admin Overview)
 import { api } from '../api.js';
+import { icon } from '../components.js';
 
 export function renderNode(container) {
   container.innerHTML = `
@@ -80,7 +81,7 @@ async function loadStatus() {
   } catch (err) {
     const content = document.getElementById('node-content');
     if (content) {
-      content.innerHTML = `<div class="empty-state"><div class="icon">!</div><p>Failed to load status: ${err.message}</p></div>`;
+      content.innerHTML = `<div class="empty-state">${icon('alertTriangle', 32, 'var(--red)')}<p>Failed to load status: ${err.message}</p></div>`;
     }
   }
 }
