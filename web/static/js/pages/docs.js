@@ -252,19 +252,13 @@ function renderQuickstart(el) {
     } else {
       methodContent.innerHTML = `
         <div class="docs-steps">
-          ${stepCard(1, 'Install Go 1.22+', `
-            <p>Doogle is written in Go. Download the installer for your platform from <a href="https://go.dev/dl/" target="_blank">go.dev/dl</a> — it covers macOS, Linux, and Windows.</p>
-            ${codeBlock(`# Verify installation
-go version`, 'bash')}
-            <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">You'll also need <code>make</code> and <code>git</code>. These are pre-installed on most systems. On Windows, use WSL2 or the Docker method instead.</p>
-          `)}
-          ${stepCard(2, 'Clone and start', `
+          ${stepCard(1, 'Clone and install dependencies', `
             ${codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-make run`, 'bash')}
-            <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">No <code>make</code>? Run directly:</p>
-            ${codeBlock(`go build -o bin/doogle ./cmd/doogle && ./bin/doogle`, 'bash')}
+make setup`, 'bash')}
+            <p style="font-size:0.85em;color:var(--text-muted);margin-top:8px">This checks for <code>git</code>, <code>curl</code>, and <code>docker</code>, and auto-installs Go locally if you don't have it. Works on macOS and Linux. On Windows, use WSL2 or the Docker method.</p>
           `)}
+          ${stepCard(2, 'Start the node', codeBlock(`make run`, 'bash'))}
           ${stepCard(3, 'Open the dashboard', `
             <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
           `)}
