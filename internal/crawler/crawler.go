@@ -35,10 +35,16 @@ type Crawler struct {
 	respectRobots  bool
 	workers        int
 
+	// Headless browser rendering
+	browser           *BrowserPool
+	enableHeadless    bool
+	headlessThreshold int
+
 	// Stats
 	totalCrawled  atomic.Int64
 	totalFailed   atomic.Int64
 	activeWorkers atomic.Int64
+	jsRendered    atomic.Int64
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -47,37 +53,58 @@ type Crawler struct {
 
 // Config for the crawler.
 type Config struct {
-	Workers        int
-	UserAgent      string
-	RequestTimeout time.Duration
-	RateLimit      int
-	MaxDepth       int
-	RespectRobots  bool
+	Workers           int
+	UserAgent         string
+	RequestTimeout    time.Duration
+	RateLimit         int
+	MaxDepth          int
+	RespectRobots     bool
+	EnableHeadless    bool
+	HeadlessThreshold int
+	HeadlessTimeout   time.Duration
 }
 
 // New creates a new crawler engine.
 func New(cfg Config, scheduler *Scheduler, onCrawled OnDocumentCrawled) *Crawler {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &Crawler{
-		scheduler:      scheduler,
-		rateLimiter:    NewRateLimiter(500 * time.Millisecond),
-		robots:         NewRobotsCache(),
-		onCrawled:      onCrawled,
-		userAgent:      cfg.UserAgent,
-		requestTimeout: cfg.RequestTimeout,
-		maxDepth:       cfg.MaxDepth,
-		rateLimit:      cfg.RateLimit,
-		respectRobots:  cfg.RespectRobots,
-		workers:        cfg.Workers,
-		ctx:            ctx,
-		cancel:         cancel,
+	c := &Crawler{
+		scheduler:         scheduler,
+		rateLimiter:       NewRateLimiter(500 * time.Millisecond),
+		robots:            NewRobotsCache(),
+		onCrawled:         onCrawled,
+		userAgent:         cfg.UserAgent,
+		requestTimeout:    cfg.RequestTimeout,
+		maxDepth:          cfg.MaxDepth,
+		rateLimit:         cfg.RateLimit,
+		respectRobots:     cfg.RespectRobots,
+		workers:           cfg.Workers,
+		enableHeadless:    cfg.EnableHeadless,
+		headlessThreshold: cfg.HeadlessThreshold,
+		ctx:               ctx,
+		cancel:            cancel,
 	}
+
+	if cfg.EnableHeadless {
+		timeout := cfg.HeadlessTimeout
+		if timeout == 0 {
+			timeout = 30 * time.Second
+		}
+		bp, err := NewBrowserPool(timeout)
+		if err != nil {
+			log.Printf("crawler: headless browser init failed: %v (continuing without headless)", err)
+			c.enableHeadless = false
+		} else {
+			c.browser = bp
+		}
+	}
+
+	return c
 }
 
 // Start launches the worker pool.
 func (c *Crawler) Start() {
-	log.Printf("crawler: starting %d workers", c.workers)
+	log.Printf("crawler: starting %d workers (headless=%v)", c.workers, c.enableHeadless)
 
 	// Start rate limiter cleanup
 	go c.rateLimiter.Cleanup(c.ctx)
@@ -93,12 +120,15 @@ func (c *Crawler) Stop() {
 	log.Println("crawler: stopping workers")
 	c.cancel()
 	c.wg.Wait()
+	if c.browser != nil {
+		c.browser.Close()
+	}
 	log.Println("crawler: all workers stopped")
 }
 
 // Stats returns current crawler counters.
-func (c *Crawler) Stats() (crawled, failed, active int64) {
-	return c.totalCrawled.Load(), c.totalFailed.Load(), c.activeWorkers.Load()
+func (c *Crawler) Stats() (crawled, failed, active, jsRendered int64) {
+	return c.totalCrawled.Load(), c.totalFailed.Load(), c.activeWorkers.Load(), c.jsRendered.Load()
 }
 
 // AddSeed schedules a seed URL for crawling.
@@ -181,7 +211,58 @@ func (c *Crawler) processTask(workerID int, task *models.CrawlTask) {
 	}
 }
 
+// spaMarkers are HTML signatures that indicate a JS-rendered single-page application.
+var spaMarkers = []string{
+	`id="root"`,
+	`id="app"`,
+	`id="__next"`,
+	`__NEXT_DATA__`,
+	`__NUXT__`,
+	`id="___gatsby"`,
+	`ng-app`,
+	`ng-version`,
+}
+
+// isSPAShell checks whether the raw HTML body looks like a JS SPA shell with minimal content.
+func isSPAShell(body []byte, contentLen int, threshold int) bool {
+	if contentLen >= threshold {
+		return false
+	}
+	bodyStr := string(body)
+	for _, marker := range spaMarkers {
+		if strings.Contains(bodyStr, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Crawler) fetch(rawURL string) (*models.Document, []string, error) {
+	doc, discoveredURLs, body, err := c.fetchHTTP(rawURL)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Check if headless fallback is warranted
+	if c.enableHeadless && c.browser != nil && isSPAShell(body, doc.ContentSize, c.headlessThreshold) {
+		log.Printf("crawler: SPA detected for %s (content=%d bytes), trying headless fallback", rawURL, doc.ContentSize)
+		hdDoc, hdURLs, hdErr := c.fetchHeadless(rawURL)
+		if hdErr != nil {
+			log.Printf("crawler: headless fallback failed for %s: %v", rawURL, hdErr)
+			// Return the original HTTP result
+			return doc, discoveredURLs, nil
+		}
+		if hdDoc.ContentSize > doc.ContentSize {
+			c.jsRendered.Add(1)
+			log.Printf("crawler: headless fallback succeeded for %s (content %d -> %d bytes)", rawURL, doc.ContentSize, hdDoc.ContentSize)
+			return hdDoc, hdURLs, nil
+		}
+	}
+
+	return doc, discoveredURLs, nil
+}
+
+func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, error) {
 	client := &http.Client{
 		Timeout: c.requestTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -194,7 +275,7 @@ func (c *Crawler) fetch(rawURL string) (*models.Document, []string, error) {
 
 	req, err := http.NewRequestWithContext(c.ctx, "GET", rawURL, nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create request: %w", err)
+		return nil, nil, nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("User-Agent", c.userAgent)
@@ -203,28 +284,28 @@ func (c *Crawler) fetch(rawURL string) (*models.Document, []string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("HTTP request: %w", err)
+		return nil, nil, nil, fmt.Errorf("HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return nil, nil, nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	// Check content type
 	ct := resp.Header.Get("Content-Type")
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "application/xhtml") {
-		return nil, nil, fmt.Errorf("not HTML: %s", ct)
+		return nil, nil, nil, fmt.Errorf("not HTML: %s", ct)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	if err != nil {
-		return nil, nil, fmt.Errorf("read body: %w", err)
+		return nil, nil, nil, fmt.Errorf("read body: %w", err)
 	}
 
 	goDoc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse HTML: %w", err)
+		return nil, nil, nil, fmt.Errorf("parse HTML: %w", err)
 	}
 
 	// Extract metadata, headings, and images BEFORE content extraction,
@@ -257,6 +338,52 @@ func (c *Crawler) fetch(rawURL string) (*models.Document, []string, error) {
 	}
 
 	// Merge meta keywords into document keywords
+	if len(metaKeywords) > 0 {
+		doc.Keywords = metaKeywords
+	}
+
+	doc.ComputeHash()
+
+	return doc, discoveredURLs, body, nil
+}
+
+func (c *Crawler) fetchHeadless(rawURL string) (*models.Document, []string, error) {
+	html, err := c.browser.RenderPage(rawURL, c.userAgent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("headless render: %w", err)
+	}
+
+	goDoc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse headless HTML: %w", err)
+	}
+
+	// Same extraction pipeline as fetchHTTP
+	ogTitle, ogDesc, canonical, metaKeywords := ExtractMetadata(goDoc)
+	headings := ExtractHeadings(goDoc)
+	images := ExtractImages(goDoc, rawURL)
+	links, discoveredURLs := ExtractLinks(goDoc, rawURL)
+	title, description, content := ExtractContent(goDoc, rawURL)
+
+	doc := &models.Document{
+		ID:          models.DocumentID(rawURL),
+		URL:         rawURL,
+		Domain:      urlutil.ExtractDomain(rawURL),
+		Title:       title,
+		Description: description,
+		Content:     content,
+		ContentSize: len(content),
+		Links:       links,
+		Images:      images,
+		Headings:    headings,
+		StatusCode:  200,
+		CrawledAt:   time.Now(),
+		OGTitle:     ogTitle,
+		OGDesc:      ogDesc,
+		Canonical:   canonical,
+		IsHTTPS:     strings.HasPrefix(rawURL, "https://"),
+	}
+
 	if len(metaKeywords) > 0 {
 		doc.Keywords = metaKeywords
 	}
