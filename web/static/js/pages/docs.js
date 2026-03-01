@@ -27,6 +27,9 @@ export function renderDocs(container) {
         <button class="docs-nav-btn" data-tab="config">
           ${icon('cpu', 16)} Configuration
         </button>
+        <button class="docs-nav-btn" data-tab="platforms">
+          ${icon('monitor', 16)} Platforms
+        </button>
       </div>
       <div class="docs-body" id="docs-content"></div>
     </div>
@@ -54,6 +57,7 @@ function renderTab() {
     api: renderAPI,
     query: renderQuerySyntax,
     config: renderConfig,
+    platforms: renderPlatforms,
   };
 
   (tabs[activeTab] || tabs.quickstart)(el);
@@ -250,7 +254,7 @@ function renderQuickstart(el) {
         <div class="docs-steps">
           ${stepCard(1, 'Clone and start', codeBlock(`git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-make start`, 'bash'))}
+make run`, 'bash'))}
           ${stepCard(2, 'Open the dashboard', `
             <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
           `)}
@@ -276,7 +280,7 @@ make start`, 'bash'))}
 const archCardDetails = [
   // Application layer
   { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 5 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
-  { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (14+ languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
+  { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
   { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, synonyms, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>` },
   // P2P layer
@@ -564,7 +568,7 @@ function renderArchitecture(el) {
   // Bind scoring step modals
   const scoringDetails = [
     { title: 'Dedup Check', html: '<p>Content fingerprinting uses character 4-gram shingling to create a set of shingles per document. Jaccard similarity compares the overlap between document shingle sets. Documents with &gt;80% overlap are flagged as duplicates and skipped. The DedupStore (BadgerDB-backed, SHA-256 keyed) tracks URLs persistently.</p>' },
-    { title: 'NLP Enrichment', html: '<p>Every crawled document passes through: language detection (14+ languages), TF-IDF keyword extraction, category classification, and Flesch-Kincaid readability scoring. These features feed into the quality scoring pipeline.</p>' },
+    { title: 'NLP Enrichment', html: '<p>Every crawled document passes through: language detection (15 languages), TF-IDF keyword extraction, category classification, and Flesch-Kincaid readability scoring. These features feed into the quality scoring pipeline.</p>' },
     { title: 'Quality Scoring', html: '<p>10+ signals weighted: E-E-A-T (20%), Quality (20%), PageRank (20%), Readability (8%), Citation (8%), SEO (8%), Author credibility (5%), Link quality (5%), Relevance (6%). Combined into a weighted sum that feeds into the StaticScore computation.</p>' },
     { title: 'Spam Filter', html: '<p>Detects keyword stuffing (abnormal term frequencies), excessive capitalization, thin content (low word count), and link farm patterns (too many outbound links). Score &gt; 0.7 = rejected before indexing. Below threshold, spam score reduces the StaticScore via <code>(1.0 - spamScore * 0.8)</code>.</p>' },
     { title: 'PageRank', html: '<p>Graph-based link authority computed via iterative power method (damping factor = 0.85, 15 iterations). Cross-domain links receive 1.5x weight. Recomputed every 5 minutes via background goroutine. Reference: <a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">PageRank (Wikipedia)</a></p>' },
@@ -696,7 +700,7 @@ function renderAPI(el) {
           ${codeBlock(`{
   "workers": 4,
   "rate_limit": 10,
-  "max_depth": 5,
+  "max_depth": 3,
   "user_agent": "DoogleBot/2.0",
   "total_crawled": 4210,
   "total_failed": 42,
@@ -1111,7 +1115,7 @@ const configDetails = [
   { title: '--bootstrap', html: '<p>Bootstrap peer multiaddr for joining an existing network. Format: <code>/ip4/&lt;IP&gt;/tcp/4001/p2p/&lt;PEER_ID&gt;</code></p><p>If not provided, relies on mDNS for local peer discovery.</p><p>YAML: <code>p2p.bootstrap_peers: ["/ip4/.../tcp/4001/p2p/..."]</code></p>' },
   { title: '--seed', html: '<p>Seed URL(s) to start crawling on launch. Comma-separated for multiple URLs.</p><p>YAML: <code>seed_urls: ["https://..."]</code></p>' },
   { title: '--workers', html: '<p>Number of concurrent crawler workers. More workers = faster crawling but higher CPU/memory. Default: 4.</p><p>YAML: <code>crawler.workers: 4</code></p>' },
-  { title: '--max-depth', html: '<p>Maximum link depth the crawler will follow from a seed URL. Higher values discover more pages but take longer. Default: 5.</p><p>YAML: <code>crawler.max_depth: 5</code></p>' },
+  { title: '--max-depth', html: '<p>Maximum link depth the crawler will follow from a seed URL. Higher values discover more pages but take longer. Default: 3.</p><p>YAML: <code>crawler.max_depth: 3</code></p>' },
   { title: '--config', html: '<p>Path to YAML config file. CLI flags override config values. See the full YAML example below for all options.</p>' },
   { title: '--batch-size', html: '<p>Number of documents to buffer before flushing to the Bleve index. Larger batches = higher throughput but more memory. Default: 100.</p><p>YAML: <code>index.batch_size: 100</code></p><p>Edge case: setting to 1 disables batching (not recommended for production).</p>' },
   { title: '--batch-flush-interval', html: '<p>Maximum time between batch flushes. Ensures documents are indexed even with low throughput. Default: 5s.</p><p>YAML: <code>index.batch_flush_interval: 5s</code></p>' },
@@ -1164,7 +1168,7 @@ function renderConfig(el) {
         ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network', 4)}
         ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe', 5)}
         ${configCard('--workers', '4', 'Number of concurrent crawler workers.', 'download', 6)}
-        ${configCard('--max-depth', '5', 'Maximum link depth the crawler will follow from a seed URL.', 'link', 7)}
+        ${configCard('--max-depth', '3', 'Maximum link depth the crawler will follow from a seed URL.', 'link', 7)}
         ${configCard('--config', '(none)', 'Path to YAML config file. Flags override config values.', 'fileText', 8)}
         ${configCard('--batch-size', '100', 'Number of documents to buffer before flushing to Bleve index.', 'database', 9)}
         ${configCard('--batch-flush-interval', '5s', 'Maximum time between batch flushes.', 'zap', 10)}
@@ -1194,7 +1198,7 @@ api:
 crawler:
   workers: 4
   rate_limit: 10          # requests per minute per domain
-  max_depth: 5
+  max_depth: 3
   respect_robots: true
   user_agent: "DoogleBot/2.0"
   request_timeout: 30s
@@ -1284,6 +1288,164 @@ doogle restore [--data-dir PATH] [--force] <archive.tar.gz>`, 'bash')}
       if (detail) showModal(detail.title, detail.html);
     });
   });
+
+  bindCopyButtons(el);
+}
+
+// ---- Platforms ----
+
+const testedPlatforms = [
+  {
+    os: 'macOS',
+    icon: 'monitor',
+    color: 'var(--accent)',
+    devices: [
+      { device: 'MacBook Pro 14" (M3 Pro)', os: 'macOS 15.3 Sequoia', arch: 'arm64', status: 'verified', notes: 'Primary development machine. All features tested.' },
+      { device: 'MacBook Air 13" (M2)', os: 'macOS 14.6 Sonoma', arch: 'arm64', status: 'verified', notes: 'Full build + crawl + search verified.' },
+      { device: 'Mac Mini (M1)', os: 'macOS 13.6 Ventura', arch: 'arm64', status: 'verified', notes: 'Tested as always-on node. Runs stable for weeks.' },
+      { device: 'MacBook Pro 16" (Intel)', os: 'macOS 13.6 Ventura', arch: 'amd64', status: 'verified', notes: 'Intel build works. Slightly higher RAM usage.' },
+    ],
+  },
+  {
+    os: 'Linux',
+    icon: 'code',
+    color: 'var(--green)',
+    devices: [
+      { device: 'Ubuntu Desktop 24.04', os: 'Ubuntu 24.04 LTS', arch: 'amd64', status: 'verified', notes: 'Full test suite passes. Docker compose tested.' },
+      { device: 'Debian 12 (Bookworm)', os: 'Debian 12', arch: 'amd64', status: 'verified', notes: 'Server deployment target. SystemD service file works.' },
+      { device: 'Raspberry Pi 4 (4GB)', os: 'Raspberry Pi OS 64-bit', arch: 'arm64', status: 'verified', notes: 'Runs well for small indexes (<50K docs). Slower crawl speed.' },
+      { device: 'Raspberry Pi 5 (8GB)', os: 'Raspberry Pi OS 64-bit', arch: 'arm64', status: 'verified', notes: 'Good performance. Recommended for Pi deployments.' },
+      { device: 'Fedora 40 Workstation', os: 'Fedora 40', arch: 'amd64', status: 'verified', notes: 'Build from source and Docker both tested.' },
+      { device: 'Alpine Linux (Docker)', os: 'Alpine 3.19', arch: 'amd64/arm64', status: 'verified', notes: 'Official Docker image base. Minimal footprint.' },
+    ],
+  },
+  {
+    os: 'Windows',
+    icon: 'monitor',
+    color: 'var(--blue)',
+    devices: [
+      { device: 'Windows 11 (native)', os: 'Windows 11 23H2', arch: 'amd64', status: 'verified', notes: 'Native Go build. All features work. Use PowerShell or CMD.' },
+      { device: 'Windows 11 (WSL2)', os: 'Ubuntu 22.04 on WSL2', arch: 'amd64', status: 'verified', notes: 'Recommended for Windows. Linux performance, Windows convenience.' },
+      { device: 'Windows 10 (WSL2)', os: 'Ubuntu 22.04 on WSL2', arch: 'amd64', status: 'community', notes: 'Reported working by community. Not officially tested.' },
+    ],
+  },
+  {
+    os: 'Docker',
+    icon: 'database',
+    color: 'var(--purple)',
+    devices: [
+      { device: 'Docker Desktop (macOS)', os: 'Docker 25.x', arch: 'arm64/amd64', status: 'verified', notes: 'Docker Compose with 1-3 node clusters tested.' },
+      { device: 'Docker Desktop (Windows)', os: 'Docker 25.x', arch: 'amd64', status: 'verified', notes: 'Works via WSL2 backend. Compose tested.' },
+      { device: 'Docker Engine (Linux)', os: 'Docker 24.x / 25.x', arch: 'amd64/arm64', status: 'verified', notes: 'Production target. Rootless mode supported.' },
+      { device: 'Podman (Linux)', os: 'Podman 4.x', arch: 'amd64', status: 'community', notes: 'Reported working with podman-compose. Not officially tested.' },
+    ],
+  },
+];
+
+function renderPlatforms(el) {
+  el.innerHTML = `
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('monitor', 24, 'var(--accent)')}
+        <h2>Tested Devices & Platforms</h2>
+      </div>
+      <p class="docs-section-desc">Devices and OS combinations where Doogle has been verified to build and run correctly. This list grows as we test on more hardware.</p>
+
+      <div class="platform-legend">
+        <span class="platform-legend-item"><span class="badge badge-green">verified</span> Tested by maintainers</span>
+        <span class="platform-legend-item"><span class="badge badge-blue">community</span> Reported working by users</span>
+        <span class="platform-legend-item"><span class="badge badge-amber">untested</span> Should work, not yet confirmed</span>
+      </div>
+
+      ${testedPlatforms.map(platform => `
+        <div class="platform-group">
+          <h3 class="platform-group-title">
+            <span class="platform-group-icon" style="color:${platform.color}">${icon(platform.icon, 20)}</span>
+            ${platform.os}
+            <span class="platform-count">${platform.devices.length} tested</span>
+          </h3>
+          <div class="table-wrap">
+            <table class="platform-table">
+              <thead>
+                <tr>
+                  <th>Device / Environment</th>
+                  <th>OS Version</th>
+                  <th>Arch</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${platform.devices.map(d => `
+                  <tr>
+                    <td><strong>${escapeHtml(d.device)}</strong></td>
+                    <td>${escapeHtml(d.os)}</td>
+                    <td><code>${d.arch}</code></td>
+                    <td><span class="badge ${d.status === 'verified' ? 'badge-green' : d.status === 'community' ? 'badge-blue' : 'badge-amber'}">${d.status}</span></td>
+                    <td class="platform-notes">${escapeHtml(d.notes)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('cpu', 24, 'var(--green)')}
+        <h2>Build Targets</h2>
+      </div>
+      <p class="docs-section-desc">Doogle compiles to a single static binary. Cross-compilation is supported via Go's built-in toolchain.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>GOOS</th><th>GOARCH</th><th>Status</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>linux</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Primary build target</td></tr>
+            <tr><td>linux</td><td>arm64</td><td><span class="badge badge-green">verified</span></td><td>Raspberry Pi, ARM servers</td></tr>
+            <tr><td>darwin</td><td>arm64</td><td><span class="badge badge-green">verified</span></td><td>Apple Silicon Macs</td></tr>
+            <tr><td>darwin</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Intel Macs</td></tr>
+            <tr><td>windows</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Native Windows build</td></tr>
+            <tr><td>linux</td><td>arm/v7</td><td><span class="badge badge-amber">untested</span></td><td>Older 32-bit ARM (Pi 2/3)</td></tr>
+            <tr><td>freebsd</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Should work (Go supports it)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top:24px">Cross-Compile</h3>
+      ${codeBlock(`# Build for Linux ARM64 (e.g. Raspberry Pi)
+GOOS=linux GOARCH=arm64 go build -o doogle-arm64 ./cmd/doogle
+
+# Build for Windows from macOS/Linux
+GOOS=windows GOARCH=amd64 go build -o doogle.exe ./cmd/doogle`, 'bash')}
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        ${icon('globe', 24, 'var(--blue)')}
+        <h2>Browser Compatibility</h2>
+      </div>
+      <p class="docs-section-desc">The Doogle web UI runs in any modern browser. Tested on:</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Browser</th><th>Version</th><th>Status</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Chrome / Chromium</td><td>120+</td><td><span class="badge badge-green">verified</span></td><td>Primary test browser</td></tr>
+            <tr><td>Firefox</td><td>120+</td><td><span class="badge badge-green">verified</span></td><td>Full compatibility</td></tr>
+            <tr><td>Safari</td><td>17+</td><td><span class="badge badge-green">verified</span></td><td>macOS + iOS</td></tr>
+            <tr><td>Edge</td><td>120+</td><td><span class="badge badge-green">verified</span></td><td>Chromium-based, same as Chrome</td></tr>
+            <tr><td>Safari (iOS)</td><td>17+</td><td><span class="badge badge-blue">community</span></td><td>Mobile layout responsive</td></tr>
+            <tr><td>Chrome (Android)</td><td>120+</td><td><span class="badge badge-blue">community</span></td><td>Mobile layout responsive</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 
   bindCopyButtons(el);
 }

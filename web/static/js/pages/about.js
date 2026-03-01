@@ -577,7 +577,7 @@ export function renderAbout(container) {
             </div>
             <pre class="about-terminal-body"><code>git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-make start
+make run
 
 # Open http://localhost:8080</code></pre>
           </div>

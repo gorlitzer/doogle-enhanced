@@ -63,7 +63,7 @@ These roles aren't assigned — they emerge. Some don't exist yet and will take 
 ```bash
 git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
-make start                      # production build + run
+make run                        # build + launch node
 ```
 
 Open [http://localhost:8080](http://localhost:8080) — the setup wizard guides you through seeding and configuration.
@@ -281,15 +281,21 @@ Dump and restore are **standalone** — they operate on raw data directories and
 
 ```bash
 make help                       # show all commands
-make start                      # production build + run
-make prod                       # optimized binary (stripped, trimpath)
-make build                      # development build
+make build                      # compile optimized binary to bin/
+make run                        # build + launch node (API on :8080)
+make run ARGS='--port 4002'     # build + launch with extra flags
 make test                       # run all tests
+make fmt                        # format Go source files
+make lint                       # static analysis (go vet)
+make dev                        # Docker backend + hot-reload UI on :3000
+make watch                      # hot-reload UI only (backend must be running)
+make docker                     # build + start 3-node cluster
+make docker-stop                # stop cluster
+make docker-logs                # tail cluster logs
 make backup                     # snapshot data to timestamped archive
 make restore BACKUP=<file>      # restore from backup
-make status                     # check running node health
-make dev-node1                  # local node 1 (port 4001/8080)
-make dev-node2                  # local node 2 (port 4002/8081)
+make clean                      # remove bin/ (keeps data)
+make nuke                       # remove bin/ AND data/ (irreversible)
 ```
 
 ### Examples
@@ -462,7 +468,7 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 - [x] Spam reporting and peer trust system (report URLs, peer reputation, auto-quarantine)
 - [x] Domain flagging (multi-peer report consensus, gossip-level filtering)
 - [x] Backup & restore (`doogle dump`/`doogle restore`, Makefile targets)
-- [x] Production build target (`make prod` with stripped binary, `make start`)
+- [x] Production build target (`make build` with stripped binary, `make run`)
 - [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
 - [ ] Hash ring rebalancing on peer join/leave
 - [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)

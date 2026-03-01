@@ -151,11 +151,11 @@ For development and testing, run multiple nodes on one machine:
 
 Each node needs a unique `--port`, `--api-port`, and `--data-dir`.
 
-Or use the Makefile shortcuts:
+Or use the Makefile with ARGS:
 
 ```bash
-make dev-node1   # port 4001, API 8080
-make dev-node2   # port 4002, API 8081
+make run                                           # node 1: port 4001, API 8080
+make run ARGS='--port 4002 --api-port 8081 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/4001'   # node 2
 ```
 
 ---

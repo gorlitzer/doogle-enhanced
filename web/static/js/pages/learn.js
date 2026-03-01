@@ -389,7 +389,7 @@ make build
             <tr><td><code>--port</code></td><td>4001</td><td>P2P listen port</td></tr>
             <tr><td><code>--api-port</code></td><td>8080</td><td>Web UI + API port</td></tr>
             <tr><td><code>--workers</code></td><td>4</td><td>Concurrent crawler workers</td></tr>
-            <tr><td><code>--max-depth</code></td><td>5</td><td>Max link depth from seeds</td></tr>
+            <tr><td><code>--max-depth</code></td><td>3</td><td>Max link depth from seeds</td></tr>
             <tr><td><code>--data-dir</code></td><td>./data</td><td>Where to store index + data</td></tr>
             <tr><td><code>--enable-headless</code></td><td>false</td><td>JS rendering for SPAs</td></tr>
             <tr><td><code>--batch-size</code></td><td>100</td><td>Docs per batch index flush</td></tr>

@@ -32,42 +32,42 @@ export function renderSearch(container) {
       <input type="text" id="search-input" placeholder="Search the decentralized web..." autofocus>
       <button id="search-btn">Search</button>
     </div>
-    <div class="search-tips" id="search-tips">
+    <div class="search-toolbar" id="search-toolbar">
       <div class="search-tips-toggle" id="search-tips-toggle">
         ${icon('zap', 14)} <span>Search operators</span>
       </div>
-      <div class="search-tips-body" id="search-tips-body">
-        <div class="search-tips-grid">
-          <code>"exact phrase"</code><span>Exact match</span>
-          <code>-exclude</code><span>Remove term</span>
-          <code>python OR ruby</code><span>Either term</span>
-          <code>site:go.dev</code><span>Specific domain</span>
-          <code>intitle:golang</code><span>Term in title</span>
-          <code>filetype:pdf</code><span>File extension</span>
-          <code>lang:en</code><span>Language filter</span>
-          <code>after:2025-01</code><span>Date range</span>
-        </div>
+      <div class="search-filters" id="search-filters">
+        <select id="filter-lang">
+          <option value="">Language: All</option>
+          <option value="en">English</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="it">Italian</option>
+          <option value="pt">Portuguese</option>
+          <option value="ru">Russian</option>
+          <option value="zh">Chinese</option>
+          <option value="ja">Japanese</option>
+        </select>
+        <select id="filter-size">
+          <option value="10">10 results</option>
+          <option value="20">20 results</option>
+          <option value="50">50 results</option>
+        </select>
+        <input type="text" id="filter-domain" placeholder="Filter by domain...">
       </div>
     </div>
-    <div class="search-filters" id="search-filters">
-      <select id="filter-lang">
-        <option value="">Language: All</option>
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="fr">French</option>
-        <option value="de">German</option>
-        <option value="it">Italian</option>
-        <option value="pt">Portuguese</option>
-        <option value="ru">Russian</option>
-        <option value="zh">Chinese</option>
-        <option value="ja">Japanese</option>
-      </select>
-      <select id="filter-size">
-        <option value="10">10 results</option>
-        <option value="20">20 results</option>
-        <option value="50">50 results</option>
-      </select>
-      <input type="text" id="filter-domain" placeholder="Filter by domain..." style="width:180px">
+    <div class="search-tips-body" id="search-tips-body">
+      <div class="search-tips-grid">
+        <code>"exact phrase"</code><span>Exact match</span>
+        <code>-exclude</code><span>Remove term</span>
+        <code>python OR ruby</code><span>Either term</span>
+        <code>site:go.dev</code><span>Specific domain</span>
+        <code>intitle:golang</code><span>Term in title</span>
+        <code>filetype:pdf</code><span>File extension</span>
+        <code>lang:en</code><span>Language filter</span>
+        <code>after:2025-01</code><span>Date range</span>
+      </div>
     </div>
     <div class="search-meta" id="search-meta"></div>
     <div class="search-results" id="search-results"></div>

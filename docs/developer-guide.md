@@ -34,9 +34,9 @@ make test
 # Run linter
 make lint
 
-# Run two nodes locally
-make dev-node1   # Terminal 1
-make dev-node2   # Terminal 2
+# Run two nodes locally (two terminals)
+make run                                           # Terminal 1 — node on :4001/:8080
+make run ARGS='--port 4002 --api-port 8081 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/4001'   # Terminal 2
 ```
 
 ---

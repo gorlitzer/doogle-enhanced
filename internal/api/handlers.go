@@ -1,13 +1,20 @@
 package api
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -29,6 +36,7 @@ type Deps struct {
 	ReportURL    func(url, reason, detail string) error
 	TrustSummary func() *models.TrustSummary
 	SetNodeName  func(name string)
+	DataDir      string
 }
 
 // SearchHandler handles GET /api/search?q=...&page=...&size=...
@@ -350,6 +358,204 @@ func SetNodeNameHandler(deps *Deps) http.HandlerFunc {
 		}
 		deps.SetNodeName(body.Name)
 		writeJSON(w, http.StatusOK, map[string]string{"name": body.Name})
+	}
+}
+
+// DumpHandler handles GET /api/admin/dump — streams a tar.gz backup of the data directory.
+func DumpHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		dataDir := deps.DataDir
+		if dataDir == "" {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "data directory not configured"})
+			return
+		}
+
+		absDir, err := filepath.Abs(dataDir)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid data directory"})
+			return
+		}
+
+		info, err := os.Stat(absDir)
+		if err != nil || !info.IsDir() {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "data directory does not exist"})
+			return
+		}
+
+		filename := fmt.Sprintf("doogle-backup-%s.tar.gz", time.Now().Format("20060102T150405"))
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+		gzWriter := gzip.NewWriter(w)
+		defer gzWriter.Close()
+
+		tarWriter := tar.NewWriter(gzWriter)
+		defer tarWriter.Close()
+
+		filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			relPath, err := filepath.Rel(filepath.Dir(absDir), path)
+			if err != nil {
+				return err
+			}
+
+			header, err := tar.FileInfoHeader(fi, "")
+			if err != nil {
+				return err
+			}
+			header.Name = relPath
+
+			if err := tarWriter.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if fi.IsDir() {
+				return nil
+			}
+
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			_, err = io.Copy(tarWriter, f)
+			return err
+		})
+	}
+}
+
+// RestoreHandler handles POST /api/admin/restore — accepts a tar.gz upload and restores the data directory.
+func RestoreHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		dataDir := deps.DataDir
+		if dataDir == "" {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "data directory not configured"})
+			return
+		}
+
+		// Limit upload to 2GB
+		r.Body = http.MaxBytesReader(w, r.Body, 2<<30)
+
+		file, _, err := r.FormFile("archive")
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'archive' file field"})
+			return
+		}
+		defer file.Close()
+
+		// Save to temp file
+		tmpFile, err := os.CreateTemp("", "doogle-restore-*.tar.gz")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create temp file"})
+			return
+		}
+		tmpPath := tmpFile.Name()
+		defer os.Remove(tmpPath)
+
+		if _, err := io.Copy(tmpFile, file); err != nil {
+			tmpFile.Close()
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save upload"})
+			return
+		}
+		tmpFile.Close()
+
+		// Open and extract
+		f, err := os.Open(tmpPath)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read archive"})
+			return
+		}
+		defer f.Close()
+
+		gzReader, err := gzip.NewReader(f)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "not a valid gzip archive"})
+			return
+		}
+		defer gzReader.Close()
+
+		absDir, _ := filepath.Abs(dataDir)
+		parentDir := filepath.Dir(absDir)
+		tarReader := tar.NewReader(gzReader)
+		fileCount := 0
+
+		for {
+			header, err := tarReader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "corrupt archive"})
+				return
+			}
+
+			targetPath := filepath.Join(parentDir, header.Name)
+
+			// Prevent path traversal
+			if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(parentDir)) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "archive contains path traversal"})
+				return
+			}
+
+			switch header.Typeflag {
+			case tar.TypeDir:
+				os.MkdirAll(targetPath, os.FileMode(header.Mode))
+			case tar.TypeReg:
+				os.MkdirAll(filepath.Dir(targetPath), 0755)
+				outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+				if err != nil {
+					continue
+				}
+				io.Copy(outFile, tarReader)
+				outFile.Close()
+				fileCount++
+			}
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status":  "restored",
+			"files":   fileCount,
+			"message": "Restart the node for changes to take effect.",
+		})
+	}
+}
+
+// DeleteDataHandler handles DELETE /api/admin/data?confirm=yes — wipes the data directory.
+func DeleteDataHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		dataDir := deps.DataDir
+		if dataDir == "" {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "data directory not configured"})
+			return
+		}
+
+		if r.URL.Query().Get("confirm") != "yes" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "must pass ?confirm=yes"})
+			return
+		}
+
+		absDir, err := filepath.Abs(dataDir)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid data directory"})
+			return
+		}
+
+		if err := os.RemoveAll(absDir); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to delete: %v", err)})
+			return
+		}
+
+		// Recreate empty dir
+		os.MkdirAll(absDir, 0755)
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status":  "deleted",
+			"message": "All data has been deleted. Restart the node.",
+		})
 	}
 }
 
