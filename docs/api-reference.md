@@ -97,17 +97,28 @@ curl "http://localhost:8080/api/search?q=distributed+systems&page=1&size=5"
 
 ### Query Syntax
 
-The search query supports Bleve's query string syntax:
-
 | Syntax | Example | Description |
 |--------|---------|-------------|
-| Simple terms | `distributed systems` | Match documents containing these terms |
-| Phrases | `"exact phrase"` | Match exact phrase |
-| Boolean AND | `distributed AND consensus` | Both terms required |
-| Boolean OR | `golang OR rust` | Either term |
-| Exclusion | `systems -database` | Exclude term |
-| Field-specific | `title:guide` | Search specific field |
-| Wildcards | `distribut*` | Prefix matching |
+| Simple terms | `distributed systems` | AND match — all terms required |
+| Phrases | `"exact phrase"` | Match exact phrase (boosted) |
+| OR operator | `golang OR rust` | Either term matches (uppercase `OR` only) |
+| Exclusion | `systems -database` | Exclude documents containing the term |
+| Site filter | `python site:docs.python.org` | Restrict to a domain |
+| Language filter | `documentation lang:de` | Restrict to language + use language-specific stemmer |
+| In Title | `intitle:golang` | Term must appear in the title |
+| In URL | `inurl:docs` | Substring must appear in the URL |
+| In Body | `intext:kubernetes` | Term must appear in body content (also `inbody:`) |
+| File Type | `filetype:pdf` | URL must end with the given extension (also `ext:`) |
+| Date Range | `after:2025-01-01 before:2025-12-31` | Restrict to a crawl date range |
+| HTTPS Only | `has:https` | Only show HTTPS results |
+| Combined | `intitle:go -tutorial site:go.dev` | Mix and match all operators |
+
+**Notes:**
+- Lowercase `or` is treated as a stop word and removed
+- Multiple excludes are supported: `golang -tutorial -beginner -basics`
+- OR groups can chain: `python OR ruby OR go`
+- Synonyms are expanded automatically (e.g., `js` → `javascript`, `k8s` → `kubernetes`)
+- Fuzzy matching is enabled for short queries (≤3 terms)
 
 ---
 

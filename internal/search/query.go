@@ -8,9 +8,16 @@ import (
 )
 
 var (
-	phraseRe = regexp.MustCompile(`"([^"]+)"`)
-	siteRe   = regexp.MustCompile(`(?i)site:(\S+)`)
-	langRe   = regexp.MustCompile(`(?i)lang:(\S+)`)
+	phraseRe   = regexp.MustCompile(`"([^"]+)"`)
+	siteRe     = regexp.MustCompile(`(?i)site:(\S+)`)
+	langRe     = regexp.MustCompile(`(?i)lang:(\S+)`)
+	intitleRe  = regexp.MustCompile(`(?i)intitle:(\S+)`)
+	inurlRe    = regexp.MustCompile(`(?i)inurl:(\S+)`)
+	intextRe   = regexp.MustCompile(`(?i)(?:intext|inbody):(\S+)`)
+	filetypeRe = regexp.MustCompile(`(?i)(?:filetype|ext):(\S+)`)
+	beforeRe   = regexp.MustCompile(`(?i)before:(\S+)`)
+	afterRe    = regexp.MustCompile(`(?i)after:(\S+)`)
+	hasRe      = regexp.MustCompile(`(?i)has:(\S+)`)
 )
 
 // stopWords to remove from query terms.
@@ -133,9 +140,88 @@ func ParseQuery(raw string) *models.ParsedQuery {
 	}
 	remaining = langRe.ReplaceAllString(remaining, " ")
 
-	// 3. Tokenize, lowercase, remove stop words
-	for _, word := range strings.Fields(remaining) {
+	// 2c. Extract search dorks
+	if m := intitleRe.FindStringSubmatch(remaining); len(m) > 1 {
+		pq.InTitle = strings.ToLower(m[1])
+	}
+	remaining = intitleRe.ReplaceAllString(remaining, " ")
+
+	if m := inurlRe.FindStringSubmatch(remaining); len(m) > 1 {
+		pq.InURL = strings.ToLower(m[1])
+	}
+	remaining = inurlRe.ReplaceAllString(remaining, " ")
+
+	if m := intextRe.FindStringSubmatch(remaining); len(m) > 1 {
+		pq.InText = strings.ToLower(m[1])
+	}
+	remaining = intextRe.ReplaceAllString(remaining, " ")
+
+	ftMatches := filetypeRe.FindAllStringSubmatch(remaining, -1)
+	for _, m := range ftMatches {
+		pq.FileTypes = append(pq.FileTypes, strings.ToLower(m[1]))
+	}
+	remaining = filetypeRe.ReplaceAllString(remaining, " ")
+
+	if m := beforeRe.FindStringSubmatch(remaining); len(m) > 1 {
+		pq.Before = m[1]
+	}
+	remaining = beforeRe.ReplaceAllString(remaining, " ")
+
+	if m := afterRe.FindStringSubmatch(remaining); len(m) > 1 {
+		pq.After = m[1]
+	}
+	remaining = afterRe.ReplaceAllString(remaining, " ")
+
+	if m := hasRe.FindStringSubmatch(remaining); len(m) > 1 {
+		if strings.ToLower(m[1]) == "https" {
+			pq.HasHTTPS = true
+		}
+	}
+	remaining = hasRe.ReplaceAllString(remaining, " ")
+
+	// 3. Tokenize: extract -excludes and OR groups before stop-word removal
+	words := strings.Fields(remaining)
+	var pendingOR []string
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+
+		// Exclude terms: -term
+		if len(word) > 1 && word[0] == '-' {
+			excluded := strings.ToLower(word[1:])
+			if excluded != "" {
+				pq.ExcludeTerms = append(pq.ExcludeTerms, excluded)
+			}
+			continue
+		}
+
+		// Uppercase OR is a boolean operator (lowercase "or" is a stop word)
+		if word == "OR" && i > 0 && i < len(words)-1 {
+			// Collect left side (last term added or last pending) and right side
+			if len(pendingOR) == 0 {
+				// Pull the previous term into the OR group
+				if len(pq.Terms) > 0 {
+					pendingOR = append(pendingOR, pq.Terms[len(pq.Terms)-1])
+					pq.Terms = pq.Terms[:len(pq.Terms)-1]
+				}
+			}
+			continue
+		}
+
 		lower := strings.ToLower(word)
+
+		// If we have a pending OR group, add to it
+		if len(pendingOR) > 0 {
+			pendingOR = append(pendingOR, lower)
+			// Check if next token is also "OR"
+			if i+1 < len(words) && words[i+1] == "OR" {
+				continue // keep accumulating
+			}
+			// Flush the OR group
+			pq.OrGroups = append(pq.OrGroups, pendingOR)
+			pendingOR = nil
+			continue
+		}
+
 		if stopWords[lower] {
 			continue
 		}

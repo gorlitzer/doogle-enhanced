@@ -77,9 +77,17 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 
 **Search & Indexing**
 - BM25 full-text search via Bleve with stemming, phrase matching, fuzzy queries
+- Boolean query operators: `AND`, `OR`, `NOT` (`-term` exclusion, `python OR ruby`)
+- Multi-language stemmers: 15 languages (English + DE, FR, ES, IT, PT, NL, RU, SV, DA, FI, HU, RO, TR, NO)
 - PageRank computation on the backlink graph
-- Query understanding: synonyms, `site:` filter, quoted phrases
+- Search dorks: `intitle:`, `inurl:`, `intext:`, `filetype:`, `before:`/`after:`, `has:https`
+- Query understanding: synonyms, `site:` filter, `lang:` filter, quoted phrases
+- Snippet highlighting — matched query terms highlighted in search results
+- Paginated results with prev/next navigation
+- Keyboard shortcuts: `/` and `Ctrl+K`/`Cmd+K` to focus search
+- LRU search result cache with TTL (configurable size and expiry)
 - Distributed fan-out search across connected peers with merge + re-rank
+- CLI search tool: `doogle search "query"` with JSON output and remote node support
 
 **Crawling**
 - Concurrent worker pool with per-domain rate limiting
@@ -101,11 +109,12 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 - Batch indexing with configurable flush interval
 - Content-size and depth-based filtering
 
-**Admin Dashboard**
+**Web UI**
 - Setup wizard with guided onboarding
 - Network topology graph (interactive canvas)
 - Crawler management with live feed, analytics, seed URLs
 - Indexer stats, document browser
+- Keyboard shortcuts: `/` and `Ctrl+K` to focus search from anywhere
 - 5 themes: Dracula, CRT Terminal, Modern, Light, Pride — each with animated logos and backgrounds
 - Comprehensive docs, troubleshooting, and FAQ built in
 
@@ -121,7 +130,7 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 - Encrypted search queries (end-to-end encrypted peer queries)
 - Semantic search (sentence embeddings, hybrid BM25 + vector scoring)
 - Knowledge graph with entity cards
-- CLI search tool, browser extension, mobile client
+- Browser extension, mobile client
 
 ---
 
@@ -176,6 +185,8 @@ Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discov
 
 ## CLI Reference
 
+### Node Mode
+
 ```
 Usage: doogle [flags]
 
@@ -190,6 +201,18 @@ Flags:
   --workers N          Crawler worker count (default: 4)
   --mdns               Enable mDNS LAN discovery (default: true)
   --headless           Enable headless browser rendering (default: false)
+```
+
+### Search Mode (CLI)
+
+```
+Usage: doogle search [flags] <query>
+
+Flags:
+  --api URL            API base URL (default: http://localhost:8080)
+  --json               Output raw JSON instead of formatted text
+  --page N             Result page, 0-indexed (default: 0)
+  --size N             Results per page (default: 10)
 ```
 
 ### Examples
@@ -209,6 +232,14 @@ Flags:
 
 # With config file
 ./bin/doogle --config ./configs/default.yaml
+
+# CLI search (requires a running node)
+./bin/doogle search "golang tutorial"
+./bin/doogle search --json "python OR ruby"
+./bin/doogle search --api http://remote:8080 "distributed systems"
+./bin/doogle search "golang -tutorial"           # exclude "tutorial"
+./bin/doogle search "python OR ruby"             # OR operator
+./bin/doogle search '"machine learning" basics'  # quoted phrase
 ```
 
 ---
@@ -234,14 +265,14 @@ Flags:
 
 ```
 doogle-v2/
-├── cmd/doogle/main.go             Entry point
+├── cmd/doogle/main.go             Entry point + CLI search subcommand
 ├── internal/
 │   ├── node/                      Orchestrator, config, identity
 │   ├── p2p/                       libp2p host, DHT, GossipSub, protocols
 │   ├── crawler/                   Worker pool, scheduler, rate limiter
 │   ├── indexer/                   Quality scoring, dedup, PageRank, pipeline
-│   ├── index/                     Bleve store, query builder, shard manager
-│   ├── search/                    Local + distributed search, ranking
+│   ├── index/                     Bleve store, query builder, multi-lang, shard manager
+│   ├── search/                    Local + distributed search, ranking, LRU cache
 │   ├── api/                       HTTP server, handlers, middleware
 │   ├── store/                     BadgerDB wrapper, URL queue, link store
 │   └── models/                    Document, CrawlTask, SearchResult, CrawlEvent
@@ -307,6 +338,8 @@ search:
   default_page_size: 10
   peer_timeout: 5s
   max_peers: 10
+  cache_size: 1000             # LRU cache entries (0 = disabled)
+  cache_ttl: 5m                # cached result TTL
 
 storage:
   data_dir: "./data/doogle"
@@ -339,14 +372,15 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 - [x] Docker + Compose support
 
 ### Phase 2 — Quality & Scale
+- [x] Boolean query operators (`AND`, `OR`, `NOT` / `-term` exclusion)
+- [x] Multi-language search (15 language stemmers via Bleve analyzers, `lang:` filter)
+- [x] Search result caching (LRU with TTL invalidation, configurable size/TTL)
+- [x] CLI search tool (`doogle search "query"`, `--json`, `--api`, remote node support)
 - [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
 - [ ] Hash ring rebalancing on peer join/leave
-- [ ] Multi-language search (15+ language stemmers, language-aware analyzers)
 - [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)
 - [ ] Structured data extraction (Schema.org, JSON-LD, microdata → rich snippets)
 - [ ] PDF & document indexing (PDF, DOCX, EPUB via tika/pdftotext)
-- [ ] Boolean query operators (AND, OR, NOT, grouping with parentheses)
-- [ ] Search result caching (LRU with TTL invalidation)
 - [ ] Peer reputation system (trust scoring based on response quality and uptime)
 - [ ] Content verification (Ed25519-signed documents for tamper detection)
 - [ ] Image search by alt text, caption, surrounding context
@@ -374,7 +408,6 @@ The admin dashboard at `http://localhost:8080` also has built-in docs covering c
 - [ ] Multilingual semantic search (cross-language retrieval via multilingual embeddings)
 
 ### Phase 5 — Ecosystem
-- [ ] CLI search tool (`doogle search "query"`, pipe-friendly JSON output)
 - [ ] Browser extension (address bar search, optional query obfuscation via P2P)
 - [ ] Mobile client (read-only, connects to remote Doogle node)
 - [ ] Light nodes (~50 MB RAM, relay-only, proxy queries, optional single crawl worker)

@@ -90,16 +90,20 @@ const posts = [
       <ul>
         <li><strong>Stop words removed</strong> — "how", "to", "the", "is" are stripped (they appear in every page)</li>
         <li><strong>Quoted phrases extracted</strong> — <code>"exact match"</code> searches for those words together</li>
-        <li><strong>Filters parsed</strong> — <code>site:example.com</code> restricts to a domain, <code>lang:en</code> filters by language</li>
+        <li><strong>Boolean operators</strong> — <code>-term</code> excludes documents, <code>OR</code> creates disjunctions</li>
+        <li><strong>Filters parsed</strong> — <code>site:example.com</code> restricts to a domain, <code>lang:de</code> filters by language (15 stemmers)</li>
+        <li><strong>Search dorks</strong> — <code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code></li>
         <li><strong>Synonyms expanded</strong> — "js" also searches for "javascript", "k8s" for "kubernetes"</li>
         <li><strong>Fuzzy matching</strong> — for short queries, typo-tolerant matching is enabled</li>
       </ul>
 
-      ${codeBlock(`Query: "how to learn javascript async"
+      ${codeBlock(`Query: "intitle:golang -tutorial site:go.dev after:2025-01-01"
 Parsed:
-  Terms: [learn, javascript, async]     (stop words removed)
-  Synonyms: javascript → [js]
-  Fuzzy: enabled (≤3 terms)`, 'text')}
+  InTitle: golang
+  Excludes: [tutorial]
+  Site: go.dev
+  After: 2025-01-01
+  Fuzzy: disabled (operators present)`, 'text')}
 
       <h3>Step 2: Bleve Matching (BM25)</h3>
       <p>The parsed query is translated into a <strong>BooleanQuery</strong> with two tiers:</p>
@@ -414,7 +418,7 @@ make build
         <div class="learn-status-card learn-status-done">
           <span class="badge badge-green">working</span>
           <strong>Full-Text Search</strong>
-          <p>BM25 ranking with field boosting, phrase matching, synonym expansion, fuzzy queries, and language filtering.</p>
+          <p>BM25 ranking with boolean operators (-exclude, OR), search dorks (intitle:, inurl:, filetype:, date range, has:https), 15 language stemmers, phrase matching, synonym expansion, and fuzzy queries.</p>
         </div>
         <div class="learn-status-card learn-status-done">
           <span class="badge badge-green">working</span>
@@ -481,6 +485,16 @@ make build
           <strong>Incremental Reindexing</strong>
           <p>Background process re-scores stale documents every 10 minutes. Freshness decay updates without re-crawling. Generation tracking ensures only stale docs are touched.</p>
         </div>
+        <div class="learn-status-card learn-status-done">
+          <span class="badge badge-green">working</span>
+          <strong>Boolean Operators & Search Dorks</strong>
+          <p>-exclude, OR disjunctions, intitle:, inurl:, intext:, filetype:, before:/after: date range, has:https. Full Google-style search dork support.</p>
+        </div>
+        <div class="learn-status-card learn-status-done">
+          <span class="badge badge-green">working</span>
+          <strong>Multi-Language Search</strong>
+          <p>15 language stemmers via lang: filter. Language-specific analyzers for English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, and more.</p>
+        </div>
       </div>
 
       <h3>What's Being Improved</h3>
@@ -489,11 +503,6 @@ make build
           <span class="badge badge-amber">improving</span>
           <strong>Ranking Quality</strong>
           <p>Tuning BM25 weights, phrase proximity boosting, better snippet generation, and score normalization.</p>
-        </div>
-        <div class="learn-status-card learn-status-wip">
-          <span class="badge badge-amber">improving</span>
-          <strong>Language Support</strong>
-          <p>Language detection for 14+ languages, lang: filter, and language-aware ranking.</p>
         </div>
         <div class="learn-status-card learn-status-wip">
           <span class="badge badge-amber">improving</span>
@@ -511,8 +520,8 @@ make build
         </div>
         <div class="learn-status-card learn-status-planned">
           <span class="badge badge-blue">phase 2</span>
-          <strong>Multi-Language Search</strong>
-          <p>15+ language stemmers in Bleve with language-aware analyzers for global coverage.</p>
+          <strong>Image Search</strong>
+          <p>Index images by alt text, caption, and surrounding context. Visual search results.</p>
         </div>
         <div class="learn-status-card learn-status-planned">
           <span class="badge badge-blue">phase 2</span>
@@ -521,8 +530,8 @@ make build
         </div>
         <div class="learn-status-card learn-status-planned">
           <span class="badge badge-blue">phase 2</span>
-          <strong>Boolean Operators & Caching</strong>
-          <p>AND, OR, NOT with grouping. LRU search result cache with TTL invalidation.</p>
+          <strong>Peer Reputation & Content Verification</strong>
+          <p>Trust scoring based on response quality and uptime. Ed25519-signed documents for tamper detection.</p>
         </div>
         <div class="learn-status-card learn-status-planned">
           <span class="badge badge-blue">phase 2</span>

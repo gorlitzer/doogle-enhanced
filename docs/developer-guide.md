@@ -45,7 +45,7 @@ make dev-node2   # Terminal 2
 
 ```
 doogle-v2/
-├── cmd/doogle/main.go          # Entry point — parses flags, creates node, handles signals
+├── cmd/doogle/main.go          # Entry point — node mode + search subcommand
 ├── internal/                   # Private packages (not importable by external code)
 │   ├── node/                   # Orchestrator — wires all subsystems together
 │   │   ├── node.go             # Node struct, init(), Run(), Shutdown(), Status()
@@ -72,14 +72,16 @@ doogle-v2/
 │   │   └── duplicate.go        # Content fingerprinting (shingling)
 │   ├── index/                  # Full-text search index
 │   │   ├── store.go            # Store interface (Search, Index, DocCount, Close)
-│   │   ├── bleve_store.go      # Bleve implementation with custom analyzer
-│   │   ├── document.go         # IndexDocument model
+│   │   ├── bleve_store.go      # Bleve implementation with custom analyzer + 15 language stemmers
+│   │   ├── document.go         # IndexDocument model (implements bleve.Classifier)
+│   │   ├── query_builder.go    # ParsedQuery → Bleve query tree (AND/OR/NOT, lang analyzer)
 │   │   └── shard.go            # Consistent hash ring for domain → node mapping
 │   ├── search/                 # Search engines
 │   │   ├── engine.go           # Local search against Bleve
-│   │   ├── distributed.go      # Fan-out to peers + merge results
-│   │   ├── ranker.go           # BM25 × quality re-ranking
-│   │   └── query.go            # Query normalization
+│   │   ├── distributed.go      # Fan-out to peers + merge results + cache
+│   │   ├── cache.go            # LRU + TTL search result cache
+│   │   ├── ranker.go           # Multi-signal re-ranking (BM25, quality, PageRank, freshness)
+│   │   └── query.go            # Query parsing (boolean operators, phrases, site/lang filters)
 │   ├── api/                    # HTTP layer
 │   │   ├── server.go           # Chi router, embedded static files, server lifecycle
 │   │   ├── handlers.go         # /api/search, /api/status, /api/crawl
@@ -144,7 +146,7 @@ The `Store` interface abstracts the index backend. `BleveStore` is the implement
 
 ### `internal/search` — Query Execution
 
-Two layers: `Engine` (local-only) and `DistributedSearch` (local + peers). The distributed search uses the local engine internally.
+Three layers: `Engine` (local-only), `DistributedSearch` (local + peers + cache), and `SearchCache` (LRU+TTL). The distributed search checks the cache first, then uses the local engine and fans out to peers. Query parsing handles boolean operators (`-exclude`, uppercase `OR`), phrases, `site:`, `lang:` filters, and synonym expansion.
 
 ### `internal/api` — HTTP Layer
 
