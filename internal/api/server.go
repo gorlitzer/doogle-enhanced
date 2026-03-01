@@ -44,6 +44,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		// Admin endpoints
 		r.Route("/admin", func(r chi.Router) {
 			r.Get("/crawler", CrawlerInfoHandler(deps))
+			r.Get("/crawler/feed", CrawlerFeedHandler(deps))
 			r.Get("/indexer", IndexerStatsHandler(deps))
 			r.Get("/peers", PeersHandler(deps))
 			r.Get("/documents", DocumentsHandler(deps))

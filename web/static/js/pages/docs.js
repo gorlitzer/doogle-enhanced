@@ -939,6 +939,7 @@ function demoParseQuery(raw) {
 // ---- Configuration ----
 
 const configDetails = [
+  { title: '--name', html: '<p>Human-readable name for this node. Shown in the navbar, admin dashboard, and wizard. Persists via config (not DB).</p><p>YAML: <code>node_name: "My Node"</code></p>' },
   { title: '--port', html: '<p>libp2p listen port for P2P communication. Uses TCP and UDP (QUIC-v1). Default: 4001.</p><p>Environment variable: <code>DOOGLE_PORT</code></p><p>YAML: <code>p2p.port: 4001</code></p>' },
   { title: '--api-port', html: '<p>HTTP API and web UI port. Serves the REST API and embedded SPA. Default: 8080.</p><p>Environment variable: <code>DOOGLE_API_PORT</code></p><p>YAML: <code>api.port: 8080</code></p>' },
   { title: '--data-dir', html: '<p>Directory for Bleve index, BadgerDB databases, identity keys, and all persistent state. Default: ./data</p><p>Environment variable: <code>DOOGLE_DATA_DIR</code></p><p>YAML: <code>storage.data_dir: "./data"</code></p>' },
@@ -991,19 +992,20 @@ function renderConfig(el) {
 
       <h3>CLI Flags</h3>
       <div class="docs-config-grid">
-        ${configCard('--port', '4001', 'libp2p listen port for P2P communication.', 'network', 0)}
-        ${configCard('--api-port', '8080', 'HTTP API and web UI port.', 'monitor', 1)}
-        ${configCard('--data-dir', './data', 'Directory for Bleve index, BadgerDB, and identity keys.', 'database', 2)}
-        ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network', 3)}
-        ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe', 4)}
-        ${configCard('--workers', '4', 'Number of concurrent crawler workers.', 'download', 5)}
-        ${configCard('--max-depth', '5', 'Maximum link depth the crawler will follow from a seed URL.', 'link', 6)}
-        ${configCard('--config', '(none)', 'Path to YAML config file. Flags override config values.', 'fileText', 7)}
-        ${configCard('--batch-size', '100', 'Number of documents to buffer before flushing to Bleve index.', 'database', 8)}
-        ${configCard('--batch-flush-interval', '5s', 'Maximum time between batch flushes.', 'zap', 9)}
-        ${configCard('--incremental-interval', '10m', 'How often the incremental re-scorer runs to update stale StaticScores.', 'trendingUp', 10)}
-        ${configCard('--replication-factor', '3', 'Number of nodes each document is replicated to for fault tolerance.', 'shield', 11)}
-        ${configCard('--anti-entropy-interval', '2m', 'How often the anti-entropy Merkle reconciliation loop runs.', 'refresh', 12)}
+        ${configCard('--name', '(none)', 'Human-readable node name shown in UI and to peers.', 'monitor', 0)}
+        ${configCard('--port', '4001', 'libp2p listen port for P2P communication.', 'network', 1)}
+        ${configCard('--api-port', '8080', 'HTTP API and web UI port.', 'monitor', 2)}
+        ${configCard('--data-dir', './data', 'Directory for Bleve index, BadgerDB, and identity keys.', 'database', 3)}
+        ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network', 4)}
+        ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe', 5)}
+        ${configCard('--workers', '4', 'Number of concurrent crawler workers.', 'download', 6)}
+        ${configCard('--max-depth', '5', 'Maximum link depth the crawler will follow from a seed URL.', 'link', 7)}
+        ${configCard('--config', '(none)', 'Path to YAML config file. Flags override config values.', 'fileText', 8)}
+        ${configCard('--batch-size', '100', 'Number of documents to buffer before flushing to Bleve index.', 'database', 9)}
+        ${configCard('--batch-flush-interval', '5s', 'Maximum time between batch flushes.', 'zap', 10)}
+        ${configCard('--incremental-interval', '10m', 'How often the incremental re-scorer runs to update stale StaticScores.', 'trendingUp', 11)}
+        ${configCard('--replication-factor', '3', 'Number of nodes each document is replicated to for fault tolerance.', 'shield', 12)}
+        ${configCard('--anti-entropy-interval', '2m', 'How often the anti-entropy Merkle reconciliation loop runs.', 'refresh', 13)}
       </div>
     </div>
 
@@ -1013,7 +1015,9 @@ function renderConfig(el) {
         <h2>YAML Config File</h2>
       </div>
       <p class="docs-section-desc">Full configuration example with all available options.</p>
-      ${codeBlock(`p2p:
+      ${codeBlock(`node_name: ""              # human-readable name (shown in UI)
+
+p2p:
   port: 4001
   mdns: true
   bootstrap_peers: []

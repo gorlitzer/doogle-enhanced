@@ -57,230 +57,358 @@ function wrapLetters(el) {
 }
 
 // ─────────────────────────────────────────────────
-// Dracula: Blood Drip — letters periodically drip down and reform
+// Dracula: Vampiric Pulse — letters breathe with a dark heartbeat,
+// periodically one letter flickers dim and reforms with a crimson pulse.
+// Clean, no spawned DOM elements.
 // ─────────────────────────────────────────────────
 function draculaDrip(el) {
   const letters = wrapLetters(el);
   el.classList.add('logo-anim-dracula');
+  // Ensure no overflow escapes the navbar
+  el.style.overflow = 'hidden';
 
-  function drip() {
-    const idx = Math.floor(Math.random() * letters.length);
-    const letter = letters[idx];
+  let breathPhase = 0;
 
-    // Create drip droplet
-    const drop = document.createElement('span');
-    drop.className = 'logo-drip-drop';
-    drop.textContent = letter.textContent;
-    letter.appendChild(drop);
-
-    // Animate letter down and back
-    letter.style.transition = 'transform 0.4s ease-in, opacity 0.4s ease-in';
-    letter.style.transform = 'translateY(6px)';
-    letter.style.opacity = '0.4';
-
-    setTimeout(() => {
-      letter.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
-      letter.style.transform = 'translateY(0)';
-      letter.style.opacity = '1';
-    }, 400);
-
-    setTimeout(() => {
-      if (drop.parentNode) drop.remove();
-      letter.style.transition = '';
-    }, 1200);
+  // Ambient breathing — subtle pulsing glow on all letters
+  function breathe() {
+    breathPhase += 0.02;
+    const pulse = Math.sin(breathPhase) * 0.3 + 0.7; // 0.4 – 1.0
+    const glow = Math.sin(breathPhase) * 4 + 4;       // 0 – 8px
+    letters.forEach((l) => {
+      // Only apply breathing if letter isn't mid-flicker
+      if (l.dataset.flickering) return;
+      l.style.textShadow = `0 0 ${glow}px rgba(0,212,255,${0.08 * pulse})`;
+    });
+    animFrame = requestAnimationFrame(breathe);
   }
 
-  // Initial drip cascade
+  // Flicker event — one letter dims to crimson and snaps back
+  function flicker() {
+    const idx = Math.floor(Math.random() * letters.length);
+    const letter = letters[idx];
+    if (letter.dataset.flickering) return;
+    letter.dataset.flickering = '1';
+
+    // Phase 1: letter dims and shifts to red
+    letter.style.transition = 'color 0.15s, text-shadow 0.15s, opacity 0.15s, filter 0.15s';
+    letter.style.color = '#cc2244';
+    letter.style.textShadow = '0 0 12px rgba(200,30,60,0.6), 0 0 4px rgba(200,30,60,0.3)';
+    letter.style.opacity = '0.45';
+    letter.style.filter = 'blur(0.5px)';
+
+    // Phase 2: snap back with overshoot glow
+    setTimeout(() => {
+      letter.style.transition = 'color 0.5s ease-out, text-shadow 0.5s ease-out, opacity 0.3s ease-out, filter 0.3s ease-out';
+      letter.style.color = '';
+      letter.style.textShadow = '0 0 14px rgba(0,212,255,0.35)';
+      letter.style.opacity = '1';
+      letter.style.filter = '';
+    }, 200);
+
+    // Phase 3: settle to ambient
+    setTimeout(() => {
+      letter.style.transition = 'text-shadow 0.8s ease-out';
+      letter.style.textShadow = '';
+      setTimeout(() => {
+        letter.style.transition = '';
+        delete letter.dataset.flickering;
+      }, 800);
+    }, 700);
+
+    // Sometimes cascade to neighbor
+    if (Math.random() > 0.6) {
+      const neighbor = letters[(idx + 1) % letters.length];
+      if (!neighbor.dataset.flickering) {
+        setTimeout(() => {
+          neighbor.dataset.flickering = '1';
+          neighbor.style.transition = 'color 0.12s, opacity 0.12s';
+          neighbor.style.color = '#cc2244';
+          neighbor.style.opacity = '0.55';
+          setTimeout(() => {
+            neighbor.style.transition = 'color 0.4s ease-out, opacity 0.25s ease-out';
+            neighbor.style.color = '';
+            neighbor.style.opacity = '1';
+            setTimeout(() => { neighbor.style.transition = ''; delete neighbor.dataset.flickering; }, 500);
+          }, 150);
+        }, 120);
+      }
+    }
+  }
+
+  // Initial entrance: letters materialize one by one with a cool→red→cool flash
   letters.forEach((l, i) => {
     l.style.opacity = '0';
-    l.style.transform = 'translateY(-12px)';
+    l.style.transform = 'translateY(-8px)';
     setTimeout(() => {
-      l.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease-out';
+      l.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out, color 0.2s';
       l.style.transform = 'translateY(0)';
       l.style.opacity = '1';
-      setTimeout(() => { l.style.transition = ''; }, 600);
-    }, 100 + i * 80);
+      l.style.color = '#cc3355';
+      l.style.textShadow = '0 0 10px rgba(200,30,60,0.4)';
+      setTimeout(() => {
+        l.style.transition = 'color 0.6s ease-out, text-shadow 0.8s ease-out';
+        l.style.color = '';
+        l.style.textShadow = '';
+        setTimeout(() => { l.style.transition = ''; }, 800);
+      }, 250);
+    }, 80 + i * 80);
   });
 
-  interval = setInterval(drip, 3000);
+  // Start ambient breathing after entrance
+  setTimeout(() => breathe(), 700);
+
+  interval = setInterval(flicker, 2800);
 }
 
 // ─────────────────────────────────────────────────
-// CRT: Glitch — random offset flickers + character swap
+// CRT: Glitch — scan lines, chromatic aberration, character corruption
 // ─────────────────────────────────────────────────
 function crtGlitch(el) {
   const letters = wrapLetters(el);
   el.classList.add('logo-anim-crt');
-  const glitchChars = '!@#$%^&*<>{}[]|/\\~';
+  const glitchChars = '!@#$%^&*<>{}[]|/\\~01';
+
+  // Initial typing effect
+  letters.forEach((l, i) => {
+    const orig = LETTERS[i];
+    l.textContent = '_';
+    l.style.opacity = '0.3';
+    setTimeout(() => {
+      // Rapid character cycling before landing on correct letter
+      let ticks = 0;
+      const cyc = setInterval(() => {
+        l.textContent = glitchChars[Math.floor(Math.random() * glitchChars.length)];
+        l.style.color = '#33ff33';
+        ticks++;
+        if (ticks > 3 + Math.floor(Math.random() * 3)) {
+          clearInterval(cyc);
+          l.textContent = orig;
+          l.style.opacity = '1';
+          l.style.color = '';
+        }
+      }, 50);
+    }, 80 + i * 120);
+  });
 
   function glitch() {
     const idx = Math.floor(Math.random() * letters.length);
     const letter = letters[idx];
     const original = LETTERS[idx];
 
-    // Random character swap
     letter.textContent = glitchChars[Math.floor(Math.random() * glitchChars.length)];
 
-    // Offset
-    const dx = (Math.random() - 0.5) * 6;
-    const dy = (Math.random() - 0.5) * 3;
+    const dx = (Math.random() - 0.5) * 8;
+    const dy = (Math.random() - 0.5) * 4;
     letter.style.transform = `translate(${dx}px, ${dy}px)`;
-    letter.style.textShadow = `${-dx}px 0 rgba(255,0,0,0.5), ${dx}px 0 rgba(0,255,255,0.5)`;
+    letter.style.textShadow = `${-dx*0.8}px 0 rgba(255,0,0,0.6), ${dx*0.8}px 0 rgba(0,255,255,0.6)`;
 
     setTimeout(() => {
       letter.textContent = original;
       letter.style.transform = '';
       letter.style.textShadow = '';
-    }, 80 + Math.random() * 80);
+    }, 60 + Math.random() * 100);
 
-    // Occasionally do a full-row glitch
-    if (Math.random() > 0.7) {
-      el.style.transform = `translateX(${(Math.random() - 0.5) * 4}px)`;
-      setTimeout(() => { el.style.transform = ''; }, 60);
+    // Full row scan-line glitch
+    if (Math.random() > 0.6) {
+      el.style.transform = `translateX(${(Math.random() - 0.5) * 6}px) skewX(${(Math.random() - 0.5) * 2}deg)`;
+      el.style.filter = `brightness(${1.2 + Math.random() * 0.5})`;
+      setTimeout(() => { el.style.transform = ''; el.style.filter = ''; }, 50);
     }
   }
 
-  // Burst: rapid glitches then calm
   function burst() {
-    const count = 2 + Math.floor(Math.random() * 4);
+    const count = 2 + Math.floor(Math.random() * 5);
     for (let i = 0; i < count; i++) {
-      setTimeout(glitch, i * 60);
+      setTimeout(glitch, i * 50);
     }
   }
 
-  interval = setInterval(burst, 2500 + Math.random() * 2000);
+  interval = setInterval(burst, 2000 + Math.random() * 2500);
 }
 
 // ─────────────────────────────────────────────────
-// Modern: Block Build — letters assemble from stacking pieces
+// Modern: Block Build — geometric assembly with glow
 // ─────────────────────────────────────────────────
 function blockBuild(el) {
   const letters = wrapLetters(el);
   el.classList.add('logo-anim-modern');
 
-  // Initial build animation — letters slide in from random directions
+  // Initial build: letters materialize from scattered positions with rotation
   letters.forEach((l, i) => {
-    const directions = [
-      { x: 0, y: -20 },  // from top
-      { x: 0, y: 20 },   // from bottom
-      { x: -20, y: 0 },  // from left
-      { x: 20, y: 0 },   // from right
-    ];
-    const dir = directions[i % directions.length];
+    const angle = (Math.random() - 0.5) * 30;
+    const dx = (Math.random() - 0.5) * 40;
+    const dy = -20 - Math.random() * 15;
     l.style.opacity = '0';
-    l.style.transform = `translate(${dir.x}px, ${dir.y}px)`;
+    l.style.transform = `translate(${dx}px, ${dy}px) rotate(${angle}deg) scale(0.4)`;
 
     setTimeout(() => {
-      l.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
-      l.style.transform = 'translate(0, 0)';
+      l.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.35s ease-out';
+      l.style.transform = 'translate(0, 0) rotate(0deg) scale(1)';
       l.style.opacity = '1';
-      setTimeout(() => { l.style.transition = ''; }, 600);
-    }, 150 + i * 100);
+      // Landing glow
+      l.style.textShadow = '0 0 14px rgba(99,102,241,0.7)';
+      setTimeout(() => {
+        l.style.textShadow = '';
+        l.style.transition = '';
+      }, 700);
+    }, 120 + i * 110);
   });
 
-  // Periodic rebuild: one letter disconnects and reconnects
+  // Periodic: one letter detaches, rotates, and snaps back into place
   function rebuild() {
     const idx = Math.floor(Math.random() * letters.length);
     const letter = letters[idx];
-    const dirs = [
-      { x: 0, y: -8 },
-      { x: 0, y: 8 },
-      { x: -8, y: -4 },
-      { x: 8, y: -4 },
-    ];
-    const dir = dirs[Math.floor(Math.random() * dirs.length)];
+    const angle = (Math.random() > 0.5 ? 1 : -1) * (8 + Math.random() * 12);
+    const dx = (Math.random() - 0.5) * 12;
+    const dy = -6 - Math.random() * 6;
 
     letter.style.transition = 'transform 0.3s ease-in, opacity 0.3s ease-in';
-    letter.style.transform = `translate(${dir.x}px, ${dir.y}px)`;
-    letter.style.opacity = '0.3';
+    letter.style.transform = `translate(${dx}px, ${dy}px) rotate(${angle}deg)`;
+    letter.style.opacity = '0.2';
 
     setTimeout(() => {
-      letter.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease-out';
-      letter.style.transform = 'translate(0, 0)';
+      letter.style.transition = 'transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease-out';
+      letter.style.transform = 'translate(0, 0) rotate(0deg)';
       letter.style.opacity = '1';
-      setTimeout(() => { letter.style.transition = ''; }, 500);
-    }, 350);
+      letter.style.textShadow = '0 0 10px rgba(99,102,241,0.5)';
+      setTimeout(() => { letter.style.transition = ''; letter.style.textShadow = ''; }, 500);
+    }, 300);
   }
 
-  interval = setInterval(rebuild, 3500);
+  interval = setInterval(rebuild, 3200);
 }
 
 // ─────────────────────────────────────────────────
-// Light: Ink Write — letters appear with quill stroke reveal
+// Light: Ink Write — calligraphic stroke with ink splash
 // ─────────────────────────────────────────────────
 function inkWrite(el) {
   const letters = wrapLetters(el);
   el.classList.add('logo-anim-light');
 
-  // Initial write-in: each letter fades in with a slight upward stroke
+  // Initial write-in: quill stroke from left to right with varying pressure
   letters.forEach((l, i) => {
     l.style.opacity = '0';
-    l.style.transform = 'translateY(4px) scaleY(0.3)';
-    l.style.transformOrigin = 'bottom center';
+    l.style.transform = 'translateY(6px) scaleY(0.2) scaleX(0.8)';
+    l.style.transformOrigin = 'bottom left';
 
     setTimeout(() => {
-      l.style.transition = 'transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease-out';
-      l.style.transform = 'translateY(0) scaleY(1)';
+      l.style.transition = 'transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease-out';
+      l.style.transform = 'translateY(0) scaleY(1) scaleX(1)';
       l.style.opacity = '1';
-      setTimeout(() => { l.style.transition = ''; }, 700);
-    }, 200 + i * 120);
+      // Ink bleed effect on arrival
+      l.style.textShadow = '0 1px 3px rgba(0,50,100,0.3)';
+      setTimeout(() => {
+        l.style.textShadow = '';
+        l.style.transition = '';
+      }, 800);
+    }, 180 + i * 130);
   });
 
-  // Periodic: a letter gently fades and re-inks
+  // Periodic: ink blot — letter gets heavy then lightens
   function reink() {
     const idx = Math.floor(Math.random() * letters.length);
     const letter = letters[idx];
 
-    letter.style.transition = 'opacity 0.8s ease-in-out, transform 0.8s ease-in-out';
-    letter.style.opacity = '0.2';
-    letter.style.transform = 'translateY(2px) scaleY(0.8)';
+    // Ink pools — letter gets bold/dark then releases
+    letter.style.transition = 'opacity 0.6s ease-in-out, transform 0.6s ease-in-out, font-weight 0.4s';
+    letter.style.opacity = '0.3';
+    letter.style.transform = 'translateY(3px) scaleY(0.7)';
+    letter.style.transformOrigin = 'bottom center';
 
     setTimeout(() => {
-      letter.style.transition = 'opacity 0.6s ease-out, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)';
+      letter.style.transition = 'opacity 0.5s ease-out, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)';
       letter.style.opacity = '1';
       letter.style.transform = 'translateY(0) scaleY(1)';
-      setTimeout(() => { letter.style.transition = ''; }, 700);
-    }, 800);
+      letter.style.textShadow = '0 1px 4px rgba(0,50,100,0.25)';
+      setTimeout(() => { letter.style.transition = ''; letter.style.textShadow = ''; }, 700);
+    }, 650);
   }
 
-  interval = setInterval(reink, 4000);
+  interval = setInterval(reink, 3800);
 }
 
 // ─────────────────────────────────────────────────
-// Pride: Rainbow Shimmer — cycling per-letter rainbow colors
+// Pride: Prismatic Flow — flashy entrance, then readable with subtle rainbow underline
 // ─────────────────────────────────────────────────
 function rainbowShimmer(el) {
   const letters = wrapLetters(el);
   el.classList.add('logo-anim-pride');
 
-  const colors = ['#ff6b6b', '#ffa500', '#fcc419', '#51cf66', '#339af0', '#cc5de8'];
-  let offset = 0;
+  let t = 0;
+  let phase = 'intro'; // 'intro' → 'settle' → 'idle'
 
-  function shimmer() {
-    letters.forEach((l, i) => {
-      const colorIdx = (i + offset) % colors.length;
-      l.style.color = colors[colorIdx];
-      l.style.textShadow = `0 0 8px ${colors[colorIdx]}44`;
-      // Slight wave motion
-      const wave = Math.sin((i + offset * 0.5) * 0.8) * 2;
-      l.style.transform = `translateY(${wave}px)`;
-    });
-    offset++;
-    animFrame = requestAnimationFrame(shimmer);
+  function hslColor(hue) {
+    return `hsl(${hue % 360}, 85%, 65%)`;
   }
 
-  // Initial pop-in
+  // Idle animation: letters are WHITE and readable, with a subtle
+  // color-cycling underline/bottom-glow and very gentle wave motion.
+  function animate() {
+    t += 0.5;
+
+    if (phase === 'idle') {
+      letters.forEach((l, i) => {
+        const hue = t * 1.5 + i * 55;
+        // White text — always readable
+        l.style.color = '#fff';
+        // Colored bottom glow only (acts as rainbow underline)
+        l.style.textShadow = `0 2px 6px hsla(${hue % 360}, 80%, 55%, 0.45), 0 0 2px rgba(255,255,255,0.3)`;
+        // Very gentle wave
+        const wave = Math.sin((t * 0.03) + i * 0.6) * 1.5;
+        l.style.transform = `translateY(${wave}px)`;
+      });
+
+      // Occasional sparkle
+      if (Math.random() > 0.95) {
+        const idx = Math.floor(Math.random() * letters.length);
+        const letter = letters[idx];
+        const spark = document.createElement('span');
+        const sx = (Math.random() - 0.5) * 12;
+        const sy = -3 - Math.random() * 8;
+        const hue = (t * 1.5 + idx * 55) % 360;
+        spark.style.cssText = `position:absolute;left:50%;top:0;pointer-events:none;font-size:0.5em;color:hsl(${hue},85%,75%);`;
+        spark.textContent = '\u2726';
+        letter.appendChild(spark);
+        spark.animate([
+          { transform: `translate(${sx}px, 0px) scale(1)`, opacity: 0.8 },
+          { transform: `translate(${sx * 1.5}px, ${sy}px) scale(0)`, opacity: 0 },
+        ], { duration: 500 + Math.random() * 300, easing: 'ease-out', fill: 'forwards' })
+          .onfinish = () => spark.remove();
+      }
+    }
+
+    animFrame = requestAnimationFrame(animate);
+  }
+
+  // Phase 1: Flashy rainbow entrance (letters burst in with full color)
   letters.forEach((l, i) => {
     l.style.opacity = '0';
-    l.style.transform = 'scale(0.5) translateY(8px)';
+    l.style.transform = 'scale(0) rotate(-20deg)';
+    const hue = i * 50;
     setTimeout(() => {
       l.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease-out';
       l.style.opacity = '1';
-      l.style.transform = 'scale(1) translateY(0)';
-      l.style.color = colors[i % colors.length];
-      setTimeout(() => { l.style.transition = ''; }, 600);
-    }, 80 + i * 70);
+      l.style.transform = 'scale(1.15) rotate(0deg)';
+      l.style.color = hslColor(hue);
+      l.style.textShadow = `0 0 14px hsla(${hue % 360}, 90%, 60%, 0.7), 0 0 30px hsla(${hue % 360}, 90%, 60%, 0.3)`;
+      setTimeout(() => { l.style.transition = ''; }, 500);
+    }, 80 + i * 80);
   });
 
-  setTimeout(() => { shimmer(); }, 600);
+  // Phase 2: Settle — transition from full rainbow to white+underline glow
+  setTimeout(() => {
+    phase = 'settle';
+    letters.forEach((l, i) => {
+      const hue = i * 55;
+      l.style.transition = 'color 0.8s ease, text-shadow 0.8s ease, transform 0.6s ease';
+      l.style.color = '#fff';
+      l.style.textShadow = `0 2px 6px hsla(${hue % 360}, 80%, 55%, 0.45), 0 0 2px rgba(255,255,255,0.3)`;
+      l.style.transform = 'scale(1)';
+      setTimeout(() => { l.style.transition = ''; }, 900);
+    });
+
+    setTimeout(() => { phase = 'idle'; }, 900);
+  }, 900);
+
+  setTimeout(() => { animate(); }, 700);
 }

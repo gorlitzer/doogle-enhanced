@@ -208,6 +208,7 @@ func (n *Node) init() error {
 		StatusFn:     n.Status,
 		CrawlSeed:    n.crawler.AddSeed,
 		CrawlerInfo:  n.CrawlerInfo,
+		CrawlerFeed:  n.crawler.RecentEvents,
 		IndexerStats: n.IndexerStats,
 		PeersInfo:    n.PeersInfo,
 		IndexStore:   bleveIdx,
@@ -277,6 +278,7 @@ func (n *Node) Status() *models.NodeStatus {
 
 	return &models.NodeStatus{
 		PeerID:         n.peerID.String(),
+		NodeName:       n.cfg.NodeName,
 		Addrs:          multiaddrsToStrings(n.host),
 		ConnectedPeers: len(peers),
 		PeerList:       peerList,

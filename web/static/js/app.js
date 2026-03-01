@@ -77,7 +77,8 @@ function startStatusPolling() {
       const s = await api.status();
       const badge = document.getElementById('node-badge-text');
       if (badge) {
-        badge.textContent = `${s.peer_id.slice(0, 12)}... | ${s.indexed_docs} docs | ${s.connected_peers} peers`;
+        const name = s.node_name || `${s.peer_id.slice(0, 12)}...`;
+        badge.textContent = `${name} | ${s.indexed_docs} docs | ${s.connected_peers} peers`;
       }
       if (firstPoll) {
         firstPoll = false;

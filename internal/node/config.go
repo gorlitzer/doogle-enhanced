@@ -11,12 +11,13 @@ import (
 
 // Config holds all node configuration.
 type Config struct {
-	P2P     P2PConfig     `yaml:"p2p"`
-	API     APIConfig     `yaml:"api"`
-	Crawler CrawlerConfig `yaml:"crawler"`
-	Index   IndexConfig   `yaml:"index"`
-	Storage StorageConfig `yaml:"storage"`
-	Search  SearchConfig  `yaml:"search"`
+	NodeName string        `yaml:"node_name"`
+	P2P      P2PConfig     `yaml:"p2p"`
+	API      APIConfig     `yaml:"api"`
+	Crawler  CrawlerConfig `yaml:"crawler"`
+	Index    IndexConfig   `yaml:"index"`
+	Storage  StorageConfig `yaml:"storage"`
+	Search   SearchConfig  `yaml:"search"`
 
 	// Seed URLs provided via CLI
 	SeedURLs []string `yaml:"-"`
@@ -137,6 +138,7 @@ func ParseFlags(cfg *Config) {
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to config YAML file")
+	flag.StringVar(&cfg.NodeName, "name", cfg.NodeName, "Human-readable node name")
 	flag.IntVar(&cfg.P2P.Port, "port", cfg.P2P.Port, "libp2p listen port")
 	flag.IntVar(&cfg.API.Port, "api-port", cfg.API.Port, "HTTP API port")
 	flag.StringVar(&cfg.Storage.DataDir, "data-dir", cfg.Storage.DataDir, "Data directory")

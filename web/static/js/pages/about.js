@@ -178,7 +178,7 @@ export function renderAbout(container) {
         <div class="about-hero-bg"></div>
         <h1 class="about-title">DOOGLE</h1>
         <div class="about-tagline-wrap">
-          <p class="about-tagline"></p>
+          <p class="about-tagline" aria-label="A decentralized, peer-to-peer search engine where every node crawls, indexes, and searches together.">&nbsp;</p>
           <span class="about-cursor">|</span>
         </div>
         <p class="about-subtitle">Open source. Zero tracking. Every node is a search engine.</p>

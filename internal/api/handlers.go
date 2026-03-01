@@ -20,6 +20,7 @@ type Deps struct {
 	StatusFn     func() *models.NodeStatus
 	CrawlSeed    func(url string)
 	CrawlerInfo  func() *models.CrawlerInfo
+	CrawlerFeed  func(afterSeq uint64) []models.CrawlEvent
 	IndexerStats func() *models.IndexerInfo
 	PeersInfo    func() []models.PeerInfo
 	IndexStore   index.Store
@@ -91,6 +92,19 @@ func CrawlerInfoHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, deps.CrawlerInfo())
+	}
+}
+
+// CrawlerFeedHandler handles GET /api/admin/crawler/feed?after=N
+func CrawlerFeedHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.CrawlerFeed == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"events": []interface{}{}})
+			return
+		}
+		afterSeq, _ := strconv.ParseUint(r.URL.Query().Get("after"), 10, 64)
+		events := deps.CrawlerFeed(afterSeq)
+		writeJSON(w, http.StatusOK, map[string]interface{}{"events": events})
 	}
 }
 
