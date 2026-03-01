@@ -10,6 +10,7 @@ const removedSeeds = new Set();
 let customSeeds = '';
 let settings = { depth: 3, workers: 4 };
 let pollInterval = null;
+const expandedGroups = new Set();
 const expandedCategories = new Set();
 
 // ─── Category Groups with Subcategories ─────────────
@@ -1566,6 +1567,7 @@ export function renderWizard(container) {
   currentStep = 0;
   selectedSubs.clear();
   removedSeeds.clear();
+  expandedGroups.clear();
   expandedCategories.clear();
   customSeeds = '';
   settings = { depth: 3, workers: 4 };
@@ -1776,59 +1778,73 @@ function renderFocus(el) {
   el.innerHTML = `
     <div class="wizard-focus">
       <h2>What interests you?</h2>
-      <p class="wizard-subtitle">Pick the topics your node will specialize in. Click a category to expand its sub-topics.</p>
+      <p class="wizard-subtitle">Pick the topics your node will specialize in. Expand a group, then select whole categories or individual sub-topics.</p>
 
       <div class="wizard-category-groups" id="wizard-categories">
-        ${CATEGORY_GROUPS.map(group => `
-          <div class="wizard-group">
+        ${CATEGORY_GROUPS.map(group => {
+          const groupOpen = expandedGroups.has(group.id);
+          const selInGroup = selectedSubsInGroup(group);
+          const totInGroup = totalSubsInGroup(group);
+          return `
+          <div class="wizard-group ${groupOpen ? 'open' : ''} ${selInGroup > 0 ? 'has-selection' : ''}">
             <div class="wizard-group-header" data-group="${group.id}">
-              <div class="wizard-group-title">
+              <div class="wizard-group-left">
+                <span class="wizard-group-chevron ${groupOpen ? 'open' : ''}">${icon('chevronDown', 14)}</span>
                 ${icon(group.icon, 20)}
                 <strong>${group.name}</strong>
-                <span class="wizard-group-badge">${selectedSubsInGroup(group)}/${totalSubsInGroup(group)}</span>
+                <span class="wizard-group-badge">${selInGroup}/${totInGroup}</span>
               </div>
               <button class="wizard-group-toggle" data-group-toggle="${group.id}" title="Select all in group">
-                ${selectedSubsInGroup(group) === totalSubsInGroup(group) ? 'Deselect all' : 'Select all'}
+                ${selInGroup === totInGroup ? 'Deselect all' : 'Select all'}
               </button>
             </div>
-            <div class="wizard-group-categories">
+            ${groupOpen ? `
+            <div class="wizard-group-body">
               ${group.categories.map(cat => {
                 const state = catSelectionState(cat);
                 const isExpanded = expandedCategories.has(cat.id);
                 const selectedCount = cat.subcategories.filter(s => selectedSubs.has(s.id)).length;
+                const totalCount = cat.subcategories.length;
                 return `
                 <div class="wizard-category ${state !== 'none' ? 'selected' : ''} ${state === 'partial' ? 'partial' : ''} ${isExpanded ? 'expanded' : ''}" data-id="${cat.id}">
                   <div class="wizard-category-header" data-cat-id="${cat.id}">
-                    <div class="wizard-category-icon">${icon(cat.icon, 24)}</div>
+                    <div class="wizard-category-icon">${icon(cat.icon, 22)}</div>
                     <div class="wizard-category-info">
                       <strong>${cat.name}</strong>
-                      <span class="wizard-category-desc">${cat.desc}</span>
-                      <span class="wizard-category-count">${cat.subcategories.length} sub-topics · ${selectedCount} selected</span>
+                      <span class="wizard-category-count">${selectedCount}/${totalCount} sub-topics</span>
                     </div>
+                    <button class="wizard-cat-select-all" data-cat-toggle="${cat.id}" title="Select all sub-topics in ${cat.name}">
+                      ${state === 'full' ? 'Deselect' : 'Select all'}
+                    </button>
                     <div class="wizard-category-expand">
                       <span class="wizard-expand-chevron ${isExpanded ? 'open' : ''}">${icon('chevronDown', 16)}</span>
                     </div>
                   </div>
                   ${isExpanded ? `
-                  <div class="wizard-sub-pills">
-                    ${cat.subcategories.map(sub => `
-                      <button class="wizard-sub-pill ${selectedSubs.has(sub.id) ? 'selected' : ''}" data-sub-id="${sub.id}" title="${sub.seeds.map(s => s.label).join(', ')}">
-                        ${selectedSubs.has(sub.id) ? '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2 6.5 4.5 9 10 3"/></svg>' : ''}
-                        ${sub.name}
-                        <span class="wizard-sub-pill-count">${sub.seeds.length}</span>
-                      </button>
-                    `).join('')}
-                  </div>
-                  <div class="wizard-sub-sources">
-                    ${cat.subcategories.filter(s => selectedSubs.has(s.id)).flatMap(s => s.seeds.map(seed => seed.label)).join(' · ') || 'No sources selected'}
+                  <div class="wizard-category-body">
+                    <div class="wizard-category-desc-row">${cat.desc}</div>
+                    <div class="wizard-sub-pills">
+                      ${cat.subcategories.map(sub => `
+                        <button class="wizard-sub-pill ${selectedSubs.has(sub.id) ? 'selected' : ''}" data-sub-id="${sub.id}" title="${sub.seeds.map(s => s.label).join(', ')}">
+                          ${selectedSubs.has(sub.id) ? '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2 6.5 4.5 9 10 3"/></svg>' : ''}
+                          ${sub.name}
+                          <span class="wizard-sub-pill-count">${sub.seeds.length}</span>
+                        </button>
+                      `).join('')}
+                    </div>
+                    <div class="wizard-sub-sources">
+                      ${cat.subcategories.filter(s => selectedSubs.has(s.id)).flatMap(s => s.seeds.map(seed => seed.label)).join(' · ') || 'No sources selected'}
+                    </div>
                   </div>
                   ` : ''}
                 </div>
               `;
               }).join('')}
             </div>
+            ` : ''}
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
 
       <div class="wizard-custom-seeds">
@@ -1856,14 +1872,48 @@ function renderFocus(el) {
     </div>
   `;
 
-  // Category header click → toggle expand
+  // Group header click → toggle group accordion
+  document.querySelectorAll('.wizard-group-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      if (e.target.closest('.wizard-group-toggle')) return;
+      const groupId = header.dataset.group;
+      if (expandedGroups.has(groupId)) {
+        expandedGroups.delete(groupId);
+      } else {
+        expandedGroups.add(groupId);
+      }
+      renderFocus(el);
+      renderNav();
+    });
+  });
+
+  // Category header click → toggle category accordion
   document.querySelectorAll('.wizard-category-header').forEach(header => {
-    header.addEventListener('click', () => {
+    header.addEventListener('click', (e) => {
+      if (e.target.closest('.wizard-cat-select-all')) return;
       const catId = header.dataset.catId;
       if (expandedCategories.has(catId)) {
         expandedCategories.delete(catId);
       } else {
         expandedCategories.add(catId);
+      }
+      renderFocus(el);
+      renderNav();
+    });
+  });
+
+  // Select-all toggle per category
+  document.querySelectorAll('.wizard-cat-select-all').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const catId = btn.dataset.catToggle;
+      const cat = CATEGORIES.find(c => c.id === catId);
+      if (!cat) return;
+      const state = catSelectionState(cat);
+      if (state === 'full') {
+        cat.subcategories.forEach(s => selectedSubs.delete(s.id));
+      } else {
+        cat.subcategories.forEach(s => selectedSubs.add(s.id));
       }
       renderFocus(el);
       renderNav();
