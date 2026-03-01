@@ -51,6 +51,7 @@ type SearchResult struct {
 	Language     string  `json:"language,omitempty"`
 	Score        float64 `json:"score"`
 	PeerID       string  `json:"peer_id,omitempty"`
+	PeerName     string  `json:"peer_name,omitempty"`
 
 	// Scoring signals (used by ranker, exposed for transparency)
 	PageRankScore     float64   `json:"pagerank_score,omitempty"`
@@ -123,6 +124,7 @@ type CrawlEvent struct {
 
 // PeerInfo holds detailed info about a connected peer.
 type PeerInfo struct {
-	PeerID string   `json:"peer_id"`
-	Addrs  []string `json:"addrs"`
+	PeerID   string   `json:"peer_id"`
+	NodeName string   `json:"node_name,omitempty"`
+	Addrs    []string `json:"addrs"`
 }

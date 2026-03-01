@@ -17,6 +17,7 @@ import (
 // ShardCatalog describes what a peer is responsible for.
 type ShardCatalog struct {
 	PeerID     string   `json:"peer_id"`
+	NodeName   string   `json:"node_name,omitempty"`
 	Domains    []string `json:"domains"`
 	DocCount   uint64   `json:"doc_count"`
 	Generation uint64   `json:"generation"`

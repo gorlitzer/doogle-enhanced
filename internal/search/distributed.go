@@ -25,6 +25,11 @@ type DistributedSearch struct {
 	replicationFactor int
 	peerTimeout       time.Duration
 	maxPeers          int
+
+	// Peer name resolution
+	PeerNameFn func(id string) string // resolve peer ID → name
+	LocalName  string                 // this node's name
+	LocalID    string                 // this node's peer ID
 }
 
 // NewDistributedSearch creates a distributed search engine.
@@ -67,6 +72,15 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		return nil, err
 	}
 
+	// Tag local results with this node's identity
+	for i := range localResp.Results {
+		localResp.Results[i].PeerID = ds.LocalID
+		localResp.Results[i].PeerName = ds.LocalName
+		if localResp.Results[i].PeerName == "" && ds.LocalID != "" {
+			localResp.Results[i].PeerName = ds.LocalID[:min(12, len(ds.LocalID))] + "..."
+		}
+	}
+
 	// Always re-rank local results with quality signals
 	RerankResults(localResp.Results)
 
@@ -97,9 +111,15 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 				log.Printf("distributed search: peer %s error: %v", peerID.String()[:12], err)
 				return
 			}
-			// Tag results with peer ID
+			// Tag results with peer ID and name
 			for i := range resp.Results {
 				resp.Results[i].PeerID = peerID.String()
+				if ds.PeerNameFn != nil {
+					resp.Results[i].PeerName = ds.PeerNameFn(peerID.String())
+				}
+				if resp.Results[i].PeerName == "" {
+					resp.Results[i].PeerName = peerID.String()[:min(12, len(peerID.String()))] + "..."
+				}
 			}
 			mu.Lock()
 			allResults = append(allResults, resp.Results...)
