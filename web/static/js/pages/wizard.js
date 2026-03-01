@@ -190,7 +190,7 @@ async function renderIdentity(el) {
     const peerId = s.peer_id || 'unknown';
     const truncated = peerId.length > 16 ? peerId.slice(0, 16) + '...' : peerId;
     const nodeName = s.node_name || '';
-    const addrs = s.listen_addresses || [];
+    const addrs = s.addrs || [];
     const peers = s.connected_peers || 0;
 
     el.innerHTML = `
@@ -301,7 +301,15 @@ function renderFocus(el) {
 }
 
 // ─── Step 3: Tune Settings ────────────────────────────
-function renderSettings(el) {
+async function renderSettings(el) {
+  // Pull actual config from the running node
+  try {
+    const info = await api.crawlerStatus();
+    if (info) {
+      if (info.max_depth) settings.depth = Math.min(5, Math.max(1, info.max_depth));
+      if (info.workers) settings.workers = Math.min(8, Math.max(1, info.workers));
+    }
+  } catch { /* use defaults */ }
   const est = Math.round(growthEstimate());
   const seeds = getAllSelectedSeeds();
 

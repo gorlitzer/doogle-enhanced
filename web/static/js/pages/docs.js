@@ -149,6 +149,27 @@ function renderQuickstart(el) {
             <p>Verify documents are indexed on the <a href="#/admin/indexer">Indexer page</a>. If just started, wait for the crawler to process the seed URLs. Try a broader query or check the query syntax guide.</p>
           </div>
         </div>
+        <div class="docs-collapsible">
+          <button class="docs-collapse-trigger">Running behind a VPN</button>
+          <div class="docs-collapse-body">
+            <p>Doogle works behind a VPN with some P2P limitations:</p>
+            <table style="width:100%;font-size:0.9em;margin:8px 0">
+              <thead><tr><th style="text-align:left">Feature</th><th style="text-align:left">Status</th><th style="text-align:left">Why</th></tr></thead>
+              <tbody>
+                <tr><td>Web crawling</td><td><span class="badge badge-green">works</span></td><td>Outbound HTTP goes through the VPN tunnel normally</td></tr>
+                <tr><td>Local search &amp; indexing</td><td><span class="badge badge-green">works</span></td><td>Purely local, no network involved</td></tr>
+                <tr><td>Web UI</td><td><span class="badge badge-green">works</span></td><td>Served on localhost, unaffected by VPN routing</td></tr>
+                <tr><td>Outbound peer connections</td><td><span class="badge badge-green">works</span></td><td>Connecting to <code>--bootstrap</code> peers goes through the tunnel</td></tr>
+                <tr><td>GossipSub messaging</td><td><span class="badge badge-green">works</span></td><td>Uses existing outbound streams, no new inbound needed</td></tr>
+                <tr><td>mDNS discovery</td><td><span class="badge badge-red">broken</span></td><td>Multicast stays on physical LAN; VPN tunnel interface does not relay mDNS</td></tr>
+                <tr><td>NAT port mapping (UPnP)</td><td><span class="badge badge-red">broken</span></td><td>UPnP targets the local router, which the VPN bypasses entirely</td></tr>
+                <tr><td>Hole punching</td><td><span class="badge badge-red">broken</span></td><td>VPN exit node won't forward unsolicited inbound connections</td></tr>
+                <tr><td>Inbound peer connections</td><td><span class="badge badge-red">broken</span></td><td>Other nodes cannot dial your VPN-assigned IP; your node is a leaf/consumer</td></tr>
+              </tbody>
+            </table>
+            <p><strong>Workaround:</strong> Use <code>--bootstrap</code> to explicitly connect outbound to known peers. Your node will crawl, index, and participate in gossip — it just can't accept new inbound connections from unknown peers.</p>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -1071,6 +1092,7 @@ seed_urls:
         ${infoCard('database', 'Data Persistence', 'All data is stored in --data-dir. Back up this directory to preserve your index, crawl history, and identity key.', 'var(--blue)')}
         ${infoCard('shield', 'Identity', 'A libp2p identity key is auto-generated on first run and stored in data-dir/identity.key. This key determines your Peer ID.', 'var(--green)')}
         ${infoCard('network', 'Firewall', 'Ensure the libp2p port (default 4001) is reachable if you want peers from outside your LAN to connect.', 'var(--amber)')}
+        ${infoCard('shield', 'VPN / Proxy', 'Crawling and local search work fine behind a VPN. However, mDNS discovery breaks (broadcasts stay on the physical LAN), NAT port-mapping and hole-punching are bypassed, and your node becomes unreachable for inbound P2P connections. You can still connect outbound to bootstrap peers. See Troubleshooting for details.', 'var(--red)')}
         ${infoCard('monitor', 'Headless Chrome', 'If enable_headless is true, Chromium will be downloaded automatically on first use via go-rod. Requires ~300MB disk space.', 'var(--purple)')}
       </div>
     </div>

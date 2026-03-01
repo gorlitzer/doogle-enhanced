@@ -100,6 +100,14 @@ async function loadNetwork() {
             <div class="card-label"><span class="badge badge-blue">Kademlia DHT</span> Internet-Wide</div>
             <div class="card-sub" style="margin-top:4px">Distributed hash table for peer routing across the internet. Bootstrap from known peers using --bootstrap flag.</div>
           </div>
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-green">NAT Traversal</span> Automatic</div>
+            <div class="card-sub" style="margin-top:4px">UPnP/NAT-PMP port mapping and hole punching allow peers behind home routers to accept inbound connections without manual port-forwarding.</div>
+          </div>
+          <div class="card card-sm">
+            <div class="card-label"><span class="badge badge-amber">VPN / Proxy</span> Limited</div>
+            <div class="card-sub" style="margin-top:4px">Behind a VPN, mDNS discovery, NAT mapping, and hole punching are bypassed. Crawling and outbound peer connections work fine, but your node becomes unreachable for inbound P2P. Use <code>--bootstrap</code> to connect to known peers. See <a href="#/docs" style="color:var(--accent)">Docs → Troubleshooting</a> for details.</div>
+          </div>
         </div>
       </div>
 
