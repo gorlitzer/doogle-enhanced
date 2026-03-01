@@ -10,6 +10,14 @@ p2p:
   bootstrap_peers: []
   # Enable mDNS for local network discovery
   mdns: true
+  # Enable DHT-based peer discovery via IPFS public bootstrap nodes
+  dht_discovery: true
+  # Rendezvous namespace for finding other Doogle nodes on the DHT
+  dht_rendezvous: "doogle/network/v2"
+  # How often to search the DHT for new peers
+  dht_discovery_interval: 30s
+  # Maximum number of peers before skipping DHT discovery rounds
+  dht_max_peers: 50
   # Protocol prefix
   protocol_prefix: /doogle
 

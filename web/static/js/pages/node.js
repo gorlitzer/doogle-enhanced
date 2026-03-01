@@ -82,7 +82,7 @@ async function loadStatus() {
 
 function renderPeerList(peers) {
   if (peers.length === 0) {
-    return '<div class="empty-state"><p>No peers connected. Waiting for discovery via mDNS or bootstrap...</p></div>';
+    return '<div class="empty-state"><p>No peers connected. Waiting for discovery via IPFS DHT, mDNS, or bootstrap...</p></div>';
   }
   return peers.map(p => `
     <div class="peer-item">

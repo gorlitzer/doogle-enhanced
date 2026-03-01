@@ -62,6 +62,7 @@ This starts a node with default settings:
 - libp2p on port `7001` (TCP + QUIC)
 - HTTP API on port `7002`
 - Data stored in `./data/doogle/`
+- DHT discovery enabled (automatically finds other Doogle nodes on the internet via IPFS public DHT)
 - mDNS enabled (finds peers on your local network automatically)
 - No seed URLs (the node waits for peers or manual crawl requests)
 
@@ -97,9 +98,38 @@ The node stores its identity key, BadgerDB, and Bleve index here. This directory
 
 ## Joining a Network
 
-### Using Bootstrap Peers
+### Automatic Discovery (Default — No Config Needed)
 
-To join an existing network, you need the **multiaddr** of at least one running node. A node prints its multiaddr at startup:
+By default, every Doogle node connects to the IPFS public DHT bootstrap nodes and advertises itself under the rendezvous namespace `doogle/network/v2`. Other Doogle nodes doing the same will find each other automatically within 30–60 seconds.
+
+Just start two nodes anywhere on the internet:
+
+```bash
+# Machine A (anywhere)
+./bin/doogle --data-dir ./data/node1
+
+# Machine B (anywhere else)
+./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2
+```
+
+No `--bootstrap` flag needed. You'll see in the logs:
+
+```
+DHT discovery: connecting to 5 IPFS bootstrap peers...
+DHT discovery: connected to 4/5 IPFS bootstrap peers
+DHT discovery: advertising as "doogle/network/v2"
+DHT discovery: connected to Doogle peer 12D3KooWAbc...
+```
+
+To disable automatic DHT discovery (e.g., for air-gapped or private networks):
+
+```bash
+./bin/doogle --dht-discovery=false
+```
+
+### Using Bootstrap Peers (Manual)
+
+For faster initial connection or private networks, you can manually specify a bootstrap peer. A node prints its multiaddr at startup:
 
 ```
 libp2p host started: 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
@@ -174,6 +204,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--seed` | — | Comma-separated seed URLs to crawl |
 | `--workers` | `4` | Number of concurrent crawl workers |
 | `--mdns` | `true` | Enable mDNS for LAN peer discovery |
+| `--dht-discovery` | `true` | Enable automatic peer discovery via IPFS public DHT |
 
 ### Precedence
 
@@ -196,6 +227,10 @@ p2p:
     - /ip4/203.0.113.10/tcp/7001/p2p/12D3KooWAbc...
     - /ip4/198.51.100.5/tcp/7001/p2p/12D3KooWDef...
   mdns: true
+  dht_discovery: true
+  dht_rendezvous: "doogle/network/v2"
+  dht_discovery_interval: 30s
+  dht_max_peers: 50
 
 api:
   port: 7002
@@ -244,6 +279,10 @@ CLI flags can still override individual settings:
 | `port` | int | `7001` | libp2p listen port |
 | `bootstrap_peers` | []string | `[]` | Multiaddr list of known peers |
 | `mdns` | bool | `true` | Enable mDNS LAN discovery |
+| `dht_discovery` | bool | `true` | Enable automatic peer discovery via IPFS public DHT |
+| `dht_rendezvous` | string | `"doogle/network/v2"` | DHT rendezvous namespace for finding Doogle nodes |
+| `dht_discovery_interval` | duration | `30s` | How often to search the DHT for new peers |
+| `dht_max_peers` | int | `50` | Skip DHT discovery rounds when this many peers are connected |
 
 #### `api`
 
@@ -318,6 +357,18 @@ Node 3 ──── Node 4
 ```
 
 More resilient. Configure multiple `bootstrap_peers` in the config.
+
+### Internet (DHT Discovery — Default)
+
+With DHT discovery enabled (the default), nodes anywhere on the internet find each other through the IPFS public DHT. No manual bootstrap needed:
+
+```bash
+# Anywhere on the internet — nodes discover each other automatically
+./bin/doogle --data-dir ./data/node1
+./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2
+```
+
+Nodes connect to IPFS bootstrap peers, advertise under `doogle/network/v2`, and find each other within 30–60 seconds.
 
 ### LAN-only (No Internet Bootstrap)
 
@@ -464,9 +515,11 @@ Check that:
 
 ### Nodes not discovering each other
 
-- On the same LAN? Ensure `--mdns true` (default).
-- Different networks? You must use `--bootstrap` with a reachable multiaddr.
+- **DHT discovery** is enabled by default. Nodes should find each other within 30–60 seconds via the IPFS public DHT. Check logs for `DHT discovery: connected to N/5 IPFS bootstrap peers`.
+- On the same LAN? mDNS should also work (`--mdns true` is the default).
+- If DHT discovery fails (e.g., behind a strict firewall), use `--bootstrap` with a reachable multiaddr.
 - Check that libp2p ports are open (TCP and UDP).
+- Disable DHT discovery for air-gapped/private networks: `--dht-discovery=false`.
 
 ### No search results
 

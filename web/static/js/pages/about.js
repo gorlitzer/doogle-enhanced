@@ -122,8 +122,8 @@ const capabilities = [
     modal: `<p>Spam detection catches keyword stuffing, cloaking patterns, thin content, and link farms. Documents with spam score &gt; 0.7 are rejected before indexing. Below that threshold, spam scores are baked into the StaticScore penalty.</p>` },
   { icon: 'monitor', title: 'Headless JS Rendering', desc: 'go-rod powered headless Chromium fallback for React, Next.js, Angular, and Vue single-page applications.',
     modal: `<p>When a page has 3+ <code>&lt;script&gt;</code> tags, the crawler falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a>. This renders React, Vue, Angular, and Next.js SPAs that would otherwise return empty HTML. Chromium is downloaded automatically on first use (~300MB).</p>` },
-  { icon: 'network', title: 'P2P Network (Kademlia)', desc: 'libp2p-based peer discovery via Kademlia DHT and mDNS. No central server — every node is equal.',
-    modal: `<p>Peer discovery uses <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a> for internet-wide routing and mDNS for local network discovery. Every node is a full peer — no central coordinators. Built on <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
+  { icon: 'network', title: 'P2P Network (Kademlia)', desc: 'libp2p-based peer discovery via Kademlia DHT, IPFS public DHT auto-discovery, and mDNS. Zero config — every node is equal.',
+    modal: `<p>Peer discovery uses three mechanisms: (1) <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a> for internet-wide routing, (2) <strong>IPFS public DHT routing discovery</strong> for automatic zero-config peer finding — nodes connect to IPFS bootstrap peers and advertise under the rendezvous namespace <code>doogle/network/v2</code>, discovering each other within 30–60 seconds with no manual bootstrap needed, and (3) mDNS for local LAN discovery. Every node is a full peer — no central coordinators. Built on <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
   { icon: 'megaphone', title: 'GossipSub Frontier', desc: 'Discovered URLs are broadcast to peers via pub/sub, creating a shared crawl frontier across the network.',
     modal: `<p>Newly discovered URLs are broadcast to all connected peers via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a> pub/sub. Nodes check if a URL falls in their shard range before scheduling a crawl, preventing duplicate work.</p>` },
   { icon: 'trendingUp', title: 'PageRank Authority', desc: 'Graph-based link analysis computes authority scores. Cross-domain links get 1.5x weight. Updated every 5 minutes.',
@@ -526,7 +526,7 @@ function renderRoadmap(el) {
       status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
       progress: 100,
       items: [
-        'P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)',
+        'P2P networking (libp2p TCP+QUIC, Kademlia DHT, IPFS DHT auto-discovery, mDNS, GossipSub, NAT traversal)',
         'Crawler with rate limiting, robots.txt, headless browser, live feed',
         'Indexer with 10+ quality signals, E-E-A-T, spam, PageRank',
         'BM25 search with boolean operators, search dorks, 15 language stemmers, phrases, fuzzy, site:/lang: filters',
@@ -586,7 +586,7 @@ function renderRoadmap(el) {
         'Browser extension, mobile client',
         'Light nodes (~50 MB RAM, relay-only)',
         'Plugin system, multi-platform releases',
-        'Public bootstrap network, community governance',
+        'Public Doogle-specific bootstrap network, community governance',
       ],
     },
   ];
@@ -654,6 +654,7 @@ function renderGetStarted(el) {
             <li><strong>Port 7001</strong> — P2P (TCP + UDP/QUIC)</li>
             <li><strong>Port 7002</strong> — HTTP API &amp; Web UI</li>
             <li>Auto NAT traversal (UPnP / hole punching)</li>
+            <li>Auto peer discovery via IPFS public DHT</li>
             <li>mDNS for local peer discovery</li>
           </ul>
         </div>
@@ -1167,8 +1168,8 @@ function setupArchDiagram() {
       desc: 'Query parsing (phrases, operators, fuzzy), BM25 retrieval, StaticScore reranking, distributed fanout.' },
 
     // P2P layer (y ~ 0.42)
-    { id: 'dht',     label: 'Kademlia DHT',   sub: 'Peer routing',         x: 0.10, y: 0.40, color: blue, layer: 'p2p',
-      desc: 'Distributed hash table for peer discovery and routing. Bootstrap from known peers or mDNS.' },
+    { id: 'dht',     label: 'Kademlia DHT',   sub: 'Peer routing + IPFS discovery',  x: 0.10, y: 0.40, color: blue, layer: 'p2p',
+      desc: 'Distributed hash table for peer discovery. Auto-discovers peers via IPFS public DHT, plus mDNS for LAN.' },
     { id: 'gossip',  label: 'GossipSub',      sub: '3 topics',             x: 0.30, y: 0.40, color: blue, layer: 'p2p',
       desc: 'Pub/sub broadcast: URL frontier, shard catalog, spam reports. Mesh overlay with fanout.' },
     { id: 'streams', label: 'Streams',         sub: 'req/reply',            x: 0.50, y: 0.40, color: blue, layer: 'p2p',
