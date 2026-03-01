@@ -9,7 +9,6 @@ import { renderIndexer } from './pages/indexer.js';
 import { renderNetwork } from './pages/network.js';
 import { renderDocs } from './pages/docs.js';
 import { renderAbout } from './pages/about.js';
-import { renderLearn } from './pages/learn.js';
 import { renderWizard } from './pages/wizard.js';
 import { renderActions } from './pages/actions.js';
 import { renderTrust } from './pages/trust.js';
@@ -26,7 +25,6 @@ const routes = {
   'admin/actions': { render: renderActions, layout: 'admin' },
   'admin/trust':   { render: renderTrust,   layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
-  'learn':       { render: renderLearn,  layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
   'wizard':      { render: renderWizard, layout: 'search' },
 };

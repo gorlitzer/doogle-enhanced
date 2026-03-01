@@ -520,67 +520,95 @@ function renderFeatures(el) {
 
 // ─── Tab: Roadmap ─────────────────────────────────────
 function renderRoadmap(el) {
+  const phases = [
+    {
+      name: 'Phase 1 — Foundation',
+      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
+      progress: 100,
+      items: [
+        'P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)',
+        'Crawler with rate limiting, robots.txt, headless browser, live feed',
+        'Indexer with 10+ quality signals, E-E-A-T, spam, PageRank',
+        'BM25 search with boolean operators, search dorks, 15 language stemmers, phrases, fuzzy, site:/lang: filters',
+        'Admin dashboard with 5 themes, wizard, network graph',
+        'Docker + Compose support',
+      ],
+    },
+    {
+      name: 'Phase 2 — Quality & Scale',
+      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
+      progress: 100,
+      items: [
+        'Spam reporting, peer trust scoring, auto-quarantine, domain flagging',
+        '16-topic onboarding wizard (Knowledge, Lifestyle, Creative, Technology)',
+        'CLI search tool, backup & restore, production builds',
+        'Search result caching, multi-language search, CLI tools',
+      ],
+    },
+    {
+      name: 'Phase 2.5 — Trust & Safety',
+      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 25,
+      items: [
+        'Sybil resistance and consensus-based domain blocklists',
+        'Reputation-weighted search ranking',
+        'Trust dashboard UI, admin allowlist/denylist',
+        'Horizontal sharding, PDF/doc indexing, image search',
+      ],
+    },
+    {
+      name: 'Phase 3 — Dark Web & Privacy',
+      status: 'planned', cls: 'about-roadmap-dark', badge: 'badge-purple',
+      progress: 0,
+      items: [
+        'Tor integration & .onion crawling via SOCKS5 proxy',
+        'I2P support via SAM bridge for eepsite crawling',
+        'Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)',
+        'Content safety layer (CSAM hash matching, configurable blocklists)',
+      ],
+    },
+    {
+      name: 'Phase 4 — Intelligence',
+      status: 'planned', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 0,
+      items: [
+        'Semantic search (sentence embeddings, hybrid BM25 + vector)',
+        'Knowledge graph with entity cards',
+        'ML-based ranking, query intent classification',
+        'Automatic summarization, topic clustering',
+      ],
+    },
+    {
+      name: 'Phase 5 — Ecosystem',
+      status: 'planned', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 0,
+      items: [
+        'Browser extension, mobile client',
+        'Light nodes (~50 MB RAM, relay-only)',
+        'Plugin system, multi-platform releases',
+        'Public bootstrap network, community governance',
+      ],
+    },
+  ];
+
+  const total = phases.length;
+  const done = phases.filter(p => p.progress === 100).length;
+
   el.innerHTML = `
     <section class="about-section about-reveal">
       <h2 class="about-section-title">Roadmap</h2>
-      <p class="about-section-desc">Six phases from foundation to ecosystem. We're finishing Phase 2.</p>
+      <p class="about-section-desc">${done} of ${total} phases complete. Building the search engine the internet deserves.</p>
       <div class="about-roadmap-timeline">
-        <div class="about-roadmap-phase about-roadmap-done">
-          <h3><span class="badge badge-green">complete</span> Phase 1 — Foundation</h3>
-          <ul>
-            <li>P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)</li>
-            <li>Crawler with rate limiting, robots.txt, headless browser, live feed</li>
-            <li>Indexer with 10+ quality signals, E-E-A-T, spam, PageRank</li>
-            <li>BM25 search with boolean operators, search dorks, 15 language stemmers, phrases, fuzzy, site:/lang: filters, distributed fan-out</li>
-            <li>Admin dashboard with 5 themes, wizard, network graph</li>
-            <li>Docker + Compose support</li>
-          </ul>
-        </div>
-        <div class="about-roadmap-phase about-roadmap-done">
-          <h3><span class="badge badge-green">complete</span> Phase 2 — Quality & Scale</h3>
-          <ul>
-            <li>Spam reporting, peer trust scoring, auto-quarantine, domain flagging</li>
-            <li>16-topic onboarding wizard (Knowledge, Lifestyle, Creative, Technology)</li>
-            <li>CLI search tool, backup & restore, production builds</li>
-            <li>Search result caching, multi-language search, CLI tools</li>
-          </ul>
-        </div>
-        <div class="about-roadmap-phase about-roadmap-next">
-          <h3><span class="badge badge-blue">next</span> Phase 2.5 — Trust & Safety</h3>
-          <ul>
-            <li>Sybil resistance and consensus-based domain blocklists</li>
-            <li>Reputation-weighted search ranking</li>
-            <li>Trust dashboard UI, admin allowlist/denylist</li>
-            <li>Horizontal sharding, PDF/doc indexing, image search</li>
-          </ul>
-        </div>
-        <div class="about-roadmap-phase about-roadmap-dark">
-          <h3><span class="badge badge-purple">planned</span> Phase 3 — Dark Web & Privacy</h3>
-          <ul>
-            <li>Tor integration &amp; .onion crawling via SOCKS5 proxy</li>
-            <li>I2P support via SAM bridge for eepsite crawling</li>
-            <li>Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)</li>
-            <li>Content safety layer (CSAM hash matching, configurable blocklists)</li>
-          </ul>
-        </div>
-        <div class="about-roadmap-phase about-roadmap-next">
-          <h3><span class="badge badge-blue">planned</span> Phase 4 — Intelligence</h3>
-          <ul>
-            <li>Semantic search (sentence embeddings, hybrid BM25 + vector)</li>
-            <li>Knowledge graph with entity cards</li>
-            <li>ML-based ranking, query intent classification</li>
-            <li>Automatic summarization, topic clustering</li>
-          </ul>
-        </div>
-        <div class="about-roadmap-phase about-roadmap-next">
-          <h3><span class="badge badge-blue">planned</span> Phase 5 — Ecosystem</h3>
-          <ul>
-            <li>Browser extension, mobile client</li>
-            <li>Light nodes (~50 MB RAM, relay-only)</li>
-            <li>Plugin system, multi-platform releases</li>
-            <li>Public bootstrap network, community governance</li>
-          </ul>
-        </div>
+        ${phases.map(p => `
+          <div class="about-roadmap-phase ${p.cls}">
+            <h3><span class="badge ${p.badge}">${p.status}</span> ${p.name}</h3>
+            <ul>${p.items.map(item => `<li>${item}</li>`).join('')}</ul>
+            <div class="roadmap-progress">
+              <div class="roadmap-progress-bar"><div class="roadmap-progress-fill" style="width:${p.progress}%"></div></div>
+              <span>${p.progress}%</span>
+            </div>
+          </div>
+        `).join('')}
       </div>
     </section>
 

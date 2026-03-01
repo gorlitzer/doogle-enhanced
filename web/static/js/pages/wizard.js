@@ -1,6 +1,6 @@
 // Doogle v2 — Onboarding Wizard
 import { api } from '../api.js';
-import { icon } from '../components.js';
+import { icon, showModal, closeModal } from '../components.js';
 import { animateElement } from '../logo-animation.js';
 
 let currentStep = 0;
@@ -12,6 +12,7 @@ let settings = { depth: 3, workers: 4 };
 let pollInterval = null;
 const expandedGroups = new Set();
 const expandedCategories = new Set();
+let seedAccordionOpen = false;
 
 // ─── Category Groups with Subcategories ─────────────
 const CATEGORY_GROUPS = [
@@ -1617,7 +1618,27 @@ function renderNav() {
   document.getElementById('wizard-back').addEventListener('click', () => { currentStep--; update(); });
   document.getElementById('wizard-next').addEventListener('click', () => {
     if (currentStep === 2 && getAllSelectedSeeds().length === 0) {
-      if (!confirm('No seeds selected. Your node won\'t crawl anything until you add seeds from the Admin panel. Continue anyway?')) return;
+      showModal('No Seeds Selected', `
+        <div style="text-align:center;padding:8px 0">
+          <div style="font-size:2.5em;margin-bottom:12px;opacity:0.7">${icon('alertTriangle', 48, 'var(--amber)')}</div>
+          <p style="color:var(--text-secondary);line-height:1.6;margin-bottom:20px">
+            Your node won't crawl anything without seed URLs.<br>
+            You can always add them later from the <strong>Actions</strong> panel in the Admin Dashboard.
+          </p>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <button class="btn" id="wizard-alert-cancel">Go Back</button>
+            <button class="btn btn-primary" id="wizard-alert-continue">Continue Anyway</button>
+          </div>
+        </div>
+      `, { width: '440px' });
+      setTimeout(() => {
+        document.getElementById('wizard-alert-cancel')?.addEventListener('click', closeModal);
+        document.getElementById('wizard-alert-continue')?.addEventListener('click', () => {
+          closeModal();
+          currentStep++; update();
+        });
+      }, 0);
+      return;
     }
     currentStep++; update();
   });
@@ -1972,19 +1993,42 @@ function renderFocus(el) {
   const toggleBtn = document.getElementById('wizard-seed-toggle');
   const seedList = document.getElementById('wizard-seed-list');
   if (toggleBtn && seedList) {
+    // Restore open state
+    if (seedAccordionOpen) {
+      seedList.classList.add('open');
+      toggleBtn.classList.add('open');
+    }
     toggleBtn.addEventListener('click', () => {
-      const open = seedList.classList.toggle('open');
-      toggleBtn.classList.toggle('open', open);
+      seedAccordionOpen = !seedAccordionOpen;
+      seedList.classList.toggle('open', seedAccordionOpen);
+      toggleBtn.classList.toggle('open', seedAccordionOpen);
     });
   }
 
-  // Remove individual seeds
+  // Remove individual seeds — update in place without full re-render
   document.querySelectorAll('.wizard-seed-remove').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const url = btn.dataset.removeUrl;
       removedSeeds.add(url);
-      renderFocus(el);
+      // Remove the item from DOM directly
+      const item = btn.closest('.wizard-seed-item');
+      if (item) item.remove();
+      // Update totals
+      const stats = countStats();
+      const totalEl = document.getElementById('wizard-seed-total');
+      if (totalEl) {
+        totalEl.textContent = `${stats.total} seed${stats.total !== 1 ? 's' : ''} selected from ${stats.catCount} topic${stats.catCount !== 1 ? 's' : ''}${stats.customCount > 0 ? ` + ${stats.customCount} custom` : ''}`;
+      }
+      const toggleEl = document.getElementById('wizard-seed-toggle');
+      if (toggleEl) {
+        toggleEl.querySelector('span').textContent = `Review seed URLs (${stats.total})`;
+      }
+      // Remove empty group labels
+      document.querySelectorAll('.wizard-seed-group-label').forEach(label => {
+        let next = label.nextElementSibling;
+        if (!next || next.classList.contains('wizard-seed-group-label')) label.remove();
+      });
       renderNav();
     });
   });
