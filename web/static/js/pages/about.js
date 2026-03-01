@@ -178,8 +178,7 @@ export function renderAbout(container) {
         <div class="about-hero-bg"></div>
         <h1 class="about-title">DOOGLE</h1>
         <div class="about-tagline-wrap">
-          <p class="about-tagline" aria-label="A decentralized, peer-to-peer search engine where every node crawls, indexes, and searches together.">&nbsp;</p>
-          <span class="about-cursor">|</span>
+          <p class="about-tagline" aria-label="A decentralized, peer-to-peer search engine where every node crawls, indexes, and searches together."><span class="about-tagline-text"></span><span class="about-cursor">|</span></p>
         </div>
         <p class="about-subtitle">Open source. Zero tracking. Every node is a search engine.</p>
         <button class="btn btn-primary about-explore-btn" onclick="document.getElementById('about-pipeline').scrollIntoView({behavior:'smooth'})">
@@ -551,7 +550,7 @@ function setupCapabilityModals() {
 
 // ---- Typewriter ----
 function typewriter(text) {
-  const el = document.querySelector('.about-tagline');
+  const el = document.querySelector('.about-tagline-text');
   if (!el) return;
   let i = 0;
   function tick() {
@@ -559,6 +558,10 @@ function typewriter(text) {
       el.textContent = text.slice(0, i);
       i++;
       setTimeout(tick, 35);
+    } else {
+      // Hide cursor after typing finishes
+      const cursor = document.querySelector('.about-cursor');
+      if (cursor) setTimeout(() => { cursor.style.opacity = '0'; cursor.style.transition = 'opacity 0.5s'; }, 1200);
     }
   }
   tick();

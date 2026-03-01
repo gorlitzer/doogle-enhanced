@@ -1160,9 +1160,10 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   max-width: 600px;
 }
 .about-cursor {
+  display: inline;
   color: var(--accent);
   animation: aboutBlink 0.8s step-end infinite;
-  margin-left: 2px;
+  margin-left: 1px;
   font-weight: 300;
 }
 @keyframes aboutBlink { 50% { opacity: 0; } }
