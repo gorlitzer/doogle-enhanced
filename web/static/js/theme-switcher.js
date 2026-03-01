@@ -89,13 +89,25 @@ export function createThemePicker() {
     </div>
   `;
 
-  // Insert before the node-badge (rightmost element)
+  // Place picker inside nav-links on desktop, outside on mobile
+  const navLinks = navbar.querySelector('.nav-links');
   const badge = navbar.querySelector('.node-badge');
-  if (badge) {
-    navbar.insertBefore(picker, badge);
-  } else {
-    navbar.appendChild(picker);
+
+  function positionPicker() {
+    if (window.innerWidth <= 768) {
+      // Mobile: keep picker in navbar flow (not inside the hidden dropdown)
+      if (picker.parentNode !== navbar) {
+        badge ? navbar.insertBefore(picker, badge) : navbar.appendChild(picker);
+      }
+    } else {
+      // Desktop: inside nav-links so it sits next to the centered links
+      if (navLinks && picker.parentNode !== navLinks) {
+        navLinks.appendChild(picker);
+      }
+    }
   }
+  positionPicker();
+  window.addEventListener('resize', positionPicker);
 
   // Toggle dropdown
   const btn = picker.querySelector('.theme-picker-btn');

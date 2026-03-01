@@ -12,6 +12,13 @@ import { animateElement } from '../logo-animation.js';
 const isMobile = () => window.innerWidth < 768;
 const mobileScale = (n) => isMobile() ? Math.floor(n * 0.6) : n;
 const getTheme = () => document.documentElement.getAttribute('data-theme') || 'dracula';
+function hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 export function renderHome(container) {
   container.innerHTML = `
@@ -85,6 +92,7 @@ export function renderHome(container) {
 
     switch (theme) {
       case 'dracula': currentAnimation = draculaSwarm(ctx, canvas, mouse, (id) => { animId = id; }); break;
+      case 'storm':   currentAnimation = stormFront(ctx, canvas, mouse, (id) => { animId = id; }); break;
       case 'crt':     currentAnimation = crtDecode(ctx, canvas, mouse, (id) => { animId = id; }); break;
       case 'modern':  currentAnimation = modernPolygons(ctx, canvas, mouse, (id) => { animId = id; }); break;
       case 'light':   currentAnimation = lightFireflies(ctx, canvas, mouse, (id) => { animId = id; }); break;
@@ -425,6 +433,210 @@ function drawMiniBat(ctx, x, y, size, alpha, wingPhase) {
   ctx.lineTo(size * 0.6, size * wing * 0.1);
   ctx.stroke();
   ctx.restore();
+}
+
+// ═════════════════════════════════════════════════
+// Storm — Falling rain with mouse ripples + click lightning
+// ═════════════════════════════════════════════════
+function stormFront(ctx, canvas, mouse, setAnimId) {
+  const dropCount = mobileScale(120);
+  const drops = [];
+  const splashes = [];
+  const ripples = [];
+  let bolts = [];
+  let flashAlpha = 0;
+  let time = 0;
+
+  for (let i = 0; i < dropCount; i++) drops.push(makeDrop());
+
+  function makeDrop() {
+    return {
+      x: Math.random() * canvas.width,
+      y: Math.random() * -canvas.height * 1.5,
+      len: 12 + Math.random() * 22,
+      speed: 4 + Math.random() * 5,
+      opacity: 0.08 + Math.random() * 0.15,
+      drift: -0.3 + Math.random() * 0.1, // slight wind to the left
+      width: 0.5 + Math.random() * 1,
+    };
+  }
+
+  function generateBolt(x, y, angle, depth) {
+    const segments = [];
+    const len = 100 + Math.random() * 200;
+    const steps = 8 + Math.floor(Math.random() * 6);
+    let cx = x, cy = y;
+    for (let i = 0; i < steps; i++) {
+      const jitter = (Math.random() - 0.5) * 50;
+      cx += Math.sin(angle) * (len / steps) + jitter;
+      cy += Math.cos(angle) * (len / steps);
+      segments.push({ x: cx, y: cy });
+    }
+    const branches = [];
+    if (depth < 2) {
+      for (let i = 2; i < segments.length; i++) {
+        if (Math.random() < 0.35) {
+          branches.push(generateBolt(segments[i].x, segments[i].y, angle + (Math.random() - 0.5) * 1.4, depth + 1));
+        }
+      }
+    }
+    return { startX: x, startY: y, segments, branches, width: Math.max(0.5, 2.5 - depth) };
+  }
+
+  function drawBolt(bolt, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#d0eaff';
+    ctx.lineWidth = bolt.width;
+    ctx.shadowColor = '#7eb8da';
+    ctx.shadowBlur = 12 + bolt.width * 5;
+    ctx.beginPath();
+    ctx.moveTo(bolt.startX, bolt.startY);
+    for (const seg of bolt.segments) ctx.lineTo(seg.x, seg.y);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(0.4, bolt.width * 0.4);
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(bolt.startX, bolt.startY);
+    for (const seg of bolt.segments) ctx.lineTo(seg.x, seg.y);
+    ctx.stroke();
+    ctx.restore();
+    for (const branch of bolt.branches) drawBolt(branch, alpha * 0.6);
+  }
+
+  // Fill initial frame with theme bg so there's no black flash
+  const style = getComputedStyle(document.documentElement);
+  const bgColor = style.getPropertyValue('--bg-primary').trim() || '#0b0e14';
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  function draw() {
+    // Trail fade using theme bg with low alpha for smooth streaks
+    ctx.fillStyle = hexToRgba(bgColor, 0.18);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    time += 0.016;
+    const now = performance.now();
+    const clickAge = (now - mouse.clickTime) / 1000;
+
+    // Rain drops
+    for (const d of drops) {
+      // Mouse repulsion — drops bend away from cursor
+      let dx = 0;
+      const ddx = d.x - mouse.x;
+      const ddy = d.y - mouse.y;
+      const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+      if (dist < 150 && dist > 1) {
+        dx = (ddx / dist) * ((150 - dist) / 150) * 3;
+      }
+
+      ctx.save();
+      ctx.globalAlpha = d.opacity;
+      ctx.strokeStyle = '#7eb8da';
+      ctx.lineWidth = d.width;
+      ctx.beginPath();
+      ctx.moveTo(d.x + dx, d.y);
+      ctx.lineTo(d.x + d.drift * d.len + dx, d.y + d.len);
+      ctx.stroke();
+      ctx.restore();
+
+      d.y += d.speed;
+      d.x += d.drift * 0.5;
+
+      if (d.y > canvas.height - 8) {
+        // Splash particles — spawn above bottom edge so they're visible
+        const groundY = canvas.height - 8;
+        if (Math.random() < 0.3) {
+          for (let s = 0; s < 2 + Math.floor(Math.random() * 3); s++) {
+            const ang = Math.PI + (Math.random() - 0.5) * 1.5;
+            splashes.push({
+              x: d.x, y: groundY,
+              vx: Math.cos(ang) * (1 + Math.random() * 2),
+              vy: Math.sin(ang) * (1.5 + Math.random() * 2),
+              life: 1, size: 0.5 + Math.random(),
+            });
+          }
+        }
+        // Ripple (half-circle at ground)
+        ripples.push({ x: d.x, y: groundY, radius: 0, life: 1, full: false });
+        Object.assign(d, makeDrop());
+      }
+    }
+
+    // Splash particles
+    for (let i = splashes.length - 1; i >= 0; i--) {
+      const s = splashes[i];
+      s.x += s.vx; s.y += s.vy;
+      s.vy += 0.1; // gravity
+      s.life -= 0.03;
+      if (s.life <= 0 || s.y > canvas.height) { splashes.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = s.life * 0.4;
+      ctx.fillStyle = '#7eb8da';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Ripples
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const r = ripples[i];
+      r.radius += r.full ? 1.5 : 0.6;
+      r.life -= r.full ? 0.018 : 0.025;
+      if (r.life <= 0) { ripples.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = r.life * (r.full ? 0.25 : 0.12);
+      ctx.strokeStyle = '#7eb8da';
+      ctx.lineWidth = r.full ? 1 : 0.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.radius, r.full ? 0 : Math.PI, r.full ? Math.PI * 2 : 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Click → spawn lightning bolt at click position
+    if (clickAge < 0.05 && mouse.clickTime > 0) {
+      bolts.push({
+        bolt: generateBolt(mouse.clickX, Math.max(0, mouse.clickY - 120), Math.PI * (0.9 + Math.random() * 0.2), 0),
+        born: now,
+        duration: 250 + Math.random() * 200,
+      });
+      flashAlpha = 0.08 + Math.random() * 0.05;
+      // Ripple burst — centered where the bolt originates
+      const rippleY = Math.max(0, mouse.clickY - 100);
+      for (let r = 0; r < 5; r++) {
+        ripples.push({ x: mouse.clickX + (Math.random() - 0.5) * 40, y: rippleY + Math.random() * 30, radius: 0, life: 1, full: true });
+      }
+    }
+
+    // Draw bolts
+    for (let i = bolts.length - 1; i >= 0; i--) {
+      const b = bolts[i];
+      const age = now - b.born;
+      if (age < b.duration) {
+        const flicker = Math.random() > 0.2 ? 1 : 0;
+        drawBolt(b.bolt, (1 - age / b.duration) * flicker);
+      } else {
+        bolts.splice(i, 1);
+      }
+    }
+
+    // Screen flash
+    if (flashAlpha > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = flashAlpha;
+      ctx.fillStyle = '#7eb8da';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      flashAlpha *= 0.9;
+    }
+
+    setAnimId(requestAnimationFrame(draw));
+  }
+
+  draw();
+  return { cleanup: () => { bolts = []; } };
 }
 
 // ═════════════════════════════════════════════════

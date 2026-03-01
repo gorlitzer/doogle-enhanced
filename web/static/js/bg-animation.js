@@ -2,6 +2,7 @@
 // Subtle, non-invasive canvas animations per theme.
 // Each theme gets its own visual identity:
 //   dracula  — drifting bats + mist particles
+//   storm    — subtle rain with lightning strikes
 //   crt      — matrix character rain
 //   modern   — connected particle mesh
 //   light    — floating dust motes
@@ -41,6 +42,7 @@ function startAnimation(theme) {
   switch (theme) {
     case 'crt':     currentAnim = matrixRain(); break;
     case 'dracula': currentAnim = draculaBats(); break;
+    case 'storm':   currentAnim = stormRain(); break;
     case 'modern':  currentAnim = particleMesh(); break;
     case 'light':   currentAnim = dustMotes(); break;
     case 'pride':   currentAnim = auroraWave(); break;
@@ -157,29 +159,102 @@ function draculaBats() {
     });
   }
 
-  // Lightning state
-  let lightning = null;     // active bolt
-  let flashAlpha = 0;       // screen flash
-  let nextStrike = performance.now() + 3000 + Math.random() * 5000;
+  function drawBat(b) {
+    const wing = Math.sin(b.wingPhase) * 0.6;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.globalAlpha = b.opacity;
+    ctx.fillStyle = '#00d4ff';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, b.size * 0.15, b.size * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -b.size * 0.1);
+    ctx.quadraticCurveTo(-b.size * 0.5, -b.size * (0.4 + wing * 0.3), -b.size, b.size * wing * 0.2);
+    ctx.quadraticCurveTo(-b.size * 0.4, b.size * 0.15, 0, b.size * 0.1);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -b.size * 0.1);
+    ctx.quadraticCurveTo(b.size * 0.5, -b.size * (0.4 + wing * 0.3), b.size, b.size * wing * 0.2);
+    ctx.quadraticCurveTo(b.size * 0.4, b.size * 0.15, 0, b.size * 0.1);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const m of mist) {
+      ctx.beginPath();
+      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);
+      g.addColorStop(0, `rgba(0, 212, 255, ${m.opacity})`);
+      g.addColorStop(1, 'rgba(0, 212, 255, 0)');
+      ctx.fillStyle = g;
+      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+      ctx.fill();
+      m.x += m.vx; m.y += m.vy;
+      if (m.x < -m.r) m.x = canvas.width + m.r;
+      if (m.x > canvas.width + m.r) m.x = -m.r;
+      if (m.y < -m.r) m.y = canvas.height + m.r;
+      if (m.y > canvas.height + m.r) m.y = -m.r;
+    }
+    for (const b of bats) {
+      drawBat(b);
+      b.wingPhase += b.wingSpeed;
+      b.x += b.vx; b.y += b.vy;
+      b.y += Math.sin(b.wingPhase * 0.3) * 0.2;
+      if (b.x < -30) b.x = canvas.width + 30;
+      if (b.x > canvas.width + 30) b.x = -30;
+      if (b.y < -30) b.y = canvas.height + 30;
+      if (b.y > canvas.height + 30) b.y = -30;
+    }
+    animId = requestAnimationFrame(draw);
+  }
+
+  draw();
+  return { cleanup: () => {} };
+}
+
+// ─────────────────────────────────────────────────
+// Storm: Rain + Lightning
+// ─────────────────────────────────────────────────
+function stormRain() {
+  const drops = [];
+  const splashes = [];
+  const dropCount = Math.max(40, Math.floor((canvas.width * canvas.height) / 12000));
+
+  for (let i = 0; i < dropCount; i++) drops.push(makeDrop());
+
+  function makeDrop() {
+    return {
+      x: Math.random() * canvas.width,
+      y: Math.random() * -canvas.height,
+      len: 10 + Math.random() * 18,
+      speed: 3 + Math.random() * 4,
+      opacity: 0.03 + Math.random() * 0.05,
+      drift: (Math.random() - 0.5) * 0.3,
+    };
+  }
+
+  let lightning = null;
+  let flashAlpha = 0;
+  let nextStrike = performance.now() + 5000 + Math.random() * 8000;
 
   function generateBolt(x, y, angle, depth) {
     const segments = [];
-    const len = 60 + Math.random() * 100;
+    const len = 80 + Math.random() * 140;
     const steps = 6 + Math.floor(Math.random() * 6);
     let cx = x, cy = y;
     for (let i = 0; i < steps; i++) {
       const jitter = (Math.random() - 0.5) * 40;
-      const stepLen = len / steps;
-      cx += Math.sin(angle) * stepLen + jitter;
-      cy += Math.cos(angle) * stepLen;
+      cx += Math.sin(angle) * (len / steps) + jitter;
+      cy += Math.cos(angle) * (len / steps);
       segments.push({ x: cx, y: cy });
     }
     const branches = [];
     if (depth < 2) {
       for (let i = 2; i < segments.length; i++) {
-        if (Math.random() < 0.35) {
-          const branchAngle = angle + (Math.random() - 0.5) * 1.2;
-          branches.push(generateBolt(segments[i].x, segments[i].y, branchAngle, depth + 1));
+        if (Math.random() < 0.3) {
+          branches.push(generateBolt(segments[i].x, segments[i].y, angle + (Math.random() - 0.5) * 1.2, depth + 1));
         }
       }
     }
@@ -189,15 +264,14 @@ function draculaBats() {
   function drawBolt(bolt, alpha) {
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#e0f0ff';
+    ctx.strokeStyle = '#c0e8ff';
     ctx.lineWidth = bolt.width;
-    ctx.shadowColor = '#00d4ff';
-    ctx.shadowBlur = 8 + bolt.width * 4;
+    ctx.shadowColor = '#7eb8da';
+    ctx.shadowBlur = 10 + bolt.width * 4;
     ctx.beginPath();
     ctx.moveTo(bolt.startX, bolt.startY);
     for (const seg of bolt.segments) ctx.lineTo(seg.x, seg.y);
     ctx.stroke();
-    // Bright core
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = Math.max(0.3, bolt.width * 0.4);
     ctx.shadowBlur = 0;
@@ -206,43 +280,13 @@ function draculaBats() {
     for (const seg of bolt.segments) ctx.lineTo(seg.x, seg.y);
     ctx.stroke();
     ctx.restore();
-    for (const branch of bolt.branches) drawBolt(branch, alpha * 0.7);
-  }
-
-  function drawBat(b) {
-    const wing = Math.sin(b.wingPhase) * 0.6;
-    ctx.save();
-    ctx.translate(b.x, b.y);
-    ctx.globalAlpha = b.opacity;
-    ctx.fillStyle = '#00d4ff';
-
-    // Body
-    ctx.beginPath();
-    ctx.ellipse(0, 0, b.size * 0.15, b.size * 0.3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Left wing
-    ctx.beginPath();
-    ctx.moveTo(0, -b.size * 0.1);
-    ctx.quadraticCurveTo(-b.size * 0.5, -b.size * (0.4 + wing * 0.3), -b.size, b.size * wing * 0.2);
-    ctx.quadraticCurveTo(-b.size * 0.4, b.size * 0.15, 0, b.size * 0.1);
-    ctx.fill();
-
-    // Right wing
-    ctx.beginPath();
-    ctx.moveTo(0, -b.size * 0.1);
-    ctx.quadraticCurveTo(b.size * 0.5, -b.size * (0.4 + wing * 0.3), b.size, b.size * wing * 0.2);
-    ctx.quadraticCurveTo(b.size * 0.4, b.size * 0.15, 0, b.size * 0.1);
-    ctx.fill();
-
-    ctx.restore();
+    for (const branch of bolt.branches) drawBolt(branch, alpha * 0.6);
   }
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const now = performance.now();
 
-    // Trigger new lightning
     if (now > nextStrike) {
       const strikeX = canvas.width * 0.1 + Math.random() * canvas.width * 0.8;
       lightning = {
@@ -250,65 +294,56 @@ function draculaBats() {
         born: now,
         duration: 150 + Math.random() * 200,
       };
-      flashAlpha = 0.06 + Math.random() * 0.04;
-      nextStrike = now + 4000 + Math.random() * 8000;
+      flashAlpha = 0.04 + Math.random() * 0.03;
+      nextStrike = now + 6000 + Math.random() * 12000;
     }
 
-    // Mist
-    for (const m of mist) {
+    for (const d of drops) {
+      ctx.save();
+      ctx.globalAlpha = d.opacity;
+      ctx.strokeStyle = '#7eb8da';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);
-      g.addColorStop(0, `rgba(0, 212, 255, ${m.opacity})`);
-      g.addColorStop(1, 'rgba(0, 212, 255, 0)');
-      ctx.fillStyle = g;
-      ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
-      ctx.fill();
-
-      m.x += m.vx;
-      m.y += m.vy;
-      if (m.x < -m.r) m.x = canvas.width + m.r;
-      if (m.x > canvas.width + m.r) m.x = -m.r;
-      if (m.y < -m.r) m.y = canvas.height + m.r;
-      if (m.y > canvas.height + m.r) m.y = -m.r;
-    }
-
-    // Bats
-    for (const b of bats) {
-      drawBat(b);
-      b.wingPhase += b.wingSpeed;
-      b.x += b.vx;
-      b.y += b.vy;
-
-      // Subtle sine drift
-      b.y += Math.sin(b.wingPhase * 0.3) * 0.2;
-
-      if (b.x < -30) b.x = canvas.width + 30;
-      if (b.x > canvas.width + 30) b.x = -30;
-      if (b.y < -30) b.y = canvas.height + 30;
-      if (b.y > canvas.height + 30) b.y = -30;
-    }
-
-    // Draw lightning bolt
-    if (lightning) {
-      const age = now - lightning.born;
-      if (age < lightning.duration) {
-        // Flicker effect — bolt visible ~70% of frames for a crackling look
-        const flicker = Math.random() > 0.3 ? 1 : 0;
-        const fade = 1 - (age / lightning.duration);
-        drawBolt(lightning.bolt, fade * flicker);
-      } else {
-        lightning = null;
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x + d.drift * d.len * 0.5, d.y + d.len);
+      ctx.stroke();
+      ctx.restore();
+      d.y += d.speed; d.x += d.drift;
+      if (d.y > canvas.height) {
+        splashes.push({ x: d.x, y: canvas.height, radius: 0, opacity: d.opacity * 1.5 });
+        Object.assign(d, makeDrop());
       }
     }
 
-    // Screen flash (ambient glow on strike)
+    for (let i = splashes.length - 1; i >= 0; i--) {
+      const s = splashes[i];
+      s.radius += 0.4; s.opacity *= 0.92;
+      if (s.opacity < 0.002) { splashes.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = s.opacity;
+      ctx.strokeStyle = '#7eb8da';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.radius, Math.PI, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (lightning) {
+      const age = now - lightning.born;
+      if (age < lightning.duration) {
+        const flicker = Math.random() > 0.25 ? 1 : 0;
+        drawBolt(lightning.bolt, (1 - age / lightning.duration) * flicker);
+      } else { lightning = null; }
+    }
+
     if (flashAlpha > 0.001) {
       ctx.save();
       ctx.globalAlpha = flashAlpha;
-      ctx.fillStyle = '#00d4ff';
+      ctx.fillStyle = '#7eb8da';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
-      flashAlpha *= 0.88; // rapid decay
+      flashAlpha *= 0.88;
     }
 
     animId = requestAnimationFrame(draw);
