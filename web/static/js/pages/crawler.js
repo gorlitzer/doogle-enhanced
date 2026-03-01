@@ -1,6 +1,6 @@
 // Doogle v2 — Crawler Management (enhanced with analytics + charts)
 import { api } from '../api.js';
-import { renderBarChart, renderLineChart, cardSkeleton, escapeHtml } from '../components.js';
+import { renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
 
 let activeTab = 'status';
 let crawlHistory = []; // track crawl counts for chart
@@ -352,6 +352,3 @@ function formatTime(d) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function getCSS(prop) {
-  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim() || '#888';
-}
