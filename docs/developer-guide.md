@@ -34,9 +34,9 @@ make test
 # Run linter
 make lint
 
-# Run two nodes locally (two terminals)
+# Run two nodes locally (two terminals) — they discover each other via DHT automatically
 make run                                           # Terminal 1 — node on :7001/:7002
-make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /ip4/127.0.0.1/tcp/7001'   # Terminal 2
+make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2'   # Terminal 2
 ```
 
 ---
@@ -53,7 +53,7 @@ doogle-v2/
 │   │   └── identity.go         # Ed25519 key generation and persistence
 │   ├── p2p/                    # libp2p networking layer
 │   │   ├── host.go             # Host creation (TCP, QUIC, Noise, NAT)
-│   │   ├── discovery.go        # Kademlia DHT + mDNS peer discovery
+│   │   ├── discovery.go        # Kademlia DHT + IPFS routing discovery + mDNS peer discovery
 │   │   ├── gossip.go           # GossipSub pub/sub (URL frontier topic)
 │   │   ├── protocols.go        # Protocol ID constants
 │   │   ├── search_protocol.go  # /doogle/search/1.0.0 stream handler + client
@@ -125,6 +125,8 @@ This is the only package that imports all others. It creates every subsystem in 
 Thin wrappers around libp2p. Each file is focused on one concern.
 
 **Key pattern:** Protocol handlers are registered via `Register*Protocol(host, handlerFunc)`. The handler receives a typed Go struct (not raw bytes) — JSON marshaling is handled internally.
+
+**Discovery:** `discovery.go` manages three discovery mechanisms: (1) Kademlia DHT for peer routing, (2) IPFS public DHT routing discovery for automatic zero-config peer finding via `RoutingDiscovery` + `BackoffDiscovery`, and (3) mDNS for LAN discovery. The `DiscoveryConfig` struct controls all discovery settings. `StartAdvertising()` and `StartFindingPeers()` are called from `node.Run()` to begin the DHT discovery loop.
 
 ### `internal/crawler` — Web Crawling
 

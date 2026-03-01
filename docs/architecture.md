@@ -53,7 +53,7 @@ The node orchestrator creates subsystems in this exact order:
 ```
 1.  LoadOrCreateIdentity()     Ed25519 keypair → persistent in data_dir/node.key
 2.  p2p.NewHost()              libp2p host on TCP + QUIC
-3.  p2p.NewDiscovery()         Kademlia DHT + optional mDNS
+3.  p2p.NewDiscovery()         Kademlia DHT + IPFS DHT routing discovery + optional mDNS
 4.  p2p.NewGossip()            GossipSub → join "doogle/url-frontier"
 5.  store.NewBadgerStore()     Open BadgerDB at data_dir/badger/
 6.  index.NewBleveStore()      Open/create Bleve index at data_dir/bleve/
@@ -70,10 +70,12 @@ The node orchestrator creates subsystems in this exact order:
 ### Runtime (`node.Run()`)
 
 ```
-1. crawler.Start()         → launches N worker goroutines
-2. go gossipLoop()         → listens for URL announcements from peers
-3. crawler.AddSeed()       → queues each seed URL
-4. apiServer.Start()       → blocks, serving HTTP
+1. crawler.Start()              → launches N worker goroutines
+2. discovery.StartAdvertising() → advertises on DHT (re-advertises at 7/8 * TTL)
+3. go discovery.StartFindingPeers() → periodic DHT peer search (every 30s)
+4. go gossipLoop()              → listens for URL announcements from peers
+5. crawler.AddSeed()            → queues each seed URL
+6. apiServer.Start()            → blocks, serving HTTP
 ```
 
 ### Shutdown (`node.Shutdown()`)
@@ -105,6 +107,8 @@ The node orchestrator creates subsystems in this exact order:
 ### Peer Discovery
 
 **Kademlia DHT** — Nodes maintain a distributed hash table. When bootstrapping, the node connects to known peers and populates its routing table. The DHT runs in `AutoServer` mode (acts as both client and server).
+
+**IPFS DHT Routing Discovery** — Enabled by default. On startup, the node connects to the IPFS public bootstrap peers (5 well-known nodes maintained by Protocol Labs) to join the global Kademlia DHT. It then uses `RoutingDiscovery` to advertise itself under the rendezvous namespace `doogle/network/v2` and periodically searches for other Doogle nodes. Discovery queries are wrapped in `BackoffDiscovery` (exponential backoff: 1s–5min, full jitter) to avoid overloading the DHT. New peers are found within 30–60 seconds — no manual `--bootstrap` needed for internet-wide discovery. Disable with `--dht-discovery=false`.
 
 **mDNS** — For local/dev networks, nodes broadcast on the LAN using the service name `doogle-p2p`. No bootstrap peers needed on the same network.
 
@@ -440,7 +444,7 @@ data_dir/
 cmd/doogle/main.go
   └─ internal/node
        ├─ internal/p2p
-       │    ├─ libp2p (host, dht, pubsub, mdns)
+       │    ├─ libp2p (host, dht, pubsub, mdns, routing discovery, backoff)
        │    └─ internal/models
        ├─ internal/crawler
        │    ├─ goquery

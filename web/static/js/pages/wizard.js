@@ -1757,7 +1757,7 @@ async function renderIdentity(el) {
 
         ${peers === 0 ? `
           <div class="wizard-info-note">
-            ${icon('radio', 16)} No peers connected yet — that's normal for a fresh node. mDNS will auto-discover nearby nodes on your local network, and the DHT will find peers across the internet. Peer count will grow over time.
+            ${icon('radio', 16)} No peers connected yet — that's normal for a fresh node. IPFS DHT discovery will automatically find other Doogle nodes on the internet within 30–60 seconds, and mDNS discovers nearby nodes on your local network. Peer count will grow over time.
           </div>
         ` : ''}
       </div>

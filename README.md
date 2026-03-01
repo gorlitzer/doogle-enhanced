@@ -83,13 +83,23 @@ go build -o bin/doogle ./cmd/doogle && ./bin/doogle
 
 ### 3. Connect a Second Node
 
+Nodes find each other **automatically** via the IPFS public DHT — no manual bootstrap needed:
+
+```bash
+./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2
+```
+
+Both nodes advertise on the DHT under a shared rendezvous namespace and discover each other within 30–60 seconds. Search on either node returns results from both.
+
+**Manual bootstrap** (optional, for faster or private connections):
+
 ```bash
 ./bin/doogle --port 7003 --api-port 7004 \
   --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/<PEER_ID> \
   --data-dir ./data/node2
 ```
 
-Replace `<PEER_ID>` with the peer ID printed by node 1 at startup. Node 2 discovers URLs via GossipSub and starts crawling. Search on either node returns results from both.
+Replace `<PEER_ID>` with the peer ID printed by node 1 at startup.
 
 ### Docker (alternative)
 
@@ -139,6 +149,7 @@ make build
 **P2P Network**
 - libp2p transport (TCP + QUIC) with Noise encryption
 - Kademlia DHT for internet-wide peer routing
+- Automatic peer discovery via IPFS public DHT — zero config, no manual bootstrap needed
 - mDNS for zero-config LAN discovery
 - GossipSub for URL frontier broadcast
 - NAT traversal via UPnP/NAT-PMP and hole punching
@@ -203,6 +214,7 @@ make build
               │  ┌──── libp2p Host ────────────────┐  │
               │  │  TCP + QUIC transports          │  │
               │  │  Kademlia DHT + mDNS            │  │
+              │  │  IPFS DHT auto-discovery        │  │
               │  │  GossipSub (URL frontier)       │  │
               │  │  NAT traversal (UPnP, holepunch)│  │
               │  └─────────────────────────────────┘  │
@@ -260,6 +272,7 @@ Flags:
   --seed URL           Seed URL(s) to crawl (comma-separated)
   --workers N          Crawler worker count (default: 4)
   --mdns               Enable mDNS LAN discovery (default: true)
+  --dht-discovery      Enable DHT peer discovery via IPFS bootstrap (default: true)
   --headless           Enable headless browser rendering (default: false)
 ```
 
@@ -386,7 +399,7 @@ doogle-v2/
 | Component | Library | Purpose |
 |-----------|---------|---------|
 | P2P networking | `go-libp2p` v0.38 | TCP + QUIC, Noise encryption, NAT traversal |
-| Peer discovery | `go-libp2p-kad-dht` | Kademlia DHT for internet-wide routing |
+| Peer discovery | `go-libp2p-kad-dht` | Kademlia DHT + IPFS routing discovery for automatic peer finding |
 | URL broadcast | `go-libp2p-pubsub` | GossipSub for URL frontier |
 | Full-text search | `bleve/v2` | BM25 index with stemming and fuzzy matching |
 | Metadata storage | `badger/v4` | Embedded KV store, SSD-optimized, crash-safe WAL |
@@ -407,6 +420,10 @@ node_name: ""                  # Human-readable name (or use --name flag)
 p2p:
   port: 7001
   mdns: true
+  dht_discovery: true              # auto-discover peers via IPFS public DHT
+  dht_rendezvous: "doogle/network/v2"
+  dht_discovery_interval: 30s
+  dht_max_peers: 50
 
 api:
   port: 7002
@@ -456,7 +473,7 @@ The admin dashboard at `http://localhost:7002` also has built-in docs covering c
 ## Roadmap
 
 ### Phase 1 — Foundation ✅
-- [x] P2P networking (libp2p TCP+QUIC, Kademlia DHT, mDNS, GossipSub, NAT traversal)
+- [x] P2P networking (libp2p TCP+QUIC, Kademlia DHT, IPFS DHT discovery, mDNS, GossipSub, NAT traversal)
 - [x] Crawler (workers, rate limiting, robots.txt, headless browser, live feed)
 - [x] Indexer (10+ quality signals, E-E-A-T, spam, PageRank, readability, freshness)
 - [x] BM25 search (phrases, fuzzy, site: filter, distributed fan-out)
@@ -521,7 +538,8 @@ The admin dashboard at `http://localhost:7002` also has built-in docs covering c
 - [ ] Governance (community proposals, node operator voting on network parameters)
 - [ ] Plugin system (pluggable analyzers, scorers, content extractors)
 - [ ] Multi-platform releases (goreleaser: Linux, macOS, Windows, amd64 + arm64)
-- [ ] Public bootstrap network (maintained entry nodes for zero-config onboarding)
+- [x] Automatic peer discovery via IPFS public DHT (zero-config onboarding)
+- [ ] Public bootstrap network (maintained Doogle-specific entry nodes)
 
 ---
 

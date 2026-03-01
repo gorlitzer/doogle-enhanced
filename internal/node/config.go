@@ -24,9 +24,13 @@ type Config struct {
 }
 
 type P2PConfig struct {
-	Port           int      `yaml:"port"`
-	BootstrapPeers []string `yaml:"bootstrap_peers"`
-	MDNS           bool     `yaml:"mdns"`
+	Port                 int           `yaml:"port"`
+	BootstrapPeers       []string      `yaml:"bootstrap_peers"`
+	MDNS                 bool          `yaml:"mdns"`
+	DHTDiscovery         bool          `yaml:"dht_discovery"`
+	DHTRendezvous        string        `yaml:"dht_rendezvous"`
+	DHTDiscoveryInterval time.Duration `yaml:"dht_discovery_interval"`
+	DHTMaxPeers          int           `yaml:"dht_max_peers"`
 }
 
 type APIConfig struct {
@@ -74,8 +78,12 @@ type SearchConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		P2P: P2PConfig{
-			Port: 7001,
-			MDNS: true,
+			Port:                 7001,
+			MDNS:                 true,
+			DHTDiscovery:         true,
+			DHTRendezvous:        "doogle/network/v2",
+			DHTDiscoveryInterval: 30 * time.Second,
+			DHTMaxPeers:          50,
 		},
 		API: APIConfig{
 			Port: 7002,
@@ -151,6 +159,7 @@ func ParseFlags(cfg *Config) {
 	flag.StringVar(&seed, "seed", "", "Seed URL(s) to crawl (comma-separated)")
 	flag.IntVar(&cfg.Crawler.Workers, "workers", cfg.Crawler.Workers, "Crawler worker count")
 	flag.BoolVar(&cfg.P2P.MDNS, "mdns", cfg.P2P.MDNS, "Enable mDNS discovery")
+	flag.BoolVar(&cfg.P2P.DHTDiscovery, "dht-discovery", cfg.P2P.DHTDiscovery, "Enable DHT-based peer discovery via IPFS bootstrap nodes")
 	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
 	flag.Parse()
 
