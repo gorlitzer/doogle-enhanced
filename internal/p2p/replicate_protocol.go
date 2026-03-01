@@ -53,7 +53,7 @@ func RegisterReplicateProtocol(h host.Host, handler ReplicateHandler) {
 	h.SetStreamHandler(ReplicateProtocol, func(s network.Stream) {
 		defer s.Close()
 
-		reader := bufio.NewReader(s)
+		reader := bufio.NewReader(io.LimitReader(s, 50<<20)) // 50 MB max
 		data, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Printf("replicate protocol: read error: %v", err)
@@ -103,7 +103,7 @@ func ReplicateDocuments(ctx context.Context, h host.Host, peerID peer.ID, req *R
 	}
 	s.CloseWrite()
 
-	reader := bufio.NewReader(s)
+	reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max
 	respData, err := reader.ReadBytes('\n')
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read replicate response: %w", err)

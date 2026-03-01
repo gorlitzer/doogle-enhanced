@@ -22,7 +22,7 @@ func RegisterAntiEntropyProtocol(h host.Host, handler AntiEntropyHandler) {
 	h.SetStreamHandler(AntiEntropyProtocol, func(s network.Stream) {
 		defer s.Close()
 
-		reader := bufio.NewReader(s)
+		reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 		data, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Printf("antientropy protocol: read error: %v", err)
@@ -72,7 +72,7 @@ func SendAntiEntropyRequest(ctx context.Context, h host.Host, peerID peer.ID, re
 	}
 	s.CloseWrite()
 
-	reader := bufio.NewReader(s)
+	reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 	respData, err := reader.ReadBytes('\n')
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read antientropy response: %w", err)

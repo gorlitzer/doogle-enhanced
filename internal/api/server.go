@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,15 +25,21 @@ type Server struct {
 func NewServer(bind string, port int, deps *Deps) *Server {
 	r := chi.NewRouter()
 
-	// Middleware
+	// Middleware — restrict CORS to localhost origins only
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowOriginFunc: func(_ *http.Request, origin string) bool {
+			return strings.HasPrefix(origin, "http://localhost:") ||
+				strings.HasPrefix(origin, "http://127.0.0.1:") ||
+				strings.HasPrefix(origin, "https://localhost:") ||
+				strings.HasPrefix(origin, "https://127.0.0.1:")
+		},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           3600,
 	}))
 	r.Use(Logger)
+	r.Use(RateLimiter(20, 40)) // 20 req/s per IP, burst of 40
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {

@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 
 	"github.com/doogle/doogle-v2/internal/models"
 )
+
+const maxGossipMessageSize = 64 * 1024 // 64 KB
 
 // Gossip manages GossipSub pub/sub for the URL frontier and shard catalog.
 type Gossip struct {
@@ -82,10 +85,27 @@ func (g *Gossip) Subscribe(ctx context.Context) (*models.URLAnnouncement, error)
 		return nil, nil
 	}
 
+	// Reject oversized messages.
+	if len(msg.Data) > maxGossipMessageSize {
+		log.Printf("gossip: dropping oversized message (%d bytes) from %s", len(msg.Data), msg.ReceivedFrom.String()[:12])
+		return nil, nil
+	}
+
 	var ann models.URLAnnouncement
 	if err := json.Unmarshal(msg.Data, &ann); err != nil {
 		return nil, fmt.Errorf("unmarshal announcement: %w", err)
 	}
+
+	// Validate URL format — reject if any URL is invalid.
+	for _, u := range ann.URLs {
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return nil, nil
+		}
+		if len(u) > 2048 {
+			return nil, nil
+		}
+	}
+
 	return &ann, nil
 }
 
@@ -106,6 +126,11 @@ func (g *Gossip) SubscribeShardCatalog(ctx context.Context) (*ShardCatalog, erro
 	}
 
 	if msg.ReceivedFrom == g.host.ID() {
+		return nil, nil
+	}
+
+	if len(msg.Data) > maxGossipMessageSize {
+		log.Printf("gossip: dropping oversized shard catalog (%d bytes) from %s", len(msg.Data), msg.ReceivedFrom.String()[:12])
 		return nil, nil
 	}
 

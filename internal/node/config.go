@@ -79,7 +79,7 @@ func DefaultConfig() *Config {
 		},
 		API: APIConfig{
 			Port: 8080,
-			Bind: "0.0.0.0",
+			Bind: "127.0.0.1",
 		},
 		Crawler: CrawlerConfig{
 			Workers:           4,

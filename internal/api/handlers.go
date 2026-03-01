@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -76,6 +78,15 @@ func CrawlHandler(deps *Deps) http.HandlerFunc {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url' in request body"})
+			return
+		}
+
+		if !strings.HasPrefix(body.URL, "http://") && !strings.HasPrefix(body.URL, "https://") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "URL must use http or https scheme"})
+			return
+		}
+		if !isSafeURL(body.URL) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "URL targets a private or reserved address"})
 			return
 		}
 
@@ -209,7 +220,7 @@ func BatchCrawlHandler(deps *Deps) http.HandlerFunc {
 		queued := 0
 		for _, u := range body.URLs {
 			u = strings.TrimSpace(u)
-			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+			if (strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) && isSafeURL(u) {
 				deps.CrawlSeed(u)
 				queued++
 			}
@@ -221,6 +232,43 @@ func BatchCrawlHandler(deps *Deps) http.HandlerFunc {
 			"total":  len(body.URLs),
 		})
 	}
+}
+
+// isSafeURL checks that a URL targets a public host (not private/internal IPs).
+func isSafeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+
+	// Reject localhost variants.
+	lower := strings.ToLower(host)
+	if lower == "localhost" || lower == "0.0.0.0" || strings.HasSuffix(lower, ".local") {
+		return false
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// hostname, not IP — allow (DNS resolution happens at crawl time).
+		return true
+	}
+
+	// Reject private, loopback, link-local, and reserved ranges.
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return false
+	}
+
+	// Reject cloud metadata IPs (169.254.169.254).
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return false
+	}
+
+	return true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

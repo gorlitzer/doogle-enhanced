@@ -155,3 +155,30 @@ func TestCrawlerFeedHandler_ContentType(t *testing.T) {
 		t.Errorf("expected application/json, got %s", ct)
 	}
 }
+
+func TestIsSafeURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		safe bool
+	}{
+		{"https://example.com", true},
+		{"http://google.com/search", true},
+		{"http://localhost:6379", false},
+		{"http://127.0.0.1:8080", false},
+		{"http://192.168.1.1", false},
+		{"http://10.0.0.1/admin", false},
+		{"http://169.254.169.254/latest/meta-data", false},
+		{"http://0.0.0.0", false},
+		{"http://[::1]/test", false},
+		{"http://myhost.local/test", false},
+		{"not-a-url", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		got := isSafeURL(tt.url)
+		if got != tt.safe {
+			t.Errorf("isSafeURL(%q) = %v, want %v", tt.url, got, tt.safe)
+		}
+	}
+}

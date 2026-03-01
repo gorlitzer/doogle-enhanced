@@ -20,7 +20,7 @@ func RegisterCrawlProtocol(h host.Host, handler CrawlTaskHandler) {
 	h.SetStreamHandler(CrawlProtocol, func(s network.Stream) {
 		defer s.Close()
 
-		reader := bufio.NewReader(s)
+		reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max
 		data, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Printf("crawl protocol: read error: %v", err)
