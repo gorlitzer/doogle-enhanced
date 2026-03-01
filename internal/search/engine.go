@@ -36,8 +36,15 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 		pageSize = 50
 	}
 
+	// Over-fetch from Bleve so re-ranking can re-order across a wider pool.
+	// We fetch up to 100 results from offset 0 and paginate after re-ranking.
+	fetchSize := pageSize * 5
+	if fetchSize < 100 {
+		fetchSize = 100
+	}
 	offset := (page - 1) * pageSize
-	hits, total, err := e.store.SearchAdvanced(pq, offset, pageSize)
+
+	hits, total, err := e.store.SearchAdvanced(pq, 0, fetchSize)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -70,6 +77,15 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			IsEvergreen:       hit.Doc.IsEvergreen,
 		}
 		results = append(results, result)
+	}
+
+	// Paginate after caller re-ranks
+	if offset >= len(results) {
+		results = nil
+	} else if offset+pageSize >= len(results) {
+		results = results[offset:]
+	} else {
+		results = results[offset : offset+pageSize]
 	}
 
 	return &models.SearchResponse{
