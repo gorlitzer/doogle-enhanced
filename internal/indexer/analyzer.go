@@ -323,30 +323,61 @@ func (a *Analyzer) extractTopics(text string) []string {
 	return result
 }
 
-// DetectLanguage performs basic language detection.
-func (a *Analyzer) DetectLanguage(text string) string {
-	lower := strings.ToLower(text)
-	esWords := []string{" el ", " la ", " los ", " las ", " es ", " en ", " que ", " de ", " por "}
-	ruWords := []string{"что", "это", "как", "для", "его", "она", "они"}
+// langProfile defines stop words for a language and the threshold to trigger detection.
+type langProfile struct {
+	code      string
+	words     []string
+	threshold int
+}
 
-	esCount, ruCount := 0, 0
-	for _, w := range esWords {
-		if strings.Contains(lower, w) {
-			esCount++
+// langProfiles ordered by specificity — more distinctive languages first.
+var langProfiles = []langProfile{
+	{"ja", []string{"の", "に", "は", "を", "た", "が", "で", "て", "と", "し", "れ", "さ"}, 4},
+	{"zh", []string{"的", "是", "在", "了", "不", "和", "有", "这", "人", "我", "他", "她"}, 4},
+	{"ko", []string{"의", "이", "는", "을", "를", "에", "와", "한", "가", "으로"}, 4},
+	{"ar", []string{"في", "من", "على", "إلى", "أن", "هذا", "التي", "هو", "كان"}, 4},
+	{"hi", []string{"का", "है", "में", "की", "को", "और", "एक", "यह", "से"}, 4},
+	{"ru", []string{"что", "это", "как", "для", "его", "она", "они", "был", "при", "все"}, 3},
+	{"pt", []string{" os ", " uma ", " são ", " como ", " com ", " mais ", " para ", " não ", " das ", " dos "}, 4},
+	{"fr", []string{" les ", " des ", " une ", " est ", " dans ", " pour ", " avec ", " sur ", " sont ", " pas "}, 4},
+	{"de", []string{" die ", " der ", " und ", " den ", " ist ", " ein ", " nicht ", " sich ", " mit ", " auf "}, 4},
+	{"it", []string{" gli ", " una ", " sono ", " della ", " nella ", " anche ", " come ", " questo ", " quello "}, 4},
+	{"es", []string{" el ", " la ", " los ", " las ", " es ", " en ", " que ", " de ", " por ", " una "}, 4},
+	{"nl", []string{" het ", " een ", " van ", " zijn ", " niet ", " voor ", " met ", " ook ", " maar "}, 4},
+	{"tr", []string{" bir ", " için ", " olan ", " ile ", " gibi ", " daha ", " çok ", " ancak "}, 3},
+	{"pl", []string{" nie ", " się ", " jest ", " jak ", " ale ", " czy ", " przy ", " oraz "}, 3},
+}
+
+// DetectLanguage identifies the language of the given text using stop word frequency.
+func (a *Analyzer) DetectLanguage(text string) string {
+	if len(text) < 20 {
+		return "en"
+	}
+
+	// Use first 2000 chars for speed
+	sample := text
+	if len(sample) > 2000 {
+		sample = sample[:2000]
+	}
+	lower := strings.ToLower(sample)
+
+	bestLang := "en"
+	bestScore := 0
+
+	for _, lp := range langProfiles {
+		count := 0
+		for _, w := range lp.words {
+			if strings.Contains(lower, w) {
+				count++
+			}
+		}
+		if count >= lp.threshold && count > bestScore {
+			bestScore = count
+			bestLang = lp.code
 		}
 	}
-	for _, w := range ruWords {
-		if strings.Contains(lower, w) {
-			ruCount++
-		}
-	}
-	if ruCount >= 3 {
-		return "ru"
-	}
-	if esCount >= 4 {
-		return "es"
-	}
-	return "en"
+
+	return bestLang
 }
 
 // ClassifyContent returns content categories.

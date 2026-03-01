@@ -10,6 +10,7 @@ import (
 var (
 	phraseRe = regexp.MustCompile(`"([^"]+)"`)
 	siteRe   = regexp.MustCompile(`(?i)site:(\S+)`)
+	langRe   = regexp.MustCompile(`(?i)lang:(\S+)`)
 )
 
 // stopWords to remove from query terms.
@@ -124,6 +125,13 @@ func ParseQuery(raw string) *models.ParsedQuery {
 		pq.SiteDomain = strings.ToLower(siteMatch[1])
 	}
 	remaining = siteRe.ReplaceAllString(remaining, " ")
+
+	// 2b. Extract lang:xx
+	langMatch := langRe.FindStringSubmatch(remaining)
+	if len(langMatch) > 1 {
+		pq.Language = strings.ToLower(langMatch[1])
+	}
+	remaining = langRe.ReplaceAllString(remaining, " ")
 
 	// 3. Tokenize, lowercase, remove stop words
 	for _, word := range strings.Fields(remaining) {
