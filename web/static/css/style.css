@@ -2833,8 +2833,11 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 }
 .actions-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+.actions-grid-full {
+  grid-template-columns: 1fr;
 }
 .action-card {
   background: var(--bg-card);
@@ -2842,6 +2845,9 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   border-radius: var(--radius);
   padding: 20px;
   transition: border-color var(--transition);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 .action-card:hover {
   border-color: var(--border-light);
