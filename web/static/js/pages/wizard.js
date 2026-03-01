@@ -1610,10 +1610,9 @@ function renderNav() {
     return;
   }
 
-  const nextDisabled = currentStep === 2 && getAllSelectedSeeds().length === 0;
   el.innerHTML = `
     <button class="btn wizard-back-btn" id="wizard-back">Back</button>
-    <button class="btn btn-primary wizard-next-btn" id="wizard-next" ${nextDisabled ? 'disabled' : ''}>Next</button>
+    <button class="btn btn-primary wizard-next-btn" id="wizard-next">Next</button>
   `;
   document.getElementById('wizard-back').addEventListener('click', () => { currentStep--; update(); });
   document.getElementById('wizard-next').addEventListener('click', () => { currentStep++; update(); });
@@ -2098,6 +2097,26 @@ function workersDesc(n) {
 async function renderLaunch(el) {
   const seeds = getAllSelectedSeeds();
   const topicNames = CATEGORIES.filter(c => c.subcategories.some(s => selectedSubs.has(s.id))).map(c => c.name);
+
+  // No seeds selected — show alert and finish wizard
+  if (seeds.length === 0) {
+    localStorage.setItem('doogle_wizard_dismissed', 'true');
+    el.innerHTML = `
+      <div class="wizard-launch">
+        <h2>Setup Complete</h2>
+        <p class="wizard-subtitle" style="margin-bottom:12px">Your node is configured but you haven't added any seed URLs yet. Remember to add seeds from the Actions panel in the Admin Dashboard so the crawler has pages to visit.</p>
+        <div class="wizard-launch-actions" style="display:flex">
+          <button class="btn btn-primary" id="wizard-go-admin">Go to Admin</button>
+          <button class="btn" id="wizard-go-search">Go to Search</button>
+        </div>
+      </div>
+    `;
+    setTimeout(() => {
+      document.getElementById('wizard-go-admin')?.addEventListener('click', () => { window.location.hash = '#/admin/actions'; });
+      document.getElementById('wizard-go-search')?.addEventListener('click', () => { window.location.hash = '#/search'; });
+    }, 0);
+    return;
+  }
 
   el.innerHTML = `
     <div class="wizard-launch">
