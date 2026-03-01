@@ -1,6 +1,6 @@
 // Doogle v2 — Documentation Page (interactive, visual, consistent with about page)
 import { api } from '../api.js';
-import { icon, escapeHtml, codeBlock, infoCard, bindCopyButtons, bindCollapsibles } from '../components.js';
+import { icon, escapeHtml, codeBlock, infoCard, bindCopyButtons, bindCollapsibles, showModal } from '../components.js';
 
 let activeTab = 'quickstart';
 
@@ -162,9 +162,8 @@ function renderQuickstart(el) {
     if (method === 'docker') {
       methodContent.innerHTML = `
         <div class="docs-steps">
-          ${stepCard(1, 'Build and start a 3-node cluster', codeBlock(`# Clone and start
-git clone https://github.com/peppapig450/doogle-p2p.git
-cd doogle-p2p/doogle-v2
+          ${stepCard(1, 'Build and start a 3-node cluster', codeBlock(`# From your local source:
+cd doogle-v2
 make docker-up`, 'bash'))}
           ${stepCard(2, 'Open the UI', `
             <div class="docs-port-grid">
@@ -188,8 +187,7 @@ make docker-up`, 'bash'))}
     } else {
       methodContent.innerHTML = `
         <div class="docs-steps">
-          ${stepCard(1, 'Build from source', codeBlock(`git clone https://github.com/peppapig450/doogle-p2p.git
-cd doogle-p2p/doogle-v2
+          ${stepCard(1, 'Build from source', codeBlock(`cd doogle-v2
 make build`, 'bash'))}
           ${stepCard(2, 'Run a node', codeBlock(`./bin/doogle --port 4001 --api-port 8080 \\
   --seed https://en.wikipedia.org`, 'bash'))}
@@ -211,6 +209,52 @@ make build`, 'bash'))}
 
 // ---- Architecture ----
 
+const archCardDetails = [
+  // Application layer
+  { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 5 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
+  { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (14+ languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
+  { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, synonyms, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
+  { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>` },
+  // P2P layer
+  { title: 'Kademlia DHT', html: `<p>Distributed peer routing via <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a>. Enables internet-wide peer discovery and routing. Bootstrap from known peers or rely on mDNS for LAN discovery. Part of <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
+  { title: 'GossipSub', html: `<p>Pub/sub message propagation via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a>. Used for URL frontier broadcast (discovered URLs), shard catalog exchange (domain assignments), and peer coordination. Epidemic-style propagation ensures network-wide consistency.</p>` },
+  { title: 'Stream Protocols', html: `<p>Request-reply protocols over <a href="https://docs.libp2p.io/" target="_blank">libp2p</a> streams:<br><code>/doogle/search/1.0.0</code> — distributed search fan-out<br><code>/doogle/crawl/1.0.0</code> — crawl task delegation to shard owners<br><code>/doogle/index/1.0.0</code> — document forwarding to shard owners</p>` },
+  { title: 'Shard Protocol', html: `<p>Protocol <code>/doogle/shard/1.0.0</code> enables shard catalog exchange between peers. Nodes publish their domain assignments (which domains each node is responsible for) via GossipSub every 60 seconds. The shard catalog includes owned domains, document count, and generation counter.</p>` },
+  { title: 'Replication', html: `<p>Protocol <code>/doogle/replicate/1.0.0</code> handles document replication with Merkle root anti-entropy sync. Documents are replicated to N nodes (default 3) using consistent hashing. When peers join or leave, replication automatically rebalances to maintain the target factor.</p>` },
+  // Storage layer
+  { title: 'BadgerDB', html: `<p><a href="https://dgraph.io/badger" target="_blank">BadgerDB</a> is a fast, pure-Go key-value store. Doogle uses it for URL frontier storage, crawl metadata, link graph edges, PageRank counters, URL deduplication, and content hashes. All data persists across restarts.</p>` },
+  { title: 'Bleve Index', html: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides full-text search with BM25 scoring. Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x). Batch writes of 100 docs per flush for 10-50x throughput. Pre-computed StaticScore stored per document.</p>` },
+  { title: 'Link Graph', html: `<p>Directed edge store for PageRank computation. Stores inbound/outbound links per document. Cross-domain links receive 1.5x weight. Link graph is stored in BadgerDB and recomputed every 5 minutes.</p>` },
+  { title: 'DedupStore', html: `<p>Persistent URL deduplication backed by <a href="https://dgraph.io/badger" target="_blank">BadgerDB</a>. Uses SHA-256 keys for O(1) lookup. Unlike in-memory dedup, survives node restarts — the crawl frontier persists across reboots without re-crawling.</p>` },
+  { title: 'ContentStore', html: `<p>Content hash tracking for incremental reindexing. Stores a hash of each document's content at index time. On re-crawl, if the content hash hasn't changed, the document is skipped — avoiding unnecessary reindexing.</p>` },
+  { title: 'GenerationStore', html: `<p>Monotonic generation counter for score freshness tracking. Each indexing pass increments the generation. The incremental re-scorer only re-processes documents whose generation is stale, ensuring efficient background updates.</p>` },
+];
+
+const protocolDetails = [
+  { title: '/doogle/search/1.0.0 — Search Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p><strong>Flow:</strong></p><pre style="font-size:0.85em;color:var(--text-secondary)">Requester                    Shard Owner
+    |--- SearchRequest --------&gt;|
+    |    {query, page, size}     |
+    |                            | (run local Bleve query)
+    |&lt;-- SearchResponse ---------|
+    |    {results[], total, ms}  |</pre><p>Queries route to shard owners via consistent hashing. For general queries, a CoveringSet of peers ensures all shards are queried. Results are merged, deduplicated by URL, and re-ranked.</p><p>Reference: <a href="https://docs.libp2p.io/" target="_blank">libp2p docs</a></p>` },
+  { title: '/doogle/crawl/1.0.0 — Crawl Task Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p><strong>Flow:</strong></p><pre style="font-size:0.85em;color:var(--text-secondary)">Requester                    Shard Owner
+    |--- CrawlRequest ---------&gt;|
+    |    {url, depth, priority}  |
+    |                            | (add to local queue)
+    |&lt;-- CrawlResponse ---------|
+    |    {status: "queued"}      |</pre><p>Delegates a URL to the correct shard owner based on consistent hashing of the domain. The receiving node adds it to its local crawl queue.</p>` },
+  { title: '/doogle/index/1.0.0 — Index Doc Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p><strong>Flow:</strong></p><pre style="font-size:0.85em;color:var(--text-secondary)">Requester                    Shard Owner
+    |--- IndexRequest ---------&gt;|
+    |    {document, scores}      |
+    |                            | (batch-index to Bleve)
+    |&lt;-- IndexResponse ---------|
+    |    {status: "indexed"}     |</pre><p>Forwards a fully-crawled and enriched document to the shard owner for batch indexing in their local Bleve store.</p>` },
+  { title: 'doogle/url-frontier — URL Frontier (GossipSub)', html: `<p><strong>Type:</strong> GossipSub pub/sub topic</p><p>Broadcasts newly discovered URLs to all peers. Nodes check if the URL falls in their shard range (via consistent hashing) before scheduling a crawl. This prevents duplicate crawl work across the network.</p><p>Reference: <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub spec</a></p>` },
+  { title: '/doogle/shard/1.0.0 — Shard Catalog Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p>Peers exchange shard assignments — which domains each node is responsible for. Published via GossipSub every 60 seconds. The catalog includes owned domains, document count per shard, and the current generation counter.</p><p>Used to build the network's consistent hash ring and compute CoveringSets for query routing.</p>` },
+  { title: '/doogle/replicate/1.0.0 — Replication Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p>Documents are replicated to N nodes (default 3) using consistent hashing. Merkle root anti-entropy ensures consistency — nodes periodically compare tree roots and sync missing documents.</p><p>On peer join/leave, replication automatically rebalances to maintain the target replication factor.</p>` },
+  { title: 'doogle/shard-catalog — Shard Catalog (GossipSub)', html: `<p><strong>Type:</strong> GossipSub pub/sub topic</p><p>Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network's hash ring in sync. Published every 60 seconds. All peers maintain a local copy of the network-wide shard map.</p>` },
+];
+
 function renderArchitecture(el) {
   el.innerHTML = `
     <div class="docs-section">
@@ -218,7 +262,7 @@ function renderArchitecture(el) {
         ${icon('network', 24, 'var(--accent)')}
         <h2>System Architecture</h2>
       </div>
-      <p class="docs-section-desc">A single Go binary — no microservices, no external dependencies at runtime.</p>
+      <p class="docs-section-desc">A single Go binary — no microservices, no external dependencies at runtime. Click any card for details.</p>
 
       <div class="docs-arch-visual">
         <div class="docs-arch-layer" style="--layer-color: var(--accent)">
@@ -226,28 +270,28 @@ function renderArchitecture(el) {
             <span class="docs-arch-layer-badge" style="background:var(--accent)">Application</span>
           </div>
           <div class="docs-arch-layer-cards">
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="0" style="cursor:pointer">
               ${icon('download', 18, 'var(--accent)')}
               <div>
                 <strong>Crawler</strong>
                 <p>Goroutine worker pool. Per-domain rate limiting. robots.txt. Headless JS fallback.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="1" style="cursor:pointer">
               ${icon('cpu', 18, 'var(--accent)')}
               <div>
                 <strong>Indexer</strong>
-                <p>NLP pipeline: language detect, keyword extract, E-E-A-T scoring, spam filter, dedup.</p>
+                <p>NLP pipeline: language detect, keyword extract, E-E-A-T scoring, spam filter, batch indexing.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="2" style="cursor:pointer">
               ${icon('search', 18, 'var(--accent)')}
               <div>
                 <strong>Search</strong>
-                <p>BM25 full-text. Query parsing (phrases, synonyms, fuzzy). Distributed fan-out to peers.</p>
+                <p>BM25 full-text. Query parsing (phrases, synonyms, fuzzy). Shard-aware distributed routing.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="3" style="cursor:pointer">
               ${icon('monitor', 18, 'var(--accent)')}
               <div>
                 <strong>HTTP API</strong>
@@ -266,25 +310,39 @@ function renderArchitecture(el) {
             <span class="docs-arch-layer-badge" style="background:var(--blue)">P2P Network</span>
           </div>
           <div class="docs-arch-layer-cards">
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="4" style="cursor:pointer">
               ${icon('network', 18, 'var(--blue)')}
               <div>
                 <strong>Kademlia DHT</strong>
                 <p>Distributed peer routing across the internet. Bootstrap from known peers.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="5" style="cursor:pointer">
               ${icon('megaphone', 18, 'var(--blue)')}
               <div>
                 <strong>GossipSub</strong>
-                <p>Pub/sub broadcast of discovered URLs. Shared crawl frontier.</p>
+                <p>Pub/sub broadcast of discovered URLs and shard catalogs.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="6" style="cursor:pointer">
               ${icon('radio', 18, 'var(--blue)')}
               <div>
                 <strong>Stream Protocols</strong>
                 <p>/doogle/search, /doogle/crawl, /doogle/index — request-reply over libp2p streams.</p>
+              </div>
+            </div>
+            <div class="docs-arch-card" data-arch-idx="7" style="cursor:pointer">
+              ${icon('database', 18, 'var(--blue)')}
+              <div>
+                <strong>Shard Protocol</strong>
+                <p>/doogle/shard/1.0.0 — shard catalog exchange. Domain assignments via GossipSub.</p>
+              </div>
+            </div>
+            <div class="docs-arch-card" data-arch-idx="8" style="cursor:pointer">
+              ${icon('shield', 18, 'var(--blue)')}
+              <div>
+                <strong>Replication</strong>
+                <p>/doogle/replicate/1.0.0 — document replication with Merkle root anti-entropy.</p>
               </div>
             </div>
           </div>
@@ -299,25 +357,46 @@ function renderArchitecture(el) {
             <span class="docs-arch-layer-badge" style="background:var(--green)">Storage</span>
           </div>
           <div class="docs-arch-layer-cards">
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="9" style="cursor:pointer">
               ${icon('database', 18, 'var(--green)')}
               <div>
                 <strong>BadgerDB</strong>
-                <p>URL frontier, crawl metadata, link graph edges, page rank counters.</p>
+                <p>URL frontier, crawl metadata, link graph edges, page rank counters, dedup store.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="10" style="cursor:pointer">
               ${icon('fileText', 18, 'var(--green)')}
               <div>
                 <strong>Bleve Index</strong>
-                <p>Full-text search index. BM25 scoring with field boosts. Anchor text + PageRank stored per doc.</p>
+                <p>Full-text search. BM25 with field boosts. Batch writes (100/flush). Pre-computed StaticScore per doc.</p>
               </div>
             </div>
-            <div class="docs-arch-card">
+            <div class="docs-arch-card" data-arch-idx="11" style="cursor:pointer">
               ${icon('link', 18, 'var(--green)')}
               <div>
                 <strong>Link Graph</strong>
                 <p>Directed edge store for PageRank computation. Inbound/outbound link counts.</p>
+              </div>
+            </div>
+            <div class="docs-arch-card" data-arch-idx="12" style="cursor:pointer">
+              ${icon('shield', 18, 'var(--green)')}
+              <div>
+                <strong>DedupStore</strong>
+                <p>Persistent URL dedup (SHA-256 keyed, survives restarts).</p>
+              </div>
+            </div>
+            <div class="docs-arch-card" data-arch-idx="13" style="cursor:pointer">
+              ${icon('cpu', 18, 'var(--green)')}
+              <div>
+                <strong>ContentStore</strong>
+                <p>Content hash tracking for incremental reindexing.</p>
+              </div>
+            </div>
+            <div class="docs-arch-card" data-arch-idx="14" style="cursor:pointer">
+              ${icon('trendingUp', 18, 'var(--green)')}
+              <div>
+                <strong>GenerationStore</strong>
+                <p>Monotonic generation counter for score freshness tracking.</p>
               </div>
             </div>
           </div>
@@ -330,11 +409,15 @@ function renderArchitecture(el) {
         ${icon('radio', 24, 'var(--blue)')}
         <h2>P2P Protocols</h2>
       </div>
+      <p class="docs-section-desc">Click any protocol for message format and flow details.</p>
       <div class="docs-protocol-grid">
-        ${protocolCard('/doogle/search/1.0.0', 'Search', 'Request-reply', 'Queries fan out to peers. Each peer runs the query against its local Bleve index and returns scored results. The requesting node merges, deduplicates, and re-ranks all responses.', 'var(--accent)')}
-        ${protocolCard('/doogle/crawl/1.0.0', 'Crawl Task', 'Request-reply', 'Delegates a URL to the correct shard owner based on consistent hashing of the domain. The receiving node adds it to its local crawl queue.', 'var(--blue)')}
-        ${protocolCard('/doogle/index/1.0.0', 'Index Doc', 'Request-reply', 'Forwards a fully-crawled and enriched document to the shard owner for indexing in their local Bleve store.', 'var(--purple)')}
-        ${protocolCard('doogle/url-frontier', 'URL Frontier', 'GossipSub pub/sub', 'Broadcasts newly discovered URLs to all peers. Nodes check if the URL falls in their shard range before scheduling a crawl.', 'var(--green)')}
+        ${protocolCard('/doogle/search/1.0.0', 'Search', 'Request-reply', 'Queries route to shard owners via consistent hashing. Each peer runs the query against its local Bleve index and returns scored results. The requesting node merges, deduplicates, and re-ranks all responses.', 'var(--accent)', 0)}
+        ${protocolCard('/doogle/crawl/1.0.0', 'Crawl Task', 'Request-reply', 'Delegates a URL to the correct shard owner based on consistent hashing of the domain. The receiving node adds it to its local crawl queue.', 'var(--blue)', 1)}
+        ${protocolCard('/doogle/index/1.0.0', 'Index Doc', 'Request-reply', 'Forwards a fully-crawled and enriched document to the shard owner for batch indexing in their local Bleve store.', 'var(--purple)', 2)}
+        ${protocolCard('doogle/url-frontier', 'URL Frontier', 'GossipSub pub/sub', 'Broadcasts newly discovered URLs to all peers. Nodes check if the URL falls in their shard range before scheduling a crawl.', 'var(--green)', 3)}
+        ${protocolCard('/doogle/shard/1.0.0', 'Shard Catalog', 'Request-reply', 'Peers exchange shard assignments — which domains each node is responsible for. Published via GossipSub every 60s.', 'var(--amber)', 4)}
+        ${protocolCard('/doogle/replicate/1.0.0', 'Replication', 'Request-reply', 'Documents are replicated to N nodes (default 3) using consistent hashing. Merkle root anti-entropy ensures consistency.', 'var(--red)', 5)}
+        ${protocolCard('doogle/shard-catalog', 'Shard Catalog', 'GossipSub pub/sub', 'Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network\'s hash ring in sync.', 'var(--purple)', 6)}
       </div>
     </div>
 
@@ -343,46 +426,82 @@ function renderArchitecture(el) {
         ${icon('trendingUp', 24, 'var(--purple)')}
         <h2>Scoring Pipeline</h2>
       </div>
-      <p class="docs-section-desc">Every document passes through a multi-stage analysis pipeline before indexing.</p>
+      <p class="docs-section-desc">Every document passes through a multi-stage analysis pipeline before indexing. Click any step for details.</p>
 
       <div class="docs-scoring-flow">
-        ${scoringStep('Dedup Check', 'Content fingerprinting via character 4-gram shingling + Jaccard similarity. >80% overlap = duplicate.', 'var(--border-light)')}
-        ${scoringStep('NLP Enrichment', 'Language detection, keyword extraction, category classification, readability analysis.', 'var(--blue)')}
-        ${scoringStep('Quality Scoring', '10+ signals: E-E-A-T, content depth, heading structure, media richness, citations, author credibility.', 'var(--green)')}
-        ${scoringStep('Spam Filter', 'Keyword stuffing, excessive caps, thin content, link farms. Score > 0.7 = rejected.', 'var(--red)')}
-        ${scoringStep('PageRank', 'Graph-based link authority. Iterative computation (damping=0.85). Cross-domain links get 1.5x weight.', 'var(--purple)')}
-        ${scoringStep('Bleve Index', 'Full-text index with BM25 weighting. Title x3, description x1.5, content x1, anchor text x2.', 'var(--accent)')}
+        ${scoringStep('Dedup Check', 'Content fingerprinting via character 4-gram shingling + Jaccard similarity. >80% overlap = duplicate.', 'var(--border-light)', 0)}
+        ${scoringStep('NLP Enrichment', 'Language detection, keyword extraction, category classification, readability analysis.', 'var(--blue)', 1)}
+        ${scoringStep('Quality Scoring', '10+ signals: E-E-A-T, content depth, heading structure, media richness, citations, author credibility.', 'var(--green)', 2)}
+        ${scoringStep('Spam Filter', 'Keyword stuffing, excessive caps, thin content, link farms. Score > 0.7 = rejected.', 'var(--red)', 3)}
+        ${scoringStep('PageRank', 'Graph-based link authority. Iterative computation (damping=0.85). Cross-domain links get 1.5x weight.', 'var(--purple)', 4)}
+        ${scoringStep('StaticScore Pre-computation', 'Quality signals combined into a single StaticScore at index time: <code>(0.5 + qualitySignal*2.0) * (1.0 - spamScore*0.8)</code>. Avoids recomputing on every search query.', 'var(--amber)', 5)}
+        ${scoringStep('Batch Indexer', 'Documents buffered and flushed to Bleve in batches of 100 (or every 5s). Batch writes are 10-50x faster than single-doc indexing.', 'var(--accent)', 6)}
+        ${scoringStep('Bleve Index', 'Full-text index with BM25 weighting. Title x3, description x1.5, content x1, anchor text x2. StaticScore stored per doc.', 'var(--green)', 7)}
       </div>
 
       <div class="docs-formula-card">
         <h3>Final Ranking Formula</h3>
         <div class="docs-formula">
-          <code>final = BM25 &times; qualityMultiplier &times; freshnessDecay &times; (1 - spamPenalty)</code>
+          <code>final = BM25 &times; StaticScore &times; freshnessDecay</code>
         </div>
         <div class="docs-formula-breakdown">
           <div class="docs-formula-item">
             <span class="docs-formula-dot" style="background:var(--accent)"></span>
-            <span>qualityMultiplier = 0.5 + weightedSignals &times; 2.0 &nbsp; <em>range [0.5, 2.5]</em></span>
+            <span>StaticScore = (0.5 + weightedSignals &times; 2.0) &times; (1 - spamScore &times; 0.8) &nbsp; <em>range [0.1, 2.5] — computed once at index time</em></span>
           </div>
           <div class="docs-formula-item">
             <span class="docs-formula-dot" style="background:var(--blue)"></span>
             <span>freshnessDecay = e<sup>-&lambda;t</sup> &nbsp; half-life: 30d (news), 120d (standard), 365d (evergreen)</span>
-          </div>
-          <div class="docs-formula-item">
-            <span class="docs-formula-dot" style="background:var(--red)"></span>
-            <span>spamPenalty = min(0.8, spam_score) &nbsp; capped to never fully zero out results</span>
           </div>
         </div>
       </div>
     </div>
   `;
 
+  // Bind architecture card modals
+  el.querySelectorAll('.docs-arch-card[data-arch-idx]').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = parseInt(card.dataset.archIdx, 10);
+      const detail = archCardDetails[idx];
+      if (detail) showModal(detail.title, detail.html);
+    });
+  });
+
+  // Bind protocol card modals
+  el.querySelectorAll('.docs-protocol-card[data-proto-idx]').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = parseInt(card.dataset.protoIdx, 10);
+      const detail = protocolDetails[idx];
+      if (detail) showModal(detail.title, detail.html);
+    });
+  });
+
+  // Bind scoring step modals
+  const scoringDetails = [
+    { title: 'Dedup Check', html: '<p>Content fingerprinting uses character 4-gram shingling to create a set of shingles per document. Jaccard similarity compares the overlap between document shingle sets. Documents with &gt;80% overlap are flagged as duplicates and skipped. The DedupStore (BadgerDB-backed, SHA-256 keyed) tracks URLs persistently.</p>' },
+    { title: 'NLP Enrichment', html: '<p>Every crawled document passes through: language detection (14+ languages), TF-IDF keyword extraction, category classification, and Flesch-Kincaid readability scoring. These features feed into the quality scoring pipeline.</p>' },
+    { title: 'Quality Scoring', html: '<p>10+ signals weighted: E-E-A-T (20%), Quality (20%), PageRank (20%), Readability (8%), Citation (8%), SEO (8%), Author credibility (5%), Link quality (5%), Relevance (6%). Combined into a weighted sum that feeds into the StaticScore computation.</p>' },
+    { title: 'Spam Filter', html: '<p>Detects keyword stuffing (abnormal term frequencies), excessive capitalization, thin content (low word count), and link farm patterns (too many outbound links). Score &gt; 0.7 = rejected before indexing. Below threshold, spam score reduces the StaticScore via <code>(1.0 - spamScore * 0.8)</code>.</p>' },
+    { title: 'PageRank', html: '<p>Graph-based link authority computed via iterative power method (damping factor = 0.85, 15 iterations). Cross-domain links receive 1.5x weight. Recomputed every 5 minutes via background goroutine. Reference: <a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">PageRank (Wikipedia)</a></p>' },
+    { title: 'StaticScore Pre-computation', html: '<p>All quality signals are combined into a single <strong>StaticScore</strong> at index time:</p><code style="display:block;padding:8px;background:var(--bg-code);border-radius:4px;margin:8px 0">StaticScore = (0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code><p>Range: [0.1, 2.5]. This moves scoring work from query-time to index-time. The incremental re-scorer updates stale StaticScores every 10 minutes. <em>ref: ranker.go</em></p>' },
+    { title: 'Batch Indexer', html: '<p>Documents are buffered in memory and flushed to <a href="https://blevesearch.com/" target="_blank">Bleve</a> in batches of 100 (configurable via <code>--batch-size</code>) or every 5 seconds (<code>--batch-flush-interval</code>). Bleve\'s batch API provides 10-50x faster write throughput compared to single-document indexing. <em>ref: Bleve batch API</em></p>' },
+    { title: 'Bleve Index', html: '<p>Full-text search index via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. BM25 weighting with field boosts: title (3x), description (1.5x), content (1x), anchor text (2x). Pre-computed StaticScore stored as a numeric field per document. Supports phrase matching, fuzzy queries, and synonym expansion.</p>' },
+  ];
+
+  el.querySelectorAll('.docs-scoring-step[data-scoring-idx]').forEach(step => {
+    step.addEventListener('click', () => {
+      const idx = parseInt(step.dataset.scoringIdx, 10);
+      const detail = scoringDetails[idx];
+      if (detail) showModal(detail.title, detail.html);
+    });
+  });
+
   bindCopyButtons(el);
 }
 
-function protocolCard(protocol, name, type, desc, color) {
+function protocolCard(protocol, name, type, desc, color, idx) {
   return `
-    <div class="docs-protocol-card" style="--proto-color:${color}">
+    <div class="docs-protocol-card" style="--proto-color:${color};cursor:pointer" data-proto-idx="${idx}">
       <div class="docs-protocol-header">
         <code>${protocol}</code>
         <span class="badge" style="background:${color};color:#fff;font-size:0.7em">${type}</span>
@@ -392,9 +511,9 @@ function protocolCard(protocol, name, type, desc, color) {
   `;
 }
 
-function scoringStep(title, desc, color) {
+function scoringStep(title, desc, color, idx) {
   return `
-    <div class="docs-scoring-step">
+    <div class="docs-scoring-step" data-scoring-idx="${idx}" style="cursor:pointer">
       <div class="docs-scoring-dot" style="background:${color}"></div>
       <div class="docs-scoring-content">
         <strong>${title}</strong>
@@ -783,6 +902,21 @@ function demoParseQuery(raw) {
 
 // ---- Configuration ----
 
+const configDetails = [
+  { title: '--port', html: '<p>libp2p listen port for P2P communication. Uses TCP and UDP (QUIC-v1). Default: 4001.</p><p>Environment variable: <code>DOOGLE_PORT</code></p><p>YAML: <code>p2p.port: 4001</code></p>' },
+  { title: '--api-port', html: '<p>HTTP API and web UI port. Serves the REST API and embedded SPA. Default: 8080.</p><p>Environment variable: <code>DOOGLE_API_PORT</code></p><p>YAML: <code>api.port: 8080</code></p>' },
+  { title: '--data-dir', html: '<p>Directory for Bleve index, BadgerDB databases, identity keys, and all persistent state. Default: ./data</p><p>Environment variable: <code>DOOGLE_DATA_DIR</code></p><p>YAML: <code>storage.data_dir: "./data"</code></p>' },
+  { title: '--bootstrap', html: '<p>Bootstrap peer multiaddr for joining an existing network. Format: <code>/ip4/&lt;IP&gt;/tcp/4001/p2p/&lt;PEER_ID&gt;</code></p><p>If not provided, relies on mDNS for local peer discovery.</p><p>YAML: <code>p2p.bootstrap_peers: ["/ip4/.../tcp/4001/p2p/..."]</code></p>' },
+  { title: '--seed', html: '<p>Seed URL(s) to start crawling on launch. Comma-separated for multiple URLs.</p><p>YAML: <code>seed_urls: ["https://..."]</code></p>' },
+  { title: '--workers', html: '<p>Number of concurrent crawler workers. More workers = faster crawling but higher CPU/memory. Default: 4.</p><p>YAML: <code>crawler.workers: 4</code></p>' },
+  { title: '--max-depth', html: '<p>Maximum link depth the crawler will follow from a seed URL. Higher values discover more pages but take longer. Default: 5.</p><p>YAML: <code>crawler.max_depth: 5</code></p>' },
+  { title: '--config', html: '<p>Path to YAML config file. CLI flags override config values. See the full YAML example below for all options.</p>' },
+  { title: '--batch-size', html: '<p>Number of documents to buffer before flushing to the Bleve index. Larger batches = higher throughput but more memory. Default: 100.</p><p>YAML: <code>index.batch_size: 100</code></p><p>Edge case: setting to 1 disables batching (not recommended for production).</p>' },
+  { title: '--batch-flush-interval', html: '<p>Maximum time between batch flushes. Ensures documents are indexed even with low throughput. Default: 5s.</p><p>YAML: <code>index.batch_flush_interval: 5s</code></p>' },
+  { title: '--incremental-interval', html: '<p>How often the incremental re-scorer runs to update stale StaticScores. Handles freshness decay, PageRank changes, and quality drift. Default: 10m.</p><p>YAML: <code>index.incremental_interval: 10m</code></p>' },
+  { title: '--replication-factor', html: '<p>Number of nodes each document is replicated to for fault tolerance. Higher values = more redundancy but more storage/bandwidth. Default: 3.</p><p>YAML: <code>index.replication_factor: 3</code></p>' },
+];
+
 function renderConfig(el) {
   el.innerHTML = `
     <div class="docs-section">
@@ -799,8 +933,8 @@ function renderConfig(el) {
           <tbody>
             <tr><td>OS</td><td colspan="2">Linux, macOS, Windows</td><td>Docker image uses Alpine</td></tr>
             <tr><td>Go</td><td colspan="2">1.22+</td><td>Build from source only</td></tr>
-            <tr><td>CPU</td><td>1 core</td><td>2–4 cores</td><td>More cores = faster crawling</td></tr>
-            <tr><td>RAM</td><td>256 MB</td><td>512 MB – 1 GB</td><td>Scales with index size + workers</td></tr>
+            <tr><td>CPU</td><td>1 core</td><td>2-4 cores</td><td>More cores = faster crawling</td></tr>
+            <tr><td>RAM</td><td>256 MB</td><td>512 MB - 1 GB</td><td>Scales with index size + workers</td></tr>
             <tr><td>Disk</td><td>30 MB (empty)</td><td>~50 MB per 1K pages</td><td>BadgerDB + Bleve index</td></tr>
             <tr><td>P2P Port</td><td colspan="2">4001 (TCP + UDP)</td><td>QUIC-v1 on UDP, configurable</td></tr>
             <tr><td>API Port</td><td colspan="2">8080 (TCP)</td><td>Web UI + REST API, configurable</td></tr>
@@ -816,18 +950,22 @@ function renderConfig(el) {
         ${icon('cpu', 24, 'var(--accent)')}
         <h2>Configuration</h2>
       </div>
-      <p class="docs-section-desc">Configure Doogle via CLI flags or a YAML config file.</p>
+      <p class="docs-section-desc">Configure Doogle via CLI flags or a YAML config file. Click any flag for details.</p>
 
       <h3>CLI Flags</h3>
       <div class="docs-config-grid">
-        ${configCard('--port', '4001', 'libp2p listen port for P2P communication.', 'network')}
-        ${configCard('--api-port', '8080', 'HTTP API and web UI port.', 'monitor')}
-        ${configCard('--data-dir', './data', 'Directory for Bleve index, BadgerDB, and identity keys.', 'database')}
-        ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network')}
-        ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe')}
-        ${configCard('--workers', '4', 'Number of concurrent crawler workers.', 'download')}
-        ${configCard('--max-depth', '5', 'Maximum link depth the crawler will follow from a seed URL.', 'link')}
-        ${configCard('--config', '(none)', 'Path to YAML config file. Flags override config values.', 'fileText')}
+        ${configCard('--port', '4001', 'libp2p listen port for P2P communication.', 'network', 0)}
+        ${configCard('--api-port', '8080', 'HTTP API and web UI port.', 'monitor', 1)}
+        ${configCard('--data-dir', './data', 'Directory for Bleve index, BadgerDB, and identity keys.', 'database', 2)}
+        ${configCard('--bootstrap', '(none)', 'Bootstrap peer multiaddr for joining an existing network.', 'network', 3)}
+        ${configCard('--seed', '(none)', 'Seed URL(s) to start crawling on launch.', 'globe', 4)}
+        ${configCard('--workers', '4', 'Number of concurrent crawler workers.', 'download', 5)}
+        ${configCard('--max-depth', '5', 'Maximum link depth the crawler will follow from a seed URL.', 'link', 6)}
+        ${configCard('--config', '(none)', 'Path to YAML config file. Flags override config values.', 'fileText', 7)}
+        ${configCard('--batch-size', '100', 'Number of documents to buffer before flushing to Bleve index.', 'database', 8)}
+        ${configCard('--batch-flush-interval', '5s', 'Maximum time between batch flushes.', 'zap', 9)}
+        ${configCard('--incremental-interval', '10m', 'How often the incremental re-scorer runs to update stale StaticScores.', 'trendingUp', 10)}
+        ${configCard('--replication-factor', '3', 'Number of nodes each document is replicated to for fault tolerance.', 'shield', 11)}
       </div>
     </div>
 
@@ -860,6 +998,10 @@ crawler:
 index:
   bleve_dir: "bleve"
   pagerank_interval: 5m   # how often PageRank is recomputed
+  batch_size: 100          # docs per batch flush
+  batch_flush_interval: 5s # max time between flushes
+  incremental_interval: 10m # how often stale docs are re-scored
+  replication_factor: 3    # replicas per document
 
 storage:
   data_dir: "./data"
@@ -871,7 +1013,10 @@ search:
 
 seed_urls:
   - "https://en.wikipedia.org"
-  - "https://go.dev"`, 'yaml')}
+  - "https://developer.mozilla.org"
+  - "https://docs.python.org/3/"
+  - "https://go.dev"
+  - "https://news.ycombinator.com"`, 'yaml')}
     </div>
 
     <div class="docs-section">
@@ -888,12 +1033,21 @@ seed_urls:
     </div>
   `;
 
+  // Bind config card modals
+  el.querySelectorAll('.docs-config-card[data-config-idx]').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = parseInt(card.dataset.configIdx, 10);
+      const detail = configDetails[idx];
+      if (detail) showModal(detail.title, detail.html);
+    });
+  });
+
   bindCopyButtons(el);
 }
 
-function configCard(flag, defaultVal, desc, iconName) {
+function configCard(flag, defaultVal, desc, iconName, idx) {
   return `
-    <div class="docs-config-card">
+    <div class="docs-config-card" data-config-idx="${idx}" style="cursor:pointer">
       <div class="docs-config-icon">${icon(iconName, 18, 'var(--accent)')}</div>
       <div>
         <code class="docs-config-flag">${flag}</code>
