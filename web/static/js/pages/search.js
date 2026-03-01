@@ -1,6 +1,6 @@
 // Doogle v2 — Search Page (enhanced with detail modal + content warnings)
 import { api } from '../api.js';
-import { showModal, scoreBar, escapeHtml, skeleton, icon } from '../components.js';
+import { showModal, closeModal, scoreBar, escapeHtml, skeleton, icon } from '../components.js';
 
 let currentPage = 1;
 let currentQuery = '';
@@ -148,6 +148,14 @@ async function doSearch(keepPage = false) {
       });
     });
 
+    // Bind report button handlers
+    results.querySelectorAll('.result-report-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        showReportModal(btn.dataset.url);
+      });
+    });
+
     // Bind pagination handlers
     const prevBtn = results.querySelector('#pagination-prev');
     const nextBtn = results.querySelector('#pagination-next');
@@ -189,6 +197,7 @@ function renderResult(r, index) {
       <div class="result-badges">
         ${badges.join('')}
         <button class="badge badge-accent result-detail-btn" data-index="${index}" style="cursor:pointer;border:none;font-family:inherit">details</button>
+        <button class="badge badge-red result-report-btn" data-url="${escapeHtml(r.url)}" style="cursor:pointer;border:none;font-family:inherit">${icon('flag', 12)} report</button>
       </div>
     </div>
   `;
@@ -271,6 +280,59 @@ function qualColor(score) {
   if (score >= 0.7) return 'green';
   if (score >= 0.4) return 'blue';
   return 'amber';
+}
+
+function showReportModal(url) {
+  const html = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label style="color:var(--text-muted);font-size:0.85em">URL</label>
+      <input type="text" value="${escapeHtml(url)}" readonly style="padding:10px 12px;background:var(--bg-secondary);color:var(--text-muted);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.9em;font-family:var(--font-mono)">
+      <label style="color:var(--text-muted);font-size:0.85em">Reason</label>
+      <select id="modal-report-reason" style="padding:10px 12px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.95em">
+        <option value="">Select reason...</option>
+        <option value="spam">Spam</option>
+        <option value="malware">Malware</option>
+        <option value="phishing">Phishing</option>
+        <option value="illegal">Illegal Content</option>
+        <option value="low_quality">Low Quality</option>
+      </select>
+      <label style="color:var(--text-muted);font-size:0.85em">Details (optional)</label>
+      <textarea id="modal-report-detail" rows="3" placeholder="Additional details..." style="padding:10px 12px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.95em;resize:vertical;font-family:inherit"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button class="btn" id="modal-report-cancel">Cancel</button>
+        <button class="btn btn-primary" id="modal-report-submit">${icon('flag', 16)} Submit Report</button>
+      </div>
+      <div id="modal-report-result"></div>
+    </div>
+  `;
+
+  showModal('Report URL', html, { width: '480px' });
+
+  document.getElementById('modal-report-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-report-submit').addEventListener('click', async () => {
+    const reason = document.getElementById('modal-report-reason').value;
+    const detail = document.getElementById('modal-report-detail').value.trim();
+    const result = document.getElementById('modal-report-result');
+
+    if (!reason) {
+      result.innerHTML = '<span class="badge badge-amber">Please select a reason</span>';
+      return;
+    }
+
+    const btn = document.getElementById('modal-report-submit');
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    try {
+      await api.report(url, reason, detail);
+      result.innerHTML = '<span class="badge badge-green">Report submitted</span>';
+      setTimeout(closeModal, 1200);
+    } catch (err) {
+      result.innerHTML = `<span class="badge badge-red">Error: ${err.message}</span>`;
+      btn.disabled = false;
+      btn.innerHTML = `${icon('flag', 16)} Submit Report`;
+    }
+  });
 }
 
 async function updateStatusBar() {

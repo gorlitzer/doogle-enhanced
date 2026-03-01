@@ -3151,3 +3151,6 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   .about-vision-grid { grid-template-columns: 1fr; }
   .about-roadmap-timeline { padding-left: 16px; }
 }
+
+/* Report button icon alignment in search results */
+.result-report-btn .icon { vertical-align: middle; }

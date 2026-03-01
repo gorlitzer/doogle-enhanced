@@ -11,6 +11,7 @@ import { renderAbout } from './pages/about.js';
 import { renderLearn } from './pages/learn.js';
 import { renderWizard } from './pages/wizard.js';
 import { renderActions } from './pages/actions.js';
+import { renderTrust } from './pages/trust.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
 
@@ -22,6 +23,7 @@ const routes = {
   'admin/indexer': { render: renderIndexer, layout: 'admin' },
   'admin/network': { render: renderNetwork, layout: 'admin' },
   'admin/actions': { render: renderActions, layout: 'admin' },
+  'admin/trust':   { render: renderTrust,   layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
   'learn':       { render: renderLearn,  layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
