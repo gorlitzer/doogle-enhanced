@@ -1,3 +1,3 @@
 package web
 
-const embedHash = "a7427e46fdbda1a2"
+const embedHash = "15a97412610ace13"

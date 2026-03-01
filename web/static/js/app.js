@@ -1,6 +1,7 @@
 // Doogle v2 — SPA Router & App Shell
 import { api } from './api.js';
 import { initTheme, createThemePicker } from './theme-switcher.js';
+import { renderHome } from './pages/home.js';
 import { renderSearch } from './pages/search.js';
 import { renderNode } from './pages/node.js';
 import { renderCrawler } from './pages/crawler.js';
@@ -16,7 +17,7 @@ import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
 
 const routes = {
-  '':            { render: renderSearch, layout: 'search' },
+  '':            { render: renderHome,   layout: 'home' },
   'search':      { render: renderSearch, layout: 'search' },
   'admin':       { render: renderNode,    layout: 'admin' },
   'admin/crawler': { render: renderCrawler, layout: 'admin' },
@@ -69,6 +70,20 @@ function render() {
   if (window._pageInterval) {
     clearInterval(window._pageInterval);
     window._pageInterval = null;
+  }
+  if (window._pageCleanup) {
+    window._pageCleanup();
+    window._pageCleanup = null;
+  }
+
+  // Transparent navbar for immersive homepage
+  const navbar = document.querySelector('.navbar');
+  if (navbar) {
+    if (match.layout === 'home') {
+      navbar.classList.add('navbar-transparent');
+    } else {
+      navbar.classList.remove('navbar-transparent');
+    }
   }
 
   match.render(main);
