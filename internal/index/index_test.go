@@ -334,7 +334,7 @@ func TestShardManager_IsOwner(t *testing.T) {
 	sm.AddNode("peer2")
 
 	owner := sm.Owner("test.com")
-	if !sm.IsOwner(owner, "test.com") {
+	if !sm.IsOwner(owner, "test.com", 2) {
 		t.Fatal("expected IsOwner=true for primary owner")
 	}
 }

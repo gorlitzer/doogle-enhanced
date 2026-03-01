@@ -220,7 +220,8 @@ const archCardDetails = [
   { title: 'GossipSub', html: `<p>Pub/sub message propagation via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a>. Used for URL frontier broadcast (discovered URLs), shard catalog exchange (domain assignments), and peer coordination. Epidemic-style propagation ensures network-wide consistency.</p>` },
   { title: 'Stream Protocols', html: `<p>Request-reply protocols over <a href="https://docs.libp2p.io/" target="_blank">libp2p</a> streams:<br><code>/doogle/search/1.0.0</code> — distributed search fan-out<br><code>/doogle/crawl/1.0.0</code> — crawl task delegation to shard owners<br><code>/doogle/index/1.0.0</code> — document forwarding to shard owners</p>` },
   { title: 'Shard Protocol', html: `<p>Protocol <code>/doogle/shard/1.0.0</code> enables shard catalog exchange between peers. Nodes publish their domain assignments (which domains each node is responsible for) via GossipSub every 60 seconds. The shard catalog includes owned domains, document count, and generation counter.</p>` },
-  { title: 'Replication', html: `<p>Protocol <code>/doogle/replicate/1.0.0</code> handles document replication with Merkle root anti-entropy sync. Documents are replicated to N nodes (default 3) using consistent hashing. When peers join or leave, replication automatically rebalances to maintain the target factor.</p>` },
+  { title: 'Replication', html: `<p>Protocol <code>/doogle/replicate/1.0.0</code> handles fire-and-forget document replication. Documents are replicated to N nodes (default 3) using consistent hashing. When peers join or leave, replication automatically rebalances to maintain the target factor.</p>` },
+  { title: 'Anti-Entropy', html: `<p>Protocol <code>/doogle/antientropy/1.0.0</code> runs a background Merkle-based consistency check every 2 minutes (configurable). For each domain a node owns, it computes a Merkle root of all document IDs and compares it with replica peers. When roots diverge, the peer reports which IDs it's missing and the initiator sends the missing documents via the replication protocol. This is bidirectional — when each peer's loop runs, both sides converge.</p>` },
   // Storage layer
   { title: 'BadgerDB', html: `<p><a href="https://dgraph.io/badger" target="_blank">BadgerDB</a> is a fast, pure-Go key-value store. Doogle uses it for URL frontier storage, crawl metadata, link graph edges, PageRank counters, URL deduplication, and content hashes. All data persists across restarts.</p>` },
   { title: 'Bleve Index', html: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides full-text search with BM25 scoring. Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x). Batch writes of 100 docs per flush for 10-50x throughput. Pre-computed StaticScore stored per document.</p>` },
@@ -251,7 +252,19 @@ const protocolDetails = [
     |    {status: "indexed"}     |</pre><p>Forwards a fully-crawled and enriched document to the shard owner for batch indexing in their local Bleve store.</p>` },
   { title: 'doogle/url-frontier — URL Frontier (GossipSub)', html: `<p><strong>Type:</strong> GossipSub pub/sub topic</p><p>Broadcasts newly discovered URLs to all peers. Nodes check if the URL falls in their shard range (via consistent hashing) before scheduling a crawl. This prevents duplicate crawl work across the network.</p><p>Reference: <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub spec</a></p>` },
   { title: '/doogle/shard/1.0.0 — Shard Catalog Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p>Peers exchange shard assignments — which domains each node is responsible for. Published via GossipSub every 60 seconds. The catalog includes owned domains, document count per shard, and the current generation counter.</p><p>Used to build the network's consistent hash ring and compute CoveringSets for query routing.</p>` },
-  { title: '/doogle/replicate/1.0.0 — Replication Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p>Documents are replicated to N nodes (default 3) using consistent hashing. Merkle root anti-entropy ensures consistency — nodes periodically compare tree roots and sync missing documents.</p><p>On peer join/leave, replication automatically rebalances to maintain the target replication factor.</p>` },
+  { title: '/doogle/replicate/1.0.0 — Replication Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p>Documents are replicated to N nodes (default 3) using consistent hashing. On crawl, documents are immediately pushed to replica peers. On peer join/leave, replication automatically rebalances to maintain the target replication factor.</p>` },
+  { title: '/doogle/antientropy/1.0.0 — Anti-Entropy Protocol', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p><strong>Flow:</strong></p><pre style="font-size:0.85em;color:var(--text-secondary)">Initiator                    Replica Peer
+    |--- AntiEntropyRequest ---&gt;|
+    |    {domain, merkle_root,  |
+    |     doc_ids}              |
+    |                           | (compare local Merkle root)
+    |&lt;-- AntiEntropyResponse ---|
+    |    {status, merkle_root,  |
+    |     missing_ids}          |
+    |                           |
+    | if diverged:              |
+    |--- ReplicateRequest -----&gt;|
+    |    {missing documents}    |</pre><p>Runs every 2 minutes (+random jitter). For each locally-owned domain, the node computes a Merkle root from sorted document IDs and sends it to replica peers. If roots match, the domain is in sync. If they diverge, the peer returns which IDs it's missing and the initiator sends those docs via the replicate protocol.</p>` },
   { title: 'doogle/shard-catalog — Shard Catalog (GossipSub)', html: `<p><strong>Type:</strong> GossipSub pub/sub topic</p><p>Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network's hash ring in sync. Published every 60 seconds. All peers maintain a local copy of the network-wide shard map.</p>` },
 ];
 
@@ -342,7 +355,14 @@ function renderArchitecture(el) {
               ${icon('shield', 18, 'var(--blue)')}
               <div>
                 <strong>Replication</strong>
-                <p>/doogle/replicate/1.0.0 — document replication with Merkle root anti-entropy.</p>
+                <p>/doogle/replicate/1.0.0 — document replication to N replica peers.</p>
+              </div>
+            </div>
+            <div class="docs-arch-card" data-arch-idx="9" style="cursor:pointer">
+              ${icon('refresh', 18, 'var(--blue)')}
+              <div>
+                <strong>Anti-Entropy</strong>
+                <p>/doogle/antientropy/1.0.0 — Merkle root reconciliation between replicas.</p>
               </div>
             </div>
           </div>
@@ -416,8 +436,9 @@ function renderArchitecture(el) {
         ${protocolCard('/doogle/index/1.0.0', 'Index Doc', 'Request-reply', 'Forwards a fully-crawled and enriched document to the shard owner for batch indexing in their local Bleve store.', 'var(--purple)', 2)}
         ${protocolCard('doogle/url-frontier', 'URL Frontier', 'GossipSub pub/sub', 'Broadcasts newly discovered URLs to all peers. Nodes check if the URL falls in their shard range before scheduling a crawl.', 'var(--green)', 3)}
         ${protocolCard('/doogle/shard/1.0.0', 'Shard Catalog', 'Request-reply', 'Peers exchange shard assignments — which domains each node is responsible for. Published via GossipSub every 60s.', 'var(--amber)', 4)}
-        ${protocolCard('/doogle/replicate/1.0.0', 'Replication', 'Request-reply', 'Documents are replicated to N nodes (default 3) using consistent hashing. Merkle root anti-entropy ensures consistency.', 'var(--red)', 5)}
-        ${protocolCard('doogle/shard-catalog', 'Shard Catalog', 'GossipSub pub/sub', 'Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network\'s hash ring in sync.', 'var(--purple)', 6)}
+        ${protocolCard('/doogle/replicate/1.0.0', 'Replication', 'Request-reply', 'Documents are replicated to N nodes (default 3) using consistent hashing. Immediate push on crawl.', 'var(--red)', 5)}
+        ${protocolCard('/doogle/antientropy/1.0.0', 'Anti-Entropy', 'Request-reply', 'Periodic Merkle root comparison for each domain. Detects and repairs missing documents between replica peers.', 'var(--amber)', 6)}
+        ${protocolCard('doogle/shard-catalog', 'Shard Catalog', 'GossipSub pub/sub', 'Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network\'s hash ring in sync.', 'var(--purple)', 7)}
       </div>
     </div>
 
@@ -915,6 +936,7 @@ const configDetails = [
   { title: '--batch-flush-interval', html: '<p>Maximum time between batch flushes. Ensures documents are indexed even with low throughput. Default: 5s.</p><p>YAML: <code>index.batch_flush_interval: 5s</code></p>' },
   { title: '--incremental-interval', html: '<p>How often the incremental re-scorer runs to update stale StaticScores. Handles freshness decay, PageRank changes, and quality drift. Default: 10m.</p><p>YAML: <code>index.incremental_interval: 10m</code></p>' },
   { title: '--replication-factor', html: '<p>Number of nodes each document is replicated to for fault tolerance. Higher values = more redundancy but more storage/bandwidth. Default: 3.</p><p>YAML: <code>index.replication_factor: 3</code></p>' },
+  { title: '--anti-entropy-interval', html: '<p>How often the anti-entropy reconciliation loop runs. Each tick, the node compares Merkle roots with replica peers and repairs any missing documents. Default: 2m. Random jitter (0-30s) is added per tick to avoid thundering herd.</p><p>YAML: <code>index.anti_entropy_interval: 2m</code></p>' },
 ];
 
 function renderConfig(el) {
@@ -966,6 +988,7 @@ function renderConfig(el) {
         ${configCard('--batch-flush-interval', '5s', 'Maximum time between batch flushes.', 'zap', 9)}
         ${configCard('--incremental-interval', '10m', 'How often the incremental re-scorer runs to update stale StaticScores.', 'trendingUp', 10)}
         ${configCard('--replication-factor', '3', 'Number of nodes each document is replicated to for fault tolerance.', 'shield', 11)}
+        ${configCard('--anti-entropy-interval', '2m', 'How often the anti-entropy Merkle reconciliation loop runs.', 'refresh', 12)}
       </div>
     </div>
 
@@ -1002,6 +1025,7 @@ index:
   batch_flush_interval: 5s # max time between flushes
   incremental_interval: 10m # how often stale docs are re-scored
   replication_factor: 3    # replicas per document
+  anti_entropy_interval: 2m # Merkle reconciliation interval
 
 storage:
   data_dir: "./data"

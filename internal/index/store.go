@@ -12,6 +12,8 @@ type Store interface {
 	Get(id string) (*IndexDocument, error)
 	ListRecent(offset, limit int) ([]IndexDocument, int, error)
 	ListAll(callback func(doc *IndexDocument) bool) error
+	ListIDsByDomain(domain string) ([]string, error)
+	ListDomains() ([]string, error)
 	Close() error
 }
 
