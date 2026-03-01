@@ -14,31 +14,42 @@ const expandedCategories = new Set();
 
 // ─── Category Groups with Subcategories ─────────────
 const CATEGORY_GROUPS = [
+  // ══════════════════════════════════════════════════════
+  // GROUP 1: Knowledge & Learning
+  // ══════════════════════════════════════════════════════
   {
     id: 'knowledge', name: 'Knowledge & Learning', icon: 'fileText',
     categories: [
       {
         id: 'education', name: 'Education', icon: 'fileText',
-        desc: 'Online courses, encyclopedias, and academic resources',
+        desc: 'Online courses, schools, and academic resources',
         subcategories: [
           { id: 'education-k12', name: 'K-12', seeds: [
             { url: 'https://www.khanacademy.org', label: 'Khan Academy' },
             { url: 'https://www.ck12.org', label: 'CK-12' },
             { url: 'https://www.education.com', label: 'Education.com' },
+            { url: 'https://www.pbslearningmedia.org', label: 'PBS LearningMedia' },
           ]},
           { id: 'education-higher', name: 'Higher Ed', seeds: [
             { url: 'https://ocw.mit.edu', label: 'MIT OpenCourseWare' },
             { url: 'https://www.edx.org', label: 'edX' },
-            { url: 'https://www.britannica.com', label: 'Britannica' },
+            { url: 'https://oyc.yale.edu', label: 'Yale Open Courses' },
+            { url: 'https://online.stanford.edu', label: 'Stanford Online' },
           ]},
           { id: 'education-online', name: 'Online Learning', seeds: [
             { url: 'https://www.coursera.org', label: 'Coursera' },
-            { url: 'https://en.wikipedia.org', label: 'Wikipedia' },
-            { url: 'https://stackoverflow.com', label: 'Stack Overflow' },
+            { url: 'https://www.udemy.com', label: 'Udemy' },
+            { url: 'https://www.skillshare.com', label: 'Skillshare' },
+            { url: 'https://www.futurelearn.com', label: 'FutureLearn' },
           ]},
           { id: 'education-languages', name: 'Languages', seeds: [
             { url: 'https://www.duolingo.com', label: 'Duolingo' },
             { url: 'https://www.babbel.com', label: 'Babbel' },
+            { url: 'https://www.busuu.com', label: 'Busuu' },
+          ]},
+          { id: 'education-vocational', name: 'Vocational & Trade', seeds: [
+            { url: 'https://www.apprenticeship.gov', label: 'Apprenticeship.gov' },
+            { url: 'https://www.masterclass.com', label: 'MasterClass' },
           ]},
         ],
       },
@@ -63,10 +74,35 @@ const CATEGORY_GROUPS = [
           { id: 'science-math', name: 'Mathematics', seeds: [
             { url: 'https://mathworld.wolfram.com', label: 'MathWorld' },
             { url: 'https://www.ams.org', label: 'AMS' },
+            { url: 'https://math.stackexchange.com', label: 'Math StackExchange' },
           ]},
           { id: 'science-earth', name: 'Earth Science', seeds: [
             { url: 'https://www.nasa.gov', label: 'NASA' },
             { url: 'https://www.scientificamerican.com', label: 'Scientific American' },
+            { url: 'https://www.usgs.gov', label: 'USGS' },
+          ]},
+          { id: 'science-astronomy', name: 'Astronomy', seeds: [
+            { url: 'https://www.space.com', label: 'Space.com' },
+            { url: 'https://www.esa.int', label: 'ESA' },
+            { url: 'https://hubblesite.org', label: 'Hubble' },
+            { url: 'https://www.skyandtelescope.org', label: 'Sky & Telescope' },
+            { url: 'https://astronomy.com', label: 'Astronomy Magazine' },
+          ]},
+          { id: 'science-space', name: 'Space Exploration', seeds: [
+            { url: 'https://www.nasa.gov', label: 'NASA' },
+            { url: 'https://www.spacex.com', label: 'SpaceX' },
+            { url: 'https://www.jwst.nasa.gov', label: 'James Webb Telescope' },
+            { url: 'https://spacenews.com', label: 'SpaceNews' },
+            { url: 'https://www.planetary.org', label: 'Planetary Society' },
+            { url: 'https://arstechnica.com/space', label: 'Ars Technica Space' },
+          ]},
+          { id: 'science-astrobiology', name: 'Astrobiology & SETI', seeds: [
+            { url: 'https://astrobiology.nasa.gov', label: 'NASA Astrobiology' },
+            { url: 'https://www.seti.org', label: 'SETI Institute' },
+          ]},
+          { id: 'science-neuro', name: 'Neuroscience', seeds: [
+            { url: 'https://www.jneurosci.org', label: 'J. Neuroscience' },
+            { url: 'https://www.brainfacts.org', label: 'BrainFacts' },
           ]},
         ],
       },
@@ -82,6 +118,7 @@ const CATEGORY_GROUPS = [
           { id: 'news-tech', name: 'Tech News', seeds: [
             { url: 'https://www.theverge.com', label: 'The Verge' },
             { url: 'https://arstechnica.com', label: 'Ars Technica' },
+            { url: 'https://www.wired.com', label: 'Wired' },
           ]},
           { id: 'news-business', name: 'Business', seeds: [
             { url: 'https://www.ft.com', label: 'Financial Times' },
@@ -91,6 +128,14 @@ const CATEGORY_GROUPS = [
             { url: 'https://www.theguardian.com', label: 'The Guardian' },
             { url: 'https://www.npr.org', label: 'NPR' },
             { url: 'https://www.aljazeera.com', label: 'Al Jazeera' },
+          ]},
+          { id: 'news-science', name: 'Science News', seeds: [
+            { url: 'https://www.newscientist.com', label: 'New Scientist' },
+            { url: 'https://www.livescience.com', label: 'Live Science' },
+          ]},
+          { id: 'news-local', name: 'Local & Regional', seeds: [
+            { url: 'https://www.patch.com', label: 'Patch' },
+            { url: 'https://www.propublica.org', label: 'ProPublica' },
           ]},
         ],
       },
@@ -111,10 +156,64 @@ const CATEGORY_GROUPS = [
             { url: 'https://whc.unesco.org', label: 'UNESCO World Heritage' },
             { url: 'https://archive.org', label: 'Internet Archive' },
           ]},
+          { id: 'history-medieval', name: 'Medieval', seeds: [
+            { url: 'https://www.medievalists.net', label: 'Medievalists.net' },
+            { url: 'https://www.themorgan.org', label: 'Morgan Library' },
+          ]},
+          { id: 'history-archaeology', name: 'Archaeology', seeds: [
+            { url: 'https://www.archaeology.org', label: 'Archaeology Magazine' },
+            { url: 'https://www.worldarchaeology.com', label: 'World Archaeology' },
+          ]},
+        ],
+      },
+      {
+        id: 'philosophy', name: 'Philosophy & Ethics', icon: 'fileText',
+        desc: 'Philosophy, logic, ethics, and critical thinking',
+        subcategories: [
+          { id: 'philosophy-general', name: 'General', seeds: [
+            { url: 'https://plato.stanford.edu', label: 'Stanford Encyclopedia' },
+            { url: 'https://www.iep.utm.edu', label: 'Internet Encyclopedia of Philosophy' },
+          ]},
+          { id: 'philosophy-ethics', name: 'Ethics & Morality', seeds: [
+            { url: 'https://ethics.org.au', label: 'Ethics Centre' },
+            { url: 'https://www.bbc.co.uk/ethics', label: 'BBC Ethics' },
+          ]},
+          { id: 'philosophy-logic', name: 'Logic & Reasoning', seeds: [
+            { url: 'https://www.logicmatters.net', label: 'Logic Matters' },
+            { url: 'https://www.fallacyfiles.org', label: 'Fallacy Files' },
+          ]},
+        ],
+      },
+      {
+        id: 'law', name: 'Law & Government', icon: 'fileText',
+        desc: 'Legal resources, government data, and civic information',
+        subcategories: [
+          { id: 'law-legal', name: 'Legal Resources', seeds: [
+            { url: 'https://www.law.cornell.edu', label: 'Cornell LII' },
+            { url: 'https://www.justia.com', label: 'Justia' },
+          ]},
+          { id: 'law-government', name: 'Government', seeds: [
+            { url: 'https://www.usa.gov', label: 'USA.gov' },
+            { url: 'https://www.gov.uk', label: 'GOV.UK' },
+            { url: 'https://www.data.gov', label: 'Data.gov' },
+          ]},
+          { id: 'law-rights', name: 'Civil Rights', seeds: [
+            { url: 'https://www.aclu.org', label: 'ACLU' },
+            { url: 'https://www.eff.org', label: 'EFF' },
+            { url: 'https://www.amnesty.org', label: 'Amnesty International' },
+          ]},
+          { id: 'law-intl', name: 'International Law', seeds: [
+            { url: 'https://www.icj-cij.org', label: 'ICJ' },
+            { url: 'https://www.un.org/en/about-us/universal-declaration-of-human-rights', label: 'UN Human Rights' },
+          ]},
         ],
       },
     ],
   },
+
+  // ══════════════════════════════════════════════════════
+  // GROUP 2: Lifestyle & Wellbeing
+  // ══════════════════════════════════════════════════════
   {
     id: 'lifestyle', name: 'Lifestyle & Wellbeing', icon: 'heart',
     categories: [
@@ -130,14 +229,25 @@ const CATEGORY_GROUPS = [
           { id: 'health-fitness', name: 'Fitness', seeds: [
             { url: 'https://www.healthline.com', label: 'Healthline' },
             { url: 'https://www.runnersworld.com', label: "Runner's World" },
+            { url: 'https://www.bodybuilding.com', label: 'Bodybuilding.com' },
           ]},
           { id: 'health-mental', name: 'Mental Health', seeds: [
             { url: 'https://www.nimh.nih.gov', label: 'NIMH' },
             { url: 'https://www.psychologytoday.com', label: 'Psychology Today' },
+            { url: 'https://www.headspace.com', label: 'Headspace' },
           ]},
           { id: 'health-nutrition', name: 'Nutrition', seeds: [
             { url: 'https://www.webmd.com', label: 'WebMD' },
             { url: 'https://medlineplus.gov', label: 'MedlinePlus' },
+            { url: 'https://examine.com', label: 'Examine' },
+          ]},
+          { id: 'health-yoga', name: 'Yoga & Meditation', seeds: [
+            { url: 'https://www.yogajournal.com', label: 'Yoga Journal' },
+            { url: 'https://www.calm.com', label: 'Calm' },
+          ]},
+          { id: 'health-alt', name: 'Alternative Medicine', seeds: [
+            { url: 'https://nccih.nih.gov', label: 'NCCIH' },
+            { url: 'https://www.herbalgram.org', label: 'HerbalGram' },
           ]},
         ],
       },
@@ -150,13 +260,31 @@ const CATEGORY_GROUPS = [
             { url: 'https://www.seriouseats.com', label: 'Serious Eats' },
             { url: 'https://www.simplyrecipes.com', label: 'Simply Recipes' },
           ]},
-          { id: 'food-restaurant', name: 'Restaurant', seeds: [
+          { id: 'food-restaurant', name: 'Restaurant & Reviews', seeds: [
             { url: 'https://www.bonappetit.com', label: 'Bon Appétit' },
             { url: 'https://www.epicurious.com', label: 'Epicurious' },
           ]},
           { id: 'food-science', name: 'Food Science', seeds: [
             { url: 'https://www.bbcgoodfood.com', label: 'BBC Good Food' },
             { url: 'https://www.foodnetwork.com', label: 'Food Network' },
+          ]},
+          { id: 'food-baking', name: 'Baking & Pastry', seeds: [
+            { url: 'https://www.kingarthurbaking.com', label: 'King Arthur Baking' },
+            { url: 'https://sallysbakingaddiction.com', label: "Sally's Baking" },
+          ]},
+          { id: 'food-vegan', name: 'Vegan & Plant-Based', seeds: [
+            { url: 'https://minimalistbaker.com', label: 'Minimalist Baker' },
+            { url: 'https://www.theppk.com', label: 'Post Punk Kitchen' },
+          ]},
+          { id: 'food-drinks', name: 'Drinks & Cocktails', seeds: [
+            { url: 'https://www.liquor.com', label: 'Liquor.com' },
+            { url: 'https://punchdrink.com', label: 'PUNCH' },
+            { url: 'https://www.winemag.com', label: 'Wine Enthusiast' },
+          ]},
+          { id: 'food-world', name: 'World Cuisines', seeds: [
+            { url: 'https://www.justonecookbook.com', label: 'Just One Cookbook' },
+            { url: 'https://www.196flavors.com', label: '196 Flavors' },
+            { url: 'https://www.maangchi.com', label: 'Maangchi' },
           ]},
         ],
       },
@@ -169,7 +297,7 @@ const CATEGORY_GROUPS = [
             { url: 'https://www.nba.com', label: 'NBA' },
             { url: 'https://www.fifa.com', label: 'FIFA' },
           ]},
-          { id: 'sports-individual', name: 'Individual', seeds: [
+          { id: 'sports-individual', name: 'Individual Sports', seeds: [
             { url: 'https://olympics.com', label: 'Olympics' },
             { url: 'https://www.bbc.com/sport', label: 'BBC Sport' },
           ]},
@@ -177,9 +305,32 @@ const CATEGORY_GROUPS = [
             { url: 'https://www.hltv.org', label: 'HLTV' },
             { url: 'https://liquipedia.net', label: 'Liquipedia' },
           ]},
-          { id: 'sports-outdoor', name: 'Outdoor', seeds: [
-            { url: 'https://www.runnersworld.com', label: "Runner's World" },
+          { id: 'sports-outdoor', name: 'Outdoor & Adventure', seeds: [
             { url: 'https://www.outsideonline.com', label: 'Outside' },
+            { url: 'https://www.rei.com/learn', label: 'REI Learn' },
+          ]},
+          { id: 'sports-combat', name: 'Combat & Martial Arts', seeds: [
+            { url: 'https://www.ufc.com', label: 'UFC' },
+            { url: 'https://www.sherdog.com', label: 'Sherdog' },
+          ]},
+          { id: 'sports-cycling', name: 'Cycling', seeds: [
+            { url: 'https://www.cyclingnews.com', label: 'CyclingNews' },
+            { url: 'https://www.bikeradar.com', label: 'BikeRadar' },
+          ]},
+          { id: 'sports-water', name: 'Water Sports', seeds: [
+            { url: 'https://www.surfer.com', label: 'Surfer' },
+            { url: 'https://www.swimmingworldmagazine.com', label: 'Swimming World' },
+          ]},
+          { id: 'sports-sailing', name: 'Sailing', seeds: [
+            { url: 'https://www.sailingworld.com', label: 'Sailing World' },
+            { url: 'https://www.yachtingworld.com', label: 'Yachting World' },
+            { url: 'https://www.sailmagazine.com', label: 'SAIL Magazine' },
+            { url: 'https://www.cruisingworld.com', label: 'Cruising World' },
+            { url: 'https://www.practical-sailor.com', label: 'Practical Sailor' },
+          ]},
+          { id: 'sports-winter', name: 'Winter Sports', seeds: [
+            { url: 'https://www.skimagazine.com', label: 'SKI Magazine' },
+            { url: 'https://snowbrains.com', label: 'SnowBrains' },
           ]},
         ],
       },
@@ -200,10 +351,167 @@ const CATEGORY_GROUPS = [
             { url: 'https://wikitravel.org', label: 'Wikitravel' },
             { url: 'https://www.rome2rio.com', label: 'Rome2Rio' },
           ]},
+          { id: 'travel-digital-nomad', name: 'Digital Nomad', seeds: [
+            { url: 'https://nomadlist.com', label: 'Nomad List' },
+            { url: 'https://www.nomadicmatt.com', label: 'Nomadic Matt' },
+          ]},
+          { id: 'travel-road', name: 'Road Trips & Van Life', seeds: [
+            { url: 'https://www.roadtrippers.com', label: 'Roadtrippers' },
+            { url: 'https://www.campendium.com', label: 'Campendium' },
+          ]},
+        ],
+      },
+      {
+        id: 'fashion', name: 'Fashion & Style', icon: 'heart',
+        desc: 'Fashion trends, streetwear, sustainable fashion, and style guides',
+        subcategories: [
+          { id: 'fashion-trends', name: 'Trends & News', seeds: [
+            { url: 'https://www.vogue.com', label: 'Vogue' },
+            { url: 'https://www.gq.com', label: 'GQ' },
+            { url: 'https://hypebeast.com', label: 'Hypebeast' },
+          ]},
+          { id: 'fashion-street', name: 'Streetwear', seeds: [
+            { url: 'https://www.highsnobiety.com', label: 'Highsnobiety' },
+            { url: 'https://www.complex.com/style', label: 'Complex Style' },
+          ]},
+          { id: 'fashion-sustainable', name: 'Sustainable Fashion', seeds: [
+            { url: 'https://goodonyou.eco', label: 'Good On You' },
+            { url: 'https://www.thegoodtrade.com', label: 'The Good Trade' },
+          ]},
+          { id: 'fashion-luxury', name: 'Luxury & High Fashion', seeds: [
+            { url: 'https://www.businessoffashion.com', label: 'Business of Fashion' },
+            { url: 'https://www.harpersbazaar.com', label: "Harper's Bazaar" },
+          ]},
+        ],
+      },
+      {
+        id: 'home', name: 'Home & Interior', icon: 'heart',
+        desc: 'Interior design, home improvement, and real estate',
+        subcategories: [
+          { id: 'home-interior', name: 'Interior Design', seeds: [
+            { url: 'https://www.architecturaldigest.com', label: 'Architectural Digest' },
+            { url: 'https://www.apartmenttherapy.com', label: 'Apartment Therapy' },
+          ]},
+          { id: 'home-diy', name: 'Home Improvement', seeds: [
+            { url: 'https://www.thisoldhouse.com', label: 'This Old House' },
+            { url: 'https://www.familyhandyman.com', label: 'Family Handyman' },
+          ]},
+          { id: 'home-realestate', name: 'Real Estate', seeds: [
+            { url: 'https://www.zillow.com', label: 'Zillow' },
+            { url: 'https://www.realtor.com', label: 'Realtor.com' },
+          ]},
+          { id: 'home-organize', name: 'Organization & Minimalism', seeds: [
+            { url: 'https://www.theminimalists.com', label: 'The Minimalists' },
+            { url: 'https://www.becomingminimalist.com', label: 'Becoming Minimalist' },
+          ]},
+        ],
+      },
+      {
+        id: 'gardening', name: 'Gardening', icon: 'heart',
+        desc: 'Vegetable gardens, houseplants, permaculture, and landscaping',
+        subcategories: [
+          { id: 'gardening-general', name: 'General Gardening', seeds: [
+            { url: 'https://www.gardeningknowhow.com', label: 'Gardening Know How' },
+            { url: 'https://www.rhs.org.uk', label: 'RHS' },
+            { url: 'https://savvygardening.com', label: 'Savvy Gardening' },
+          ]},
+          { id: 'gardening-veggie', name: 'Vegetable & Edible', seeds: [
+            { url: 'https://www.growveg.com', label: 'GrowVeg' },
+            { url: 'https://www.gardenersworld.com', label: "Gardeners' World" },
+            { url: 'https://www.epicgardening.com', label: 'Epic Gardening' },
+          ]},
+          { id: 'gardening-houseplants', name: 'Houseplants', seeds: [
+            { url: 'https://www.thespruce.com/houseplants-4127735', label: 'The Spruce Houseplants' },
+            { url: 'https://www.houseplantjournal.com', label: 'Houseplant Journal' },
+          ]},
+          { id: 'gardening-permaculture', name: 'Permaculture', seeds: [
+            { url: 'https://www.permaculturenews.org', label: 'Permaculture News' },
+            { url: 'https://www.permaculture.org', label: 'Permaculture Institute' },
+          ]},
+          { id: 'gardening-landscape', name: 'Landscaping', seeds: [
+            { url: 'https://www.gardendesign.com', label: 'Garden Design' },
+            { url: 'https://www.bhg.com/gardening', label: 'BHG Gardening' },
+          ]},
+          { id: 'gardening-hydroponics', name: 'Hydroponics & Indoor', seeds: [
+            { url: 'https://www.maximumyield.com', label: 'Maximum Yield' },
+            { url: 'https://generalhydroponics.com', label: 'General Hydroponics' },
+          ]},
+        ],
+      },
+      {
+        id: 'parenting', name: 'Parenting & Family', icon: 'heart',
+        desc: 'Parenting advice, child development, and family life',
+        subcategories: [
+          { id: 'parenting-baby', name: 'Baby & Toddler', seeds: [
+            { url: 'https://www.whattoexpect.com', label: 'What to Expect' },
+            { url: 'https://www.babycenter.com', label: 'BabyCenter' },
+          ]},
+          { id: 'parenting-kids', name: 'Kids & Teens', seeds: [
+            { url: 'https://www.commonsensemedia.org', label: 'Common Sense Media' },
+            { url: 'https://www.parents.com', label: 'Parents.com' },
+          ]},
+          { id: 'parenting-education', name: 'Homeschooling', seeds: [
+            { url: 'https://www.time4learning.com', label: 'Time4Learning' },
+            { url: 'https://www.homeschool.com', label: 'Homeschool.com' },
+          ]},
+        ],
+      },
+      {
+        id: 'pets', name: 'Pets & Animals', icon: 'heart',
+        desc: 'Pet care, animal behavior, veterinary resources, and wildlife',
+        subcategories: [
+          { id: 'pets-dogs', name: 'Dogs', seeds: [
+            { url: 'https://www.akc.org', label: 'AKC' },
+            { url: 'https://www.whole-dog-journal.com', label: 'Whole Dog Journal' },
+          ]},
+          { id: 'pets-cats', name: 'Cats', seeds: [
+            { url: 'https://www.catster.com', label: 'Catster' },
+            { url: 'https://icatcare.org', label: 'iCatCare' },
+          ]},
+          { id: 'pets-exotic', name: 'Exotic & Aquarium', seeds: [
+            { url: 'https://www.thesprucepets.com', label: 'The Spruce Pets' },
+            { url: 'https://www.fishkeepingworld.com', label: 'Fishkeeping World' },
+          ]},
+          { id: 'pets-wildlife', name: 'Wildlife & Conservation', seeds: [
+            { url: 'https://www.worldwildlife.org', label: 'WWF' },
+            { url: 'https://www.audubon.org', label: 'Audubon Society' },
+          ]},
+        ],
+      },
+      {
+        id: 'gambling', name: 'Gambling & Betting', icon: 'trendingUp',
+        desc: 'Poker strategy, sports betting, casino games, and odds analysis',
+        subcategories: [
+          { id: 'gambling-poker', name: 'Poker', seeds: [
+            { url: 'https://www.pokernews.com', label: 'PokerNews' },
+            { url: 'https://www.pokerstrategy.com', label: 'PokerStrategy' },
+            { url: 'https://forumserver.twoplustwo.com', label: 'TwoPlusTwo' },
+          ]},
+          { id: 'gambling-sports', name: 'Sports Betting', seeds: [
+            { url: 'https://www.actionnetwork.com', label: 'Action Network' },
+            { url: 'https://www.covers.com', label: 'Covers' },
+            { url: 'https://www.oddsportal.com', label: 'OddsPortal' },
+          ]},
+          { id: 'gambling-casino', name: 'Casino & Table Games', seeds: [
+            { url: 'https://wizardofodds.com', label: 'Wizard of Odds' },
+            { url: 'https://www.blackjackapprenticeship.com', label: 'Blackjack Apprenticeship' },
+          ]},
+          { id: 'gambling-fantasy', name: 'Fantasy & DFS', seeds: [
+            { url: 'https://www.fantasypros.com', label: 'FantasyPros' },
+            { url: 'https://www.rotowire.com', label: 'RotoWire' },
+          ]},
+          { id: 'gambling-odds', name: 'Odds & Analytics', seeds: [
+            { url: 'https://www.fivethirtyeight.com', label: 'FiveThirtyEight' },
+            { url: 'https://www.pinnacle.com/en/betting-resources', label: 'Pinnacle Resources' },
+          ]},
         ],
       },
     ],
   },
+
+  // ══════════════════════════════════════════════════════
+  // GROUP 3: Creative & Entertainment
+  // ══════════════════════════════════════════════════════
   {
     id: 'creative', name: 'Creative & Entertainment', icon: 'monitor',
     categories: [
@@ -216,17 +524,53 @@ const CATEGORY_GROUPS = [
             { url: 'https://www.artsy.net', label: 'Artsy' },
             { url: 'https://www.metmuseum.org', label: 'Met Museum' },
           ]},
-          { id: 'arts-film', name: 'Film', seeds: [
-            { url: 'https://www.imdb.com', label: 'IMDb' },
-            { url: 'https://letterboxd.com', label: 'Letterboxd' },
-          ]},
           { id: 'arts-photography', name: 'Photography', seeds: [
             { url: 'https://www.deviantart.com', label: 'DeviantArt' },
             { url: 'https://500px.com', label: '500px' },
+            { url: 'https://petapixel.com', label: 'PetaPixel' },
           ]},
-          { id: 'arts-design', name: 'Design', seeds: [
+          { id: 'arts-design', name: 'Graphic Design', seeds: [
             { url: 'https://www.behance.net', label: 'Behance' },
             { url: 'https://dribbble.com', label: 'Dribbble' },
+          ]},
+          { id: 'arts-ux', name: 'UX & Product Design', seeds: [
+            { url: 'https://www.nngroup.com', label: 'Nielsen Norman' },
+            { url: 'https://uxdesign.cc', label: 'UX Collective' },
+          ]},
+          { id: 'arts-3d', name: '3D Art & CGI', seeds: [
+            { url: 'https://www.artstation.com', label: 'ArtStation' },
+            { url: 'https://www.blender.org', label: 'Blender' },
+          ]},
+          { id: 'arts-architecture', name: 'Architecture', seeds: [
+            { url: 'https://www.archdaily.com', label: 'ArchDaily' },
+            { url: 'https://www.dezeen.com', label: 'Dezeen' },
+          ]},
+        ],
+      },
+      {
+        id: 'film', name: 'Film & Television', icon: 'monitor',
+        desc: 'Movies, TV shows, directors, and cinema history',
+        subcategories: [
+          { id: 'film-reviews', name: 'Reviews & Ratings', seeds: [
+            { url: 'https://www.imdb.com', label: 'IMDb' },
+            { url: 'https://letterboxd.com', label: 'Letterboxd' },
+            { url: 'https://www.rottentomatoes.com', label: 'Rotten Tomatoes' },
+          ]},
+          { id: 'film-indie', name: 'Independent Film', seeds: [
+            { url: 'https://www.indiewire.com', label: 'IndieWire' },
+            { url: 'https://mubi.com', label: 'MUBI' },
+          ]},
+          { id: 'film-tv', name: 'Television', seeds: [
+            { url: 'https://www.tvguide.com', label: 'TV Guide' },
+            { url: 'https://deadline.com', label: 'Deadline' },
+          ]},
+          { id: 'film-making', name: 'Filmmaking', seeds: [
+            { url: 'https://nofilmschool.com', label: 'No Film School' },
+            { url: 'https://www.studiobinder.com', label: 'StudioBinder' },
+          ]},
+          { id: 'film-animation', name: 'Animation', seeds: [
+            { url: 'https://www.cartoonbrew.com', label: 'Cartoon Brew' },
+            { url: 'https://www.animationmagazine.net', label: 'Animation Magazine' },
           ]},
         ],
       },
@@ -234,7 +578,7 @@ const CATEGORY_GROUPS = [
         id: 'music', name: 'Music', icon: 'music',
         desc: 'Music discovery, streaming, theory, and production',
         subcategories: [
-          { id: 'music-streaming', name: 'Streaming', seeds: [
+          { id: 'music-streaming', name: 'Streaming & Discovery', seeds: [
             { url: 'https://bandcamp.com', label: 'Bandcamp' },
             { url: 'https://soundcloud.com', label: 'SoundCloud' },
           ]},
@@ -250,6 +594,14 @@ const CATEGORY_GROUPS = [
             { url: 'https://pitchfork.com', label: 'Pitchfork' },
             { url: 'https://www.rollingstone.com', label: 'Rolling Stone' },
             { url: 'https://www.discogs.com', label: 'Discogs' },
+          ]},
+          { id: 'music-genres', name: 'Genre Communities', seeds: [
+            { url: 'https://www.residentadvisor.net', label: 'Resident Advisor' },
+            { url: 'https://daily.bandcamp.com', label: 'Bandcamp Daily' },
+          ]},
+          { id: 'music-instruments', name: 'Instruments & Tabs', seeds: [
+            { url: 'https://www.ultimate-guitar.com', label: 'Ultimate Guitar' },
+            { url: 'https://www.pianistmagazine.com', label: 'Pianist Magazine' },
           ]},
         ],
       },
@@ -269,6 +621,27 @@ const CATEGORY_GROUPS = [
             { url: 'https://openlibrary.org', label: 'Open Library' },
             { url: 'https://www.gutenberg.org', label: 'Project Gutenberg' },
             { url: 'https://www.loc.gov', label: 'Library of Congress' },
+          ]},
+          { id: 'books-scifi', name: 'Science Fiction', seeds: [
+            { url: 'https://www.tor.com', label: 'Tor.com' },
+            { url: 'https://locusmag.com', label: 'Locus Magazine' },
+            { url: 'https://www.sfsite.com', label: 'SF Site' },
+            { url: 'https://www.clarkesworld.com', label: 'Clarkesworld' },
+          ]},
+          { id: 'books-fantasy', name: 'Fantasy', seeds: [
+            { url: 'https://www.fantasy-faction.com', label: 'Fantasy Faction' },
+            { url: 'https://thefantasyinn.com', label: 'The Fantasy Inn' },
+            { url: 'https://www.grimdarkmagazine.com', label: 'Grimdark Magazine' },
+            { url: 'https://www.orbitbooks.net', label: 'Orbit Books' },
+          ]},
+          { id: 'books-horror', name: 'Horror', seeds: [
+            { url: 'https://www.nightmare-magazine.com', label: 'Nightmare Magazine' },
+            { url: 'https://www.horrorwriters.org', label: 'Horror Writers Association' },
+          ]},
+          { id: 'books-comics', name: 'Comics & Graphic Novels', seeds: [
+            { url: 'https://www.comicbookresources.com', label: 'CBR' },
+            { url: 'https://imagecomics.com', label: 'Image Comics' },
+            { url: 'https://www.webtoons.com', label: 'Webtoons' },
           ]},
         ],
       },
@@ -291,11 +664,127 @@ const CATEGORY_GROUPS = [
           { id: 'gaming-dev', name: 'Game Dev', seeds: [
             { url: 'https://www.gamedeveloper.com', label: 'Game Developer' },
             { url: 'https://unity.com', label: 'Unity' },
+            { url: 'https://godotengine.org', label: 'Godot' },
+          ]},
+          { id: 'gaming-retro', name: 'Retro Gaming', seeds: [
+            { url: 'https://www.retrorgb.com', label: 'RetroRGB' },
+            { url: 'https://www.racketboy.com', label: 'Racketboy' },
+          ]},
+          { id: 'gaming-tabletop', name: 'Board Games', seeds: [
+            { url: 'https://boardgamegeek.com', label: 'BoardGameGeek' },
+            { url: 'https://www.dicebreaker.com', label: 'Dicebreaker' },
+            { url: 'https://www.shutupandsitdown.com', label: 'Shut Up & Sit Down' },
+          ]},
+          { id: 'gaming-ttrpg', name: 'Tabletop RPGs', seeds: [
+            { url: 'https://www.dndbeyond.com', label: 'D&D Beyond' },
+            { url: 'https://paizo.com', label: 'Paizo (Pathfinder)' },
+            { url: 'https://www.chaosium.com', label: 'Chaosium (Call of Cthulhu)' },
+            { url: 'https://www.gmbinder.com', label: 'GM Binder' },
+          ]},
+          { id: 'gaming-miniatures', name: 'Miniatures & Wargaming', seeds: [
+            { url: 'https://www.warhammer-community.com', label: 'Warhammer Community' },
+            { url: 'https://www.beastsofwar.com', label: 'Beasts of War' },
+          ]},
+          { id: 'gaming-puzzles', name: 'Puzzles & Strategy', seeds: [
+            { url: 'https://www.chess.com', label: 'Chess.com' },
+            { url: 'https://lichess.org', label: 'Lichess' },
+          ]},
+        ],
+      },
+      {
+        id: 'anime', name: 'Anime & Manga', icon: 'monitor',
+        desc: 'Anime series, manga, light novels, and Japanese pop culture',
+        subcategories: [
+          { id: 'anime-tracking', name: 'Tracking & Discovery', seeds: [
+            { url: 'https://myanimelist.net', label: 'MyAnimeList' },
+            { url: 'https://anilist.co', label: 'AniList' },
+            { url: 'https://kitsu.app', label: 'Kitsu' },
+          ]},
+          { id: 'anime-news', name: 'News & Reviews', seeds: [
+            { url: 'https://www.animenewsnetwork.com', label: 'Anime News Network' },
+            { url: 'https://www.cbr.com/category/anime', label: 'CBR Anime' },
+          ]},
+          { id: 'anime-manga', name: 'Manga', seeds: [
+            { url: 'https://www.mangaupdates.com', label: 'Manga Updates' },
+            { url: 'https://mangadex.org', label: 'MangaDex' },
+          ]},
+          { id: 'anime-lightnovel', name: 'Light Novels', seeds: [
+            { url: 'https://www.novelupdates.com', label: 'Novel Updates' },
+            { url: 'https://j-novel.club', label: 'J-Novel Club' },
+          ]},
+        ],
+      },
+      {
+        id: 'scifi-culture', name: 'Sci-Fi & Futurism', icon: 'cpu',
+        desc: 'Science fiction culture, futurism, transhumanism, and speculative tech',
+        subcategories: [
+          { id: 'scifi-fiction', name: 'Sci-Fi Media', seeds: [
+            { url: 'https://www.den-of-geek.com', label: 'Den of Geek' },
+            { url: 'https://io9.gizmodo.com', label: 'io9' },
+            { url: 'https://www.syfy.com/syfy-wire', label: 'SYFY Wire' },
+          ]},
+          { id: 'scifi-futurism', name: 'Futurism & Singularity', seeds: [
+            { url: 'https://futurism.com', label: 'Futurism' },
+            { url: 'https://singularityhub.com', label: 'Singularity Hub' },
+            { url: 'https://www.kurzweilai.net', label: 'Kurzweil AI' },
+          ]},
+          { id: 'scifi-transhumanism', name: 'Transhumanism', seeds: [
+            { url: 'https://humanityplus.org', label: 'Humanity+' },
+            { url: 'https://www.nickbostrom.com', label: 'Nick Bostrom' },
+          ]},
+          { id: 'scifi-space-culture', name: 'Space Culture', seeds: [
+            { url: 'https://www.universetoday.com', label: 'Universe Today' },
+            { url: 'https://www.space.com', label: 'Space.com' },
+            { url: 'https://everydayastronaut.com', label: 'Everyday Astronaut' },
+          ]},
+        ],
+      },
+      {
+        id: 'podcasts', name: 'Podcasts & Audio', icon: 'music',
+        desc: 'Podcasts, audiobooks, and audio storytelling',
+        subcategories: [
+          { id: 'podcasts-directories', name: 'Directories', seeds: [
+            { url: 'https://podcastindex.org', label: 'Podcast Index' },
+            { url: 'https://www.listennotes.com', label: 'Listen Notes' },
+          ]},
+          { id: 'podcasts-true-crime', name: 'True Crime', seeds: [
+            { url: 'https://www.thecrimson.com', label: 'True Crime Podcasts' },
+            { url: 'https://crimejunkie.com', label: 'Crime Junkie' },
+          ]},
+          { id: 'podcasts-comedy', name: 'Comedy', seeds: [
+            { url: 'https://www.earwolf.com', label: 'Earwolf' },
+            { url: 'https://maximumfun.org', label: 'Maximum Fun' },
+          ]},
+        ],
+      },
+      {
+        id: 'writing', name: 'Writing & Storytelling', icon: 'fileText',
+        desc: 'Creative writing, screenwriting, journalism, and publishing',
+        subcategories: [
+          { id: 'writing-creative', name: 'Creative Writing', seeds: [
+            { url: 'https://www.writersdigest.com', label: "Writer's Digest" },
+            { url: 'https://www.nanowrimo.org', label: 'NaNoWriMo' },
+          ]},
+          { id: 'writing-journalism', name: 'Journalism', seeds: [
+            { url: 'https://www.cjr.org', label: 'Columbia Journalism Review' },
+            { url: 'https://www.niemanlab.org', label: 'Nieman Lab' },
+          ]},
+          { id: 'writing-screenwriting', name: 'Screenwriting', seeds: [
+            { url: 'https://www.scriptmag.com', label: 'Script Magazine' },
+            { url: 'https://johnaugust.com', label: 'John August' },
+          ]},
+          { id: 'writing-selfpub', name: 'Self-Publishing', seeds: [
+            { url: 'https://www.lulu.com', label: 'Lulu' },
+            { url: 'https://selfpublishingadvice.org', label: 'Self-Publishing Advice' },
           ]},
         ],
       },
     ],
   },
+
+  // ══════════════════════════════════════════════════════
+  // GROUP 4: Technology & Development
+  // ══════════════════════════════════════════════════════
   {
     id: 'technology', name: 'Technology & Development', icon: 'code',
     categories: [
@@ -303,22 +792,71 @@ const CATEGORY_GROUPS = [
         id: 'tech', name: 'Programming', icon: 'code',
         desc: 'Language docs, tutorials, and developer resources',
         subcategories: [
-          { id: 'tech-aiml', name: 'AI / ML', seeds: [
+          { id: 'tech-aiml', name: 'AI / ML Frameworks', seeds: [
             { url: 'https://huggingface.co', label: 'Hugging Face' },
             { url: 'https://pytorch.org', label: 'PyTorch' },
             { url: 'https://www.tensorflow.org', label: 'TensorFlow' },
+            { url: 'https://jax.readthedocs.io', label: 'JAX' },
+          ]},
+          { id: 'tech-llm', name: 'LLMs & Generative AI', seeds: [
+            { url: 'https://openai.com/research', label: 'OpenAI Research' },
+            { url: 'https://www.anthropic.com', label: 'Anthropic' },
+            { url: 'https://ai.meta.com', label: 'Meta AI' },
+            { url: 'https://www.deepmind.com', label: 'DeepMind' },
+            { url: 'https://ollama.com', label: 'Ollama' },
+            { url: 'https://lmsys.org', label: 'LMSYS' },
+          ]},
+          { id: 'tech-ai-news', name: 'AI News & Community', seeds: [
+            { url: 'https://arxiv.org/list/cs.AI/recent', label: 'arXiv AI' },
+            { url: 'https://the-decoder.com', label: 'The Decoder' },
+            { url: 'https://www.marktechpost.com', label: 'MarkTechPost' },
+            { url: 'https://aisafety.info', label: 'AI Safety Info' },
+          ]},
+          { id: 'tech-ai-tools', name: 'AI Tools & Agents', seeds: [
+            { url: 'https://www.langchain.com', label: 'LangChain' },
+            { url: 'https://docs.llamaindex.ai', label: 'LlamaIndex' },
+            { url: 'https://github.com/ggerganov/llama.cpp', label: 'llama.cpp' },
+            { url: 'https://www.cursor.com', label: 'Cursor' },
           ]},
           { id: 'tech-security', name: 'Cybersecurity', seeds: [
             { url: 'https://owasp.org', label: 'OWASP' },
             { url: 'https://www.schneier.com', label: 'Schneier on Security' },
+            { url: 'https://krebsonsecurity.com', label: 'Krebs on Security' },
+          ]},
+          { id: 'tech-hacking', name: 'Hacking & CTF', seeds: [
+            { url: 'https://www.hackthebox.com', label: 'Hack The Box' },
+            { url: 'https://tryhackme.com', label: 'TryHackMe' },
+            { url: 'https://ctftime.org', label: 'CTFtime' },
+            { url: 'https://portswigger.net/web-security', label: 'PortSwigger Academy' },
+          ]},
+          { id: 'tech-infosec', name: 'Infosec & Bug Bounty', seeds: [
+            { url: 'https://www.hackerone.com', label: 'HackerOne' },
+            { url: 'https://thehackernews.com', label: 'The Hacker News' },
+            { url: 'https://www.exploit-db.com', label: 'Exploit-DB' },
+            { url: 'https://www.offensive-security.com', label: 'Offensive Security' },
+          ]},
+          { id: 'tech-reversing', name: 'Reverse Engineering', seeds: [
+            { url: 'https://crackmes.one', label: 'crackmes.one' },
+            { url: 'https://ghidra-sre.org', label: 'Ghidra' },
+            { url: 'https://malwareunicorn.org', label: 'Malware Unicorn' },
           ]},
           { id: 'tech-hardware', name: 'Hardware', seeds: [
             { url: 'https://www.anandtech.com', label: 'AnandTech' },
             { url: 'https://www.tomshardware.com', label: "Tom's Hardware" },
           ]},
-          { id: 'tech-mobile', name: 'Mobile', seeds: [
+          { id: 'tech-mobile', name: 'Mobile Dev', seeds: [
             { url: 'https://developer.android.com', label: 'Android Dev' },
             { url: 'https://developer.apple.com', label: 'Apple Dev' },
+          ]},
+          { id: 'tech-algorithms', name: 'Algorithms & DS', seeds: [
+            { url: 'https://leetcode.com', label: 'LeetCode' },
+            { url: 'https://codeforces.com', label: 'Codeforces' },
+            { url: 'https://www.geeksforgeeks.org', label: 'GeeksforGeeks' },
+          ]},
+          { id: 'tech-systems', name: 'Systems Programming', seeds: [
+            { url: 'https://www.rust-lang.org', label: 'Rust' },
+            { url: 'https://ziglang.org', label: 'Zig' },
+            { url: 'https://cppreference.com', label: 'cppreference' },
           ]},
         ],
       },
@@ -343,6 +881,11 @@ const CATEGORY_GROUPS = [
             { url: 'https://apache.org', label: 'Apache' },
             { url: 'https://www.linuxfoundation.org', label: 'Linux Foundation' },
           ]},
+          { id: 'opensource-linux', name: 'Linux & BSD', seeds: [
+            { url: 'https://www.kernel.org', label: 'kernel.org' },
+            { url: 'https://wiki.archlinux.org', label: 'Arch Wiki' },
+            { url: 'https://www.freebsd.org', label: 'FreeBSD' },
+          ]},
         ],
       },
       {
@@ -365,6 +908,14 @@ const CATEGORY_GROUPS = [
             { url: 'https://redis.io/docs/', label: 'Redis' },
             { url: 'https://www.postgresql.org/docs/', label: 'PostgreSQL' },
           ]},
+          { id: 'infra-cicd', name: 'CI/CD', seeds: [
+            { url: 'https://docs.github.com/en/actions', label: 'GitHub Actions' },
+            { url: 'https://www.jenkins.io', label: 'Jenkins' },
+          ]},
+          { id: 'infra-observability', name: 'Observability', seeds: [
+            { url: 'https://grafana.com', label: 'Grafana' },
+            { url: 'https://opentelemetry.io', label: 'OpenTelemetry' },
+          ]},
         ],
       },
       {
@@ -379,7 +930,7 @@ const CATEGORY_GROUPS = [
           { id: 'webdev-backend', name: 'Backend', seeds: [
             { url: 'https://go.dev', label: 'Go' },
             { url: 'https://docs.python.org/3/', label: 'Python' },
-            { url: 'https://www.rust-lang.org', label: 'Rust' },
+            { url: 'https://nodejs.org/en/docs', label: 'Node.js' },
           ]},
           { id: 'webdev-frameworks', name: 'Frameworks', seeds: [
             { url: 'https://reactjs.org', label: 'React' },
@@ -390,6 +941,551 @@ const CATEGORY_GROUPS = [
             { url: 'https://htmx.org', label: 'htmx' },
             { url: 'https://tailwindcss.com', label: 'Tailwind' },
             { url: 'https://nextjs.org', label: 'Next.js' },
+          ]},
+          { id: 'webdev-perf', name: 'Performance', seeds: [
+            { url: 'https://pagespeed.web.dev', label: 'PageSpeed Insights' },
+            { url: 'https://www.webpagetest.org', label: 'WebPageTest' },
+          ]},
+        ],
+      },
+      {
+        id: 'datascience', name: 'Data Science', icon: 'trendingUp',
+        desc: 'Data analysis, visualization, statistics, and big data',
+        subcategories: [
+          { id: 'datascience-analysis', name: 'Analysis & Viz', seeds: [
+            { url: 'https://www.kaggle.com', label: 'Kaggle' },
+            { url: 'https://www.datacamp.com', label: 'DataCamp' },
+          ]},
+          { id: 'datascience-stats', name: 'Statistics', seeds: [
+            { url: 'https://www.stat.berkeley.edu', label: 'Berkeley Stats' },
+            { url: 'https://seeing-theory.brown.edu', label: 'Seeing Theory' },
+          ]},
+          { id: 'datascience-bigdata', name: 'Big Data', seeds: [
+            { url: 'https://spark.apache.org', label: 'Apache Spark' },
+            { url: 'https://kafka.apache.org', label: 'Apache Kafka' },
+          ]},
+        ],
+      },
+      {
+        id: 'blockchain', name: 'Blockchain & Web3', icon: 'network',
+        desc: 'Blockchain tech, decentralized protocols, Web3, and crypto',
+        subcategories: [
+          { id: 'blockchain-protocols', name: 'Layer 1 Protocols', seeds: [
+            { url: 'https://ethereum.org', label: 'Ethereum' },
+            { url: 'https://bitcoin.org', label: 'Bitcoin.org' },
+            { url: 'https://solana.com', label: 'Solana' },
+            { url: 'https://cosmos.network', label: 'Cosmos' },
+          ]},
+          { id: 'blockchain-l2', name: 'Layer 2 & Scaling', seeds: [
+            { url: 'https://www.optimism.io', label: 'Optimism' },
+            { url: 'https://polygon.technology', label: 'Polygon' },
+            { url: 'https://www.starknet.io', label: 'StarkNet' },
+          ]},
+          { id: 'blockchain-defi', name: 'DeFi', seeds: [
+            { url: 'https://defillama.com', label: 'DefiLlama' },
+            { url: 'https://www.coindesk.com', label: 'CoinDesk' },
+            { url: 'https://dune.com', label: 'Dune Analytics' },
+          ]},
+          { id: 'blockchain-dev', name: 'Smart Contract Dev', seeds: [
+            { url: 'https://docs.soliditylang.org', label: 'Solidity' },
+            { url: 'https://hardhat.org', label: 'Hardhat' },
+            { url: 'https://book.getfoundry.sh', label: 'Foundry' },
+          ]},
+          { id: 'blockchain-nft', name: 'NFTs & Digital Art', seeds: [
+            { url: 'https://opensea.io', label: 'OpenSea' },
+            { url: 'https://foundation.app', label: 'Foundation' },
+          ]},
+          { id: 'blockchain-privacy', name: 'Privacy & ZK', seeds: [
+            { url: 'https://z.cash', label: 'Zcash' },
+            { url: 'https://zkp.science', label: 'ZK Proofs' },
+          ]},
+        ],
+      },
+      {
+        id: 'robotics', name: 'Robotics & IoT', icon: 'cpu',
+        desc: 'Robotics, embedded systems, IoT, drones, and hardware hacking',
+        subcategories: [
+          { id: 'robotics-general', name: 'Robotics', seeds: [
+            { url: 'https://www.ros.org', label: 'ROS' },
+            { url: 'https://spectrum.ieee.org/topic/robotics', label: 'IEEE Robotics' },
+            { url: 'https://www.therobotreport.com', label: 'The Robot Report' },
+          ]},
+          { id: 'robotics-iot', name: 'IoT', seeds: [
+            { url: 'https://www.home-assistant.io', label: 'Home Assistant' },
+            { url: 'https://mqtt.org', label: 'MQTT' },
+            { url: 'https://www.iotworldtoday.com', label: 'IoT World Today' },
+          ]},
+          { id: 'robotics-embedded', name: 'Embedded Systems', seeds: [
+            { url: 'https://www.arduino.cc', label: 'Arduino' },
+            { url: 'https://www.raspberrypi.org', label: 'Raspberry Pi' },
+            { url: 'https://www.espressif.com', label: 'Espressif' },
+          ]},
+          { id: 'robotics-drones', name: 'Drones & UAVs', seeds: [
+            { url: 'https://www.dronedj.com', label: 'DroneDJ' },
+            { url: 'https://ardupilot.org', label: 'ArduPilot' },
+          ]},
+          { id: 'robotics-autonomous', name: 'Autonomous Vehicles', seeds: [
+            { url: 'https://www.autoware.org', label: 'Autoware' },
+            { url: 'https://comma.ai', label: 'comma.ai' },
+          ]},
+        ],
+      },
+      {
+        id: 'quantum', name: 'Quantum Computing', icon: 'cpu',
+        desc: 'Quantum hardware, algorithms, simulators, and research',
+        subcategories: [
+          { id: 'quantum-research', name: 'Research & News', seeds: [
+            { url: 'https://quantumai.google', label: 'Google Quantum AI' },
+            { url: 'https://www.ibm.com/quantum', label: 'IBM Quantum' },
+            { url: 'https://quantum-journal.org', label: 'Quantum Journal' },
+          ]},
+          { id: 'quantum-learn', name: 'Learning', seeds: [
+            { url: 'https://qiskit.org/learn', label: 'Qiskit Learn' },
+            { url: 'https://pennylane.ai', label: 'PennyLane' },
+            { url: 'https://quantum.country', label: 'Quantum Country' },
+          ]},
+          { id: 'quantum-hardware', name: 'Hardware & Companies', seeds: [
+            { url: 'https://ionq.com', label: 'IonQ' },
+            { url: 'https://www.rigetti.com', label: 'Rigetti' },
+            { url: 'https://www.pasqal.com', label: 'Pasqal' },
+          ]},
+        ],
+      },
+      {
+        id: 'biotech', name: 'Biotech & Nanotech', icon: 'cpu',
+        desc: 'Biotechnology, CRISPR, synthetic biology, and nanotechnology',
+        subcategories: [
+          { id: 'biotech-gene', name: 'Gene Editing & CRISPR', seeds: [
+            { url: 'https://www.broadinstitute.org', label: 'Broad Institute' },
+            { url: 'https://www.genengnews.com', label: 'GEN' },
+          ]},
+          { id: 'biotech-synbio', name: 'Synthetic Biology', seeds: [
+            { url: 'https://www.synbiobeta.com', label: 'SynBioBeta' },
+            { url: 'https://igem.org', label: 'iGEM' },
+          ]},
+          { id: 'biotech-nano', name: 'Nanotechnology', seeds: [
+            { url: 'https://www.nano.gov', label: 'Nano.gov' },
+            { url: 'https://www.nanowerk.com', label: 'Nanowerk' },
+          ]},
+        ],
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════
+  // GROUP 5: Business & Finance
+  // ══════════════════════════════════════════════════════
+  {
+    id: 'business', name: 'Business & Finance', icon: 'trendingUp',
+    categories: [
+      {
+        id: 'finance', name: 'Finance & Investing', icon: 'trendingUp',
+        desc: 'Markets, personal finance, investing, and financial literacy',
+        subcategories: [
+          { id: 'finance-markets', name: 'Markets', seeds: [
+            { url: 'https://finance.yahoo.com', label: 'Yahoo Finance' },
+            { url: 'https://www.marketwatch.com', label: 'MarketWatch' },
+            { url: 'https://www.investing.com', label: 'Investing.com' },
+          ]},
+          { id: 'finance-personal', name: 'Personal Finance', seeds: [
+            { url: 'https://www.nerdwallet.com', label: 'NerdWallet' },
+            { url: 'https://www.investopedia.com', label: 'Investopedia' },
+          ]},
+          { id: 'finance-crypto', name: 'Crypto Markets', seeds: [
+            { url: 'https://www.coingecko.com', label: 'CoinGecko' },
+            { url: 'https://messari.io', label: 'Messari' },
+          ]},
+          { id: 'finance-realestate', name: 'Real Estate Investing', seeds: [
+            { url: 'https://www.biggerpockets.com', label: 'BiggerPockets' },
+            { url: 'https://www.reit.com', label: 'REIT.com' },
+          ]},
+        ],
+      },
+      {
+        id: 'startups', name: 'Startups & Entrepreneurship', icon: 'trendingUp',
+        desc: 'Startup culture, venture capital, and founder resources',
+        subcategories: [
+          { id: 'startups-news', name: 'Startup News', seeds: [
+            { url: 'https://techcrunch.com', label: 'TechCrunch' },
+            { url: 'https://news.ycombinator.com', label: 'Hacker News' },
+            { url: 'https://lobste.rs', label: 'Lobsters' },
+          ]},
+          { id: 'startups-vc', name: 'Venture Capital', seeds: [
+            { url: 'https://www.crunchbase.com', label: 'Crunchbase' },
+            { url: 'https://a16z.com', label: 'a16z' },
+          ]},
+          { id: 'startups-indie', name: 'Indie Hackers', seeds: [
+            { url: 'https://www.indiehackers.com', label: 'Indie Hackers' },
+            { url: 'https://microconf.com', label: 'MicroConf' },
+          ]},
+          { id: 'startups-tools', name: 'Business Tools', seeds: [
+            { url: 'https://www.producthunt.com', label: 'Product Hunt' },
+            { url: 'https://www.saastr.com', label: 'SaaStr' },
+          ]},
+        ],
+      },
+      {
+        id: 'economics', name: 'Economics', icon: 'trendingUp',
+        desc: 'Economic theory, policy, and global markets',
+        subcategories: [
+          { id: 'economics-macro', name: 'Macroeconomics', seeds: [
+            { url: 'https://www.imf.org', label: 'IMF' },
+            { url: 'https://www.worldbank.org', label: 'World Bank' },
+          ]},
+          { id: 'economics-research', name: 'Research', seeds: [
+            { url: 'https://www.nber.org', label: 'NBER' },
+            { url: 'https://freakonomics.com', label: 'Freakonomics' },
+          ]},
+          { id: 'economics-policy', name: 'Policy & Think Tanks', seeds: [
+            { url: 'https://www.brookings.edu', label: 'Brookings' },
+            { url: 'https://www.cato.org', label: 'Cato Institute' },
+          ]},
+        ],
+      },
+      {
+        id: 'careers', name: 'Careers & Professional', icon: 'trendingUp',
+        desc: 'Job hunting, career development, and professional growth',
+        subcategories: [
+          { id: 'careers-jobs', name: 'Job Boards', seeds: [
+            { url: 'https://www.linkedin.com', label: 'LinkedIn' },
+            { url: 'https://www.indeed.com', label: 'Indeed' },
+          ]},
+          { id: 'careers-remote', name: 'Remote Work', seeds: [
+            { url: 'https://weworkremotely.com', label: 'We Work Remotely' },
+            { url: 'https://remoteok.com', label: 'RemoteOK' },
+          ]},
+          { id: 'careers-freelance', name: 'Freelancing', seeds: [
+            { url: 'https://www.upwork.com', label: 'Upwork' },
+            { url: 'https://www.toptal.com', label: 'Toptal' },
+          ]},
+          { id: 'careers-skills', name: 'Skills & Certifications', seeds: [
+            { url: 'https://www.pluralsight.com', label: 'Pluralsight' },
+            { url: 'https://www.credential.net', label: 'Credential.net' },
+          ]},
+        ],
+      },
+      {
+        id: 'marketing', name: 'Marketing & Growth', icon: 'megaphone',
+        desc: 'Digital marketing, SEO, content strategy, and analytics',
+        subcategories: [
+          { id: 'marketing-seo', name: 'SEO', seeds: [
+            { url: 'https://moz.com', label: 'Moz' },
+            { url: 'https://ahrefs.com/blog', label: 'Ahrefs Blog' },
+          ]},
+          { id: 'marketing-content', name: 'Content Marketing', seeds: [
+            { url: 'https://contentmarketinginstitute.com', label: 'CMI' },
+            { url: 'https://copyblogger.com', label: 'Copyblogger' },
+          ]},
+          { id: 'marketing-social', name: 'Social Media', seeds: [
+            { url: 'https://buffer.com/resources', label: 'Buffer' },
+            { url: 'https://sproutsocial.com/insights', label: 'Sprout Social' },
+          ]},
+        ],
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════
+  // GROUP 6: Society & Environment
+  // ══════════════════════════════════════════════════════
+  {
+    id: 'society', name: 'Society & Environment', icon: 'globe',
+    categories: [
+      {
+        id: 'environment', name: 'Environment & Climate', icon: 'globe',
+        desc: 'Climate science, sustainability, and environmental policy',
+        subcategories: [
+          { id: 'environment-climate', name: 'Climate Science', seeds: [
+            { url: 'https://climate.nasa.gov', label: 'NASA Climate' },
+            { url: 'https://www.ipcc.ch', label: 'IPCC' },
+            { url: 'https://www.carbonbrief.org', label: 'Carbon Brief' },
+          ]},
+          { id: 'environment-energy', name: 'Renewable Energy', seeds: [
+            { url: 'https://www.irena.org', label: 'IRENA' },
+            { url: 'https://cleantechnica.com', label: 'CleanTechnica' },
+          ]},
+          { id: 'environment-conservation', name: 'Conservation', seeds: [
+            { url: 'https://www.iucn.org', label: 'IUCN' },
+            { url: 'https://www.conservation.org', label: 'Conservation International' },
+          ]},
+          { id: 'environment-zerowaste', name: 'Zero Waste', seeds: [
+            { url: 'https://zerowastehome.com', label: 'Zero Waste Home' },
+            { url: 'https://www.treehugger.com', label: 'Treehugger' },
+          ]},
+        ],
+      },
+      {
+        id: 'social', name: 'Social Issues & Activism', icon: 'megaphone',
+        desc: 'Social justice, activism, nonprofits, and civic engagement',
+        subcategories: [
+          { id: 'social-justice', name: 'Social Justice', seeds: [
+            { url: 'https://www.aclu.org', label: 'ACLU' },
+            { url: 'https://www.hrw.org', label: 'Human Rights Watch' },
+          ]},
+          { id: 'social-nonprofit', name: 'Nonprofits', seeds: [
+            { url: 'https://www.charitynavigator.org', label: 'Charity Navigator' },
+            { url: 'https://www.givewell.org', label: 'GiveWell' },
+          ]},
+          { id: 'social-civic', name: 'Civic Tech', seeds: [
+            { url: 'https://www.codeforamerica.org', label: 'Code for America' },
+            { url: 'https://www.mysociety.org', label: 'mySociety' },
+          ]},
+        ],
+      },
+      {
+        id: 'religion', name: 'Religion & Spirituality', icon: 'globe',
+        desc: 'World religions, theology, meditation, and spiritual traditions',
+        subcategories: [
+          { id: 'religion-world', name: 'World Religions', seeds: [
+            { url: 'https://www.bbc.co.uk/religion', label: 'BBC Religion' },
+            { url: 'https://www.patheos.com', label: 'Patheos' },
+          ]},
+          { id: 'religion-texts', name: 'Sacred Texts', seeds: [
+            { url: 'https://www.sacred-texts.com', label: 'Sacred Texts Archive' },
+            { url: 'https://www.biblegateway.com', label: 'Bible Gateway' },
+          ]},
+          { id: 'religion-mindfulness', name: 'Mindfulness & Meditation', seeds: [
+            { url: 'https://www.lionsroar.com', label: "Lion's Roar" },
+            { url: 'https://www.mindful.org', label: 'Mindful.org' },
+          ]},
+        ],
+      },
+      {
+        id: 'languages', name: 'Linguistics & World Languages', icon: 'globe',
+        desc: 'Linguistics, endangered languages, translation, and etymology',
+        subcategories: [
+          { id: 'languages-linguistics', name: 'Linguistics', seeds: [
+            { url: 'https://www.linguisticsociety.org', label: 'LSA' },
+            { url: 'https://www.ethnologue.com', label: 'Ethnologue' },
+          ]},
+          { id: 'languages-etymology', name: 'Etymology', seeds: [
+            { url: 'https://www.etymonline.com', label: 'Etymonline' },
+            { url: 'https://en.wiktionary.org', label: 'Wiktionary' },
+          ]},
+          { id: 'languages-translation', name: 'Translation', seeds: [
+            { url: 'https://www.proz.com', label: 'ProZ' },
+            { url: 'https://www.deepl.com', label: 'DeepL' },
+          ]},
+        ],
+      },
+      {
+        id: 'psychology', name: 'Psychology & Behavior', icon: 'cpu',
+        desc: 'Behavioral science, cognitive psychology, and decision-making',
+        subcategories: [
+          { id: 'psychology-cognitive', name: 'Cognitive Science', seeds: [
+            { url: 'https://www.apa.org', label: 'APA' },
+            { url: 'https://www.cognitiontoday.com', label: 'Cognition Today' },
+          ]},
+          { id: 'psychology-behavioral', name: 'Behavioral Science', seeds: [
+            { url: 'https://behavioralscientist.org', label: 'Behavioral Scientist' },
+            { url: 'https://www.lesswrong.com', label: 'LessWrong' },
+          ]},
+          { id: 'psychology-relationships', name: 'Relationships', seeds: [
+            { url: 'https://www.gottman.com', label: 'Gottman Institute' },
+            { url: 'https://www.verywellmind.com', label: 'Verywell Mind' },
+          ]},
+        ],
+      },
+      {
+        id: 'mystery', name: 'Mystery & Paranormal', icon: 'globe',
+        desc: 'Mysteries, UFOs, cryptozoology, conspiracy analysis, and the unexplained',
+        subcategories: [
+          { id: 'mystery-ufo', name: 'UFOs & Aliens', seeds: [
+            { url: 'https://www.theblackvault.com', label: 'The Black Vault' },
+            { url: 'https://nuforc.org', label: 'NUFORC' },
+            { url: 'https://www.uapinfo.org', label: 'UAP Info' },
+            { url: 'https://www.mufon.com', label: 'MUFON' },
+          ]},
+          { id: 'mystery-paranormal', name: 'Paranormal', seeds: [
+            { url: 'https://www.coasttocoastam.com', label: 'Coast to Coast AM' },
+            { url: 'https://mysteriousuniverse.org', label: 'Mysterious Universe' },
+          ]},
+          { id: 'mystery-crypto', name: 'Cryptozoology', seeds: [
+            { url: 'https://www.cryptozoologynews.com', label: 'Cryptozoology News' },
+            { url: 'https://cryptomundo.com', label: 'Cryptomundo' },
+          ]},
+          { id: 'mystery-unsolved', name: 'Unsolved Mysteries', seeds: [
+            { url: 'https://unsolvedmysteries.fandom.com', label: 'Unsolved Mysteries Wiki' },
+            { url: 'https://www.theunresolvedpodcast.com', label: 'The Unresolved' },
+          ]},
+          { id: 'mystery-conspiracy', name: 'Conspiracy Analysis', seeds: [
+            { url: 'https://www.snopes.com', label: 'Snopes' },
+            { url: 'https://rationalwiki.org', label: 'RationalWiki' },
+          ]},
+          { id: 'mystery-myths', name: 'Myths & Folklore', seeds: [
+            { url: 'https://www.mythologysource.com', label: 'Mythology Source' },
+            { url: 'https://www.theoi.com', label: 'Theoi (Greek Mythology)' },
+            { url: 'https://norse-mythology.org', label: 'Norse Mythology' },
+          ]},
+          { id: 'mystery-fortean', name: 'Fortean & Weird', seeds: [
+            { url: 'https://fortean-times.com', label: 'Fortean Times' },
+            { url: 'https://www.atlasobscura.com', label: 'Atlas Obscura' },
+            { url: 'https://www.theanomalien.com', label: 'The Anomalien' },
+          ]},
+        ],
+      },
+      {
+        id: 'privacy-search', name: 'Privacy & Search Engines', icon: 'globe',
+        desc: 'Alternative search engines, privacy tools, digital rights, and surveillance',
+        subcategories: [
+          { id: 'privacy-search-alt', name: 'Alt Search Engines', seeds: [
+            { url: 'https://searx.space', label: 'SearXNG Instances' },
+            { url: 'https://www.mojeek.com', label: 'Mojeek' },
+            { url: 'https://yacy.net', label: 'YaCy' },
+            { url: 'https://search.brave.com', label: 'Brave Search' },
+            { url: 'https://www.qwant.com', label: 'Qwant' },
+          ]},
+          { id: 'privacy-digital', name: 'Digital Privacy', seeds: [
+            { url: 'https://www.privacyguides.org', label: 'Privacy Guides' },
+            { url: 'https://www.eff.org', label: 'EFF' },
+            { url: 'https://ssd.eff.org', label: 'Surveillance Self-Defense' },
+          ]},
+          { id: 'privacy-tools', name: 'Privacy Software', seeds: [
+            { url: 'https://www.torproject.org', label: 'Tor Project' },
+            { url: 'https://signal.org', label: 'Signal' },
+            { url: 'https://tails.net', label: 'Tails OS' },
+            { url: 'https://www.qubes-os.org', label: 'Qubes OS' },
+          ]},
+          { id: 'privacy-surveillance', name: 'Surveillance & Rights', seeds: [
+            { url: 'https://www.accessnow.org', label: 'Access Now' },
+            { url: 'https://privacyinternational.org', label: 'Privacy International' },
+          ]},
+          { id: 'privacy-decentralized', name: 'Decentralized Web', seeds: [
+            { url: 'https://ipfs.tech', label: 'IPFS' },
+            { url: 'https://dat-ecosystem.org', label: 'Dat Ecosystem' },
+            { url: 'https://scuttlebutt.nz', label: 'Scuttlebutt' },
+          ]},
+        ],
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════
+  // GROUP 7: DIY & Maker
+  // ══════════════════════════════════════════════════════
+  {
+    id: 'maker', name: 'DIY & Maker', icon: 'cpu',
+    categories: [
+      {
+        id: 'diy', name: 'DIY & Crafts', icon: 'cpu',
+        desc: 'Maker projects, crafting, 3D printing, and hands-on builds',
+        subcategories: [
+          { id: 'diy-projects', name: 'Projects', seeds: [
+            { url: 'https://www.instructables.com', label: 'Instructables' },
+            { url: 'https://hackaday.com', label: 'Hackaday' },
+          ]},
+          { id: 'diy-3dprint', name: '3D Printing', seeds: [
+            { url: 'https://www.thingiverse.com', label: 'Thingiverse' },
+            { url: 'https://www.prusa3d.com', label: 'Prusa' },
+            { url: 'https://all3dp.com', label: 'All3DP' },
+          ]},
+          { id: 'diy-woodworking', name: 'Woodworking', seeds: [
+            { url: 'https://www.woodmagazine.com', label: 'Wood Magazine' },
+            { url: 'https://www.popularwoodworking.com', label: 'Popular Woodworking' },
+          ]},
+          { id: 'diy-sewing', name: 'Sewing & Textiles', seeds: [
+            { url: 'https://www.ravelry.com', label: 'Ravelry' },
+            { url: 'https://www.sewmagazine.co.uk', label: 'Sew Magazine' },
+          ]},
+          { id: 'diy-electronics', name: 'Electronics', seeds: [
+            { url: 'https://www.adafruit.com', label: 'Adafruit' },
+            { url: 'https://www.sparkfun.com', label: 'SparkFun' },
+          ]},
+          { id: 'diy-howto', name: 'How-To Guides', seeds: [
+            { url: 'https://www.wikihow.com', label: 'wikiHow' },
+            { url: 'https://www.ifixit.com', label: 'iFixit' },
+            { url: 'https://makezine.com', label: 'Make Magazine' },
+            { url: 'https://www.popularmechanics.com', label: 'Popular Mechanics' },
+          ]},
+          { id: 'diy-leatherwork', name: 'Leatherwork & Metalwork', seeds: [
+            { url: 'https://www.leathercraftlibrary.com', label: 'Leathercraft Library' },
+            { url: 'https://www.iforgeiron.com', label: 'IForgeIron' },
+          ]},
+          { id: 'diy-pottery', name: 'Pottery & Ceramics', seeds: [
+            { url: 'https://www.ceramicartsnetwork.org', label: 'Ceramic Arts Network' },
+            { url: 'https://thepotterywheel.com', label: 'The Pottery Wheel' },
+          ]},
+        ],
+      },
+      {
+        id: 'auto', name: 'Automotive & Motorsport', icon: 'trendingUp',
+        desc: 'Cars, motorcycles, restoration, and motorsport',
+        subcategories: [
+          { id: 'auto-news', name: 'Automotive News', seeds: [
+            { url: 'https://www.caranddriver.com', label: 'Car and Driver' },
+            { url: 'https://www.motortrend.com', label: 'MotorTrend' },
+          ]},
+          { id: 'auto-ev', name: 'Electric Vehicles', seeds: [
+            { url: 'https://electrek.co', label: 'Electrek' },
+            { url: 'https://insideevs.com', label: 'InsideEVs' },
+          ]},
+          { id: 'auto-motorsport', name: 'Motorsport', seeds: [
+            { url: 'https://www.formula1.com', label: 'Formula 1' },
+            { url: 'https://www.autosport.com', label: 'Autosport' },
+          ]},
+          { id: 'auto-restoration', name: 'Restoration & Mods', seeds: [
+            { url: 'https://www.hagerty.com', label: 'Hagerty' },
+            { url: 'https://bringatrailer.com', label: 'Bring a Trailer' },
+          ]},
+          { id: 'auto-motorcycle', name: 'Motorcycles', seeds: [
+            { url: 'https://www.revzilla.com', label: 'RevZilla' },
+            { url: 'https://www.cycleworld.com', label: 'Cycle World' },
+          ]},
+        ],
+      },
+      {
+        id: 'photo-video', name: 'Photography & Video', icon: 'image',
+        desc: 'Camera gear, editing tutorials, and videography',
+        subcategories: [
+          { id: 'photo-gear', name: 'Gear & Reviews', seeds: [
+            { url: 'https://www.dpreview.com', label: 'DPReview' },
+            { url: 'https://www.imaging-resource.com', label: 'Imaging Resource' },
+          ]},
+          { id: 'photo-editing', name: 'Editing & Post', seeds: [
+            { url: 'https://fstoppers.com', label: 'Fstoppers' },
+            { url: 'https://phlearn.com', label: 'PHLEARN' },
+          ]},
+          { id: 'photo-videography', name: 'Videography', seeds: [
+            { url: 'https://www.premiumbeat.com/blog', label: 'PremiumBeat Blog' },
+            { url: 'https://www.cinema5d.com', label: 'cinema5D' },
+          ]},
+        ],
+      },
+      {
+        id: 'homelab', name: 'Homelab & Self-Hosting', icon: 'database',
+        desc: 'Home servers, self-hosted services, NAS builds, and privacy tools',
+        subcategories: [
+          { id: 'homelab-selfhost', name: 'Self-Hosting', seeds: [
+            { url: 'https://www.reddit.com/r/selfhosted', label: 'r/selfhosted' },
+            { url: 'https://awesome-selfhosted.net', label: 'Awesome Self-Hosted' },
+            { url: 'https://noted.lol', label: 'Noted' },
+          ]},
+          { id: 'homelab-servers', name: 'Home Servers & NAS', seeds: [
+            { url: 'https://www.servethehome.com', label: 'ServeTheHome' },
+            { url: 'https://www.truenas.com', label: 'TrueNAS' },
+            { url: 'https://unraid.net', label: 'Unraid' },
+            { url: 'https://www.reddit.com/r/homelab', label: 'r/homelab' },
+          ]},
+          { id: 'homelab-privacy', name: 'Privacy Tools', seeds: [
+            { url: 'https://www.privacyguides.org', label: 'Privacy Guides' },
+            { url: 'https://www.eff.org/pages/tools', label: 'EFF Tools' },
+            { url: 'https://prism-break.org', label: 'PRISM Break' },
+          ]},
+          { id: 'homelab-networking', name: 'Home Networking', seeds: [
+            { url: 'https://openwrt.org', label: 'OpenWrt' },
+            { url: 'https://www.pfsense.org', label: 'pfSense' },
+            { url: 'https://pi-hole.net', label: 'Pi-hole' },
+          ]},
+          { id: 'homelab-containers', name: 'Home Containers', seeds: [
+            { url: 'https://www.portainer.io', label: 'Portainer' },
+            { url: 'https://www.proxmox.com', label: 'Proxmox' },
+            { url: 'https://tailscale.com', label: 'Tailscale' },
+          ]},
+          { id: 'homelab-communities', name: 'Communities & Forums', seeds: [
+            { url: 'https://news.ycombinator.com', label: 'Hacker News' },
+            { url: 'https://lobste.rs', label: 'Lobsters' },
+            { url: 'https://tildes.net', label: 'Tildes' },
+            { url: 'https://www.reddit.com/r/homeserver', label: 'r/homeserver' },
           ]},
         ],
       },
@@ -972,6 +2068,11 @@ async function renderLaunch(el) {
           <div class="wizard-counter-label">In Queue</div>
         </div>
       </div>
+      <p class="wizard-launch-note" id="wizard-launch-note" style="display:none">
+        This is just a starting point. Seeds are living things — some will grow and flourish,
+        others will go stale or disappear. You can always add new seeds, remove old ones, and
+        reshape your index from the Admin Dashboard. Your node evolves with the web.
+      </p>
       <div class="wizard-launch-actions" id="wizard-launch-actions" style="display:none">
         <button class="btn btn-primary" id="wizard-go-search">Go to Search</button>
         <a href="#/admin" class="wizard-admin-link">View Admin Dashboard</a>
@@ -1012,6 +2113,8 @@ async function renderLaunch(el) {
         ready = true;
         if (statusEl) statusEl.textContent = 'Your node is ready!';
         if (actionsEl) actionsEl.style.display = 'flex';
+        const noteEl = document.getElementById('wizard-launch-note');
+        if (noteEl) noteEl.style.display = 'block';
       }
     } catch { /* ignore polling errors */ }
   }, 2000);
