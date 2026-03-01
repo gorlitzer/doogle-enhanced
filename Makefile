@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev docker clean nuke
+.PHONY: help setup build run test dev stop clean nuke
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -11,17 +11,14 @@ help:
 	@echo "  Doogle — P2P Decentralized Search Engine"
 	@echo ""
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
+	@echo "    make build              Compile binary to bin/"
 	@echo "    make run                Build + launch node (API on :8080)"
 	@echo "    make run ARGS='...'     Pass extra flags to the binary"
+	@echo "    make dev                Docker detached + hot-reload UI on :3000"
+	@echo "    make stop               Stop docker containers"
 	@echo "    make test               Run all tests"
-	@echo "    make dev                Docker backend + hot-reload UI on :3000"
-	@echo "    make docker             Build + start 3-node cluster"
-	@echo "    make build              Compile binary to bin/ without running"
 	@echo "    make clean              Remove binary and node data"
 	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
-	@echo ""
-	@echo "  dev/docker run detached — close terminal safely. Manage with:"
-	@echo "  docker compose ps | logs -f | down"
 	@echo ""
 
 setup:
@@ -51,14 +48,14 @@ setup:
 	@if command -v docker >/dev/null 2>&1; then \
 		echo "[ok] docker: $$(docker --version | head -1)"; \
 	else \
-		echo "[--] docker not found (optional — only needed for make docker/dev)"; \
+		echo "[--] docker not found (optional — only needed for make dev)"; \
 		echo "     Install from https://docs.docker.com/get-docker/"; \
 	fi
 	@# ---- Docker Compose ----
 	@if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
 		echo "[ok] docker compose: $$(docker compose version --short 2>/dev/null)"; \
 	elif command -v docker >/dev/null 2>&1; then \
-		echo "[--] docker compose not found (optional — needed for make docker/dev)"; \
+		echo "[--] docker compose not found (optional — needed for make dev)"; \
 	fi
 	@# ---- curl ----
 	@if command -v curl >/dev/null 2>&1; then \
@@ -85,13 +82,14 @@ test:
 	$(GO) test ./...
 
 dev:
-	docker compose up --build -d node1
-	@sleep 2
-	@echo "Backend on :8080 — hot-reload UI on :3000"
-	node dev-server.mjs --api http://localhost:8080
-
-docker:
 	docker compose up --build -d
+	@sleep 2
+	@echo "Running detached on :8080 — stop with: make stop"
+
+stop:
+	@-pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null
+	@-docker compose down 2>/dev/null
+	@echo "Stopped."
 
 clean:
 	@-docker compose down -v 2>/dev/null
