@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev docker clean reset
+.PHONY: help setup build run test dev docker clean
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -17,7 +17,7 @@ help:
 	@echo "    make dev                Docker backend + hot-reload UI on :3000"
 	@echo "    make docker             Build + start 3-node cluster"
 	@echo "    make build              Compile binary to bin/ without running"
-	@echo "    make clean              Remove build artifacts"
+	@echo "    make clean              Remove build artifacts + all node data"
 	@echo ""
 
 setup:
