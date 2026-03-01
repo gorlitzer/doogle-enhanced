@@ -181,7 +181,7 @@ async function pollFeed() {
       if (ev.seq > feedLastSeq) feedLastSeq = ev.seq;
 
       const row = document.createElement('div');
-      row.className = 'crawl-event';
+      row.className = 'crawl-event' + (ev.status === 'failed' ? ' ev-fail' : '');
       const dotCls = ev.status === 'ok' ? 'dot-ok' : 'dot-fail';
       const title = ev.title ? escapeHtml(ev.title).slice(0, 40) : '';
       const size = ev.content_size ? formatBytes(ev.content_size) : '';
