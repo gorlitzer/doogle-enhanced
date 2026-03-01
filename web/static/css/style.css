@@ -2300,3 +2300,98 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   .wizard-id-row { flex-direction: column; gap: 4px; }
   .wizard-id-label { min-width: auto; }
 }
+
+/* ---- About: Vision Grid ---- */
+.about-vision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.about-vision-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.about-vision-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 20px rgba(0,212,255,0.1);
+  border-color: var(--border-light);
+}
+.about-vision-icon { margin-bottom: 10px; }
+.about-vision-card h3 {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.about-vision-card p {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ---- About: Roadmap Timeline ---- */
+.about-roadmap-timeline {
+  position: relative;
+  padding-left: 24px;
+  border-left: 2px solid var(--border);
+  margin: 16px 0;
+}
+.about-roadmap-phase {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.about-roadmap-phase::before {
+  content: '';
+  position: absolute;
+  left: -33px;
+  top: 24px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--border);
+  border: 2px solid var(--bg-primary);
+}
+.about-roadmap-done {
+  border-left: 3px solid var(--green);
+}
+.about-roadmap-done::before {
+  background: var(--green);
+}
+.about-roadmap-next {
+  border-left: 3px solid var(--blue);
+}
+.about-roadmap-next::before {
+  background: var(--blue);
+}
+.about-roadmap-dark {
+  border-left: 3px solid var(--purple);
+}
+.about-roadmap-dark::before {
+  background: var(--purple);
+}
+.about-roadmap-phase h3 {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.about-roadmap-phase ul {
+  margin: 8px 0 0 16px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+@media (max-width: 768px) {
+  .about-vision-grid { grid-template-columns: 1fr; }
+  .about-roadmap-timeline { padding-left: 16px; }
+}

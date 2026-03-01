@@ -402,7 +402,7 @@ make build
     color: 'var(--amber)',
     date: '2026-03-01',
     tags: ['roadmap', 'wip'],
-    summary: 'Doogle is a work in progress. Here\'s what works today, what\'s being improved, and where we\'re headed.',
+    summary: 'A five-phase plan to index every corner of the web — from foundation to dark web to intelligence.',
     content: () => `
       <h3>What Works Today</h3>
       <div class="learn-status-grid">
@@ -502,32 +502,119 @@ make build
         </div>
       </div>
 
-      <h3>What's Planned</h3>
+      <h3>Phase 2 — Quality & Scale</h3>
       <div class="learn-status-grid">
         <div class="learn-status-card learn-status-planned">
-          <span class="badge badge-blue">planned</span>
+          <span class="badge badge-blue">phase 2</span>
+          <strong>Horizontal Index Sharding</strong>
+          <p>Bleve split by shard, distributed via <code>/doogle/index/1.0.0</code>. Hash ring rebalancing on peer join/leave.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 2</span>
+          <strong>Multi-Language Search</strong>
+          <p>15+ language stemmers in Bleve with language-aware analyzers for global coverage.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 2</span>
           <strong>PDF & Document Indexing</strong>
-          <p>Parse and index PDF, DOCX, and other document formats.</p>
+          <p>Parse and index PDF, DOCX, EPUB via tika/pdftotext. Structured data extraction (Schema.org, JSON-LD).</p>
         </div>
         <div class="learn-status-card learn-status-planned">
-          <span class="badge badge-blue">planned</span>
+          <span class="badge badge-blue">phase 2</span>
+          <strong>Boolean Operators & Caching</strong>
+          <p>AND, OR, NOT with grouping. LRU search result cache with TTL invalidation.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 2</span>
+          <strong>Peer Reputation & Content Verification</strong>
+          <p>Trust scoring based on response quality and uptime. Ed25519-signed documents for tamper detection.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 2</span>
           <strong>Image Search</strong>
-          <p>Index images by alt text, surrounding context, and visual features.</p>
+          <p>Index images by alt text, caption, and surrounding context.</p>
+        </div>
+      </div>
+
+      <h3>Phase 3 — Dark Web & Privacy</h3>
+      <div class="learn-status-grid">
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-purple">phase 3</span>
+          <strong>Tor Integration & .onion Crawling</strong>
+          <p>Bundled/sidecar Tor daemon with automatic SOCKS5 routing. Frontier accepts .onion URLs with per-hidden-service rate limiting.</p>
         </div>
         <div class="learn-status-card learn-status-planned">
-          <span class="badge badge-blue">planned</span>
-          <strong>Search Suggestions</strong>
-          <p>Autocomplete and "did you mean" suggestions based on indexed content.</p>
+          <span class="badge badge-purple">phase 3</span>
+          <strong>I2P Eepsite Support</strong>
+          <p>SAM bridge integration for crawling .i2p eepsites. Full I2P network participation.</p>
         </div>
         <div class="learn-status-card learn-status-planned">
-          <span class="badge badge-blue">planned</span>
-          <strong>Personalized Ranking</strong>
-          <p>Local-only preference learning — your node adapts to your interests without sharing data.</p>
+          <span class="badge badge-purple">phase 3</span>
+          <strong>Privacy-Preserving P2P</strong>
+          <p>Optional libp2p-over-Tor transport so peers never expose IPs. End-to-end encrypted queries — relays can't read them.</p>
         </div>
         <div class="learn-status-card learn-status-planned">
-          <span class="badge badge-blue">planned</span>
-          <strong>Light Nodes</strong>
-          <p>Lightweight mode (~50-100 MB RAM) for edge devices. No local index — relay queries to full nodes, cache results, optionally contribute 1 crawl worker. More nodes = stronger mesh.</p>
+          <span class="badge badge-purple">phase 3</span>
+          <strong>.onion Seed Directories</strong>
+          <p>ahmia.fi, Haystak, Torch as built-in wizard seed categories for dark web bootstrapping.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-purple">phase 3</span>
+          <strong>Content Safety Layer</strong>
+          <p>CSAM hash matching, configurable blocklists, enabled by default. Network source tagging (clearnet/tor/i2p) filterable in search UI.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-purple">phase 3</span>
+          <strong>Tor Circuit Management</strong>
+          <p>Connection pooling, circuit rotation, and bandwidth-aware scheduling for efficient .onion crawling.</p>
+        </div>
+      </div>
+
+      <h3>Phase 4 — Intelligence</h3>
+      <div class="learn-status-grid">
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 4</span>
+          <strong>Semantic Search</strong>
+          <p>Sentence embeddings via ONNX with hybrid BM25 + vector scoring. Multilingual cross-language retrieval.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 4</span>
+          <strong>Knowledge Graph</strong>
+          <p>NER to entity graph in BadgerDB. Entity cards in search results with related topics.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 4</span>
+          <strong>ML-Based Ranking</strong>
+          <p>Learn-to-rank from local-only click signals (XGBoost/ONNX). Query intent classification.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 4</span>
+          <strong>Summarization & Clustering</strong>
+          <p>Extractive summaries or local LLM via llama.cpp. Topic clustering and trend detection across the network.</p>
+        </div>
+      </div>
+
+      <h3>Phase 5 — Ecosystem</h3>
+      <div class="learn-status-grid">
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 5</span>
+          <strong>CLI & Browser Extension</strong>
+          <p><code>doogle search "query"</code> with pipe-friendly JSON output. Browser address bar search with optional P2P query obfuscation.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 5</span>
+          <strong>Light Nodes & Mobile</strong>
+          <p>~50 MB RAM relay-only mode. Mobile client connects to remote Doogle nodes. More nodes = stronger mesh.</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 5</span>
+          <strong>Plugin System & Releases</strong>
+          <p>Pluggable analyzers, scorers, content extractors. goreleaser builds for Linux, macOS, Windows (amd64 + arm64).</p>
+        </div>
+        <div class="learn-status-card learn-status-planned">
+          <span class="badge badge-blue">phase 5</span>
+          <strong>Governance & Incentives</strong>
+          <p>Community proposals, node operator voting. Reputation + credit for uptime/crawl contribution (not a blockchain). Public bootstrap network.</p>
         </div>
       </div>
 
@@ -537,6 +624,8 @@ make build
         <li><strong>Add seeds</strong> — submit quality URLs to grow the index</li>
         <li><strong>Report bugs</strong> — found something broken? Open an issue when the repo goes public (coming soon)</li>
         <li><strong>Contribute code</strong> — the project is open source, PRs welcome</li>
+        <li><strong>Run a Tor relay</strong> — help the network reach .onion services when Phase 3 lands</li>
+        <li><strong>Curate dark web seeds</strong> — know good .onion directories or I2P eepsites? We'll need seed lists</li>
       </ul>
     `,
   },

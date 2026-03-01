@@ -202,11 +202,13 @@ function renderQuickstart(el) {
     if (method === 'docker') {
       methodContent.innerHTML = `
         <div class="docs-steps">
-          ${stepCard(1, 'Build and start a 3-node cluster', codeBlock(`# From your local source:
-cd doogle-v2
-make docker-up`, 'bash'))}
-          ${stepCard(2, 'Open the UI', `
-            <div class="docs-port-grid">
+          ${stepCard(1, 'Start a single node', codeBlock(`docker compose up -d node1`, 'bash'))}
+          ${stepCard(2, 'Open the dashboard', `
+            <p>Open <a href="http://localhost:8080" target="_blank">http://localhost:8080</a> — the setup wizard will guide you through picking seeds and launching the crawler.</p>
+          `)}
+          ${stepCard(3, 'Optional: full 3-node cluster', `
+            ${codeBlock('docker compose up -d', 'bash')}
+            <div class="docs-port-grid" style="margin-top:12px">
               <div class="docs-port-card">
                 <span class="docs-port-label">Node 1</span>
                 <code>http://localhost:8080</code>
@@ -220,8 +222,8 @@ make docker-up`, 'bash'))}
                 <code>http://localhost:8082</code>
               </div>
             </div>
+            <p style="margin-top:8px;font-size:0.85em;color:var(--text-muted)">Three nodes auto-connected via mDNS.</p>
           `)}
-          ${stepCard(3, 'View logs', codeBlock('make docker-logs', 'bash'))}
         </div>
       `;
     } else {
