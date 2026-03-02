@@ -81,6 +81,16 @@ func RateLimiter(rps float64, burst int) func(http.Handler) http.Handler {
 	}
 }
 
+// isLoopback returns true if the request originates from a loopback address.
+func isLoopback(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // BearerAuth returns middleware that checks for a valid Bearer token.
 // Also accepts ?_token=... query param for iframe embedding.
 func BearerAuth(token string) func(http.Handler) http.Handler {

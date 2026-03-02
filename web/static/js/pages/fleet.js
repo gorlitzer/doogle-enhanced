@@ -1,104 +1,47 @@
 // Doogle v2 — Fleet Management Dashboard
 import { escapeHtml, cardSkeleton, timeAgo } from '../components.js';
+import { api } from '../api.js';
 
-const TOKEN_KEY = 'doogle_fleet_token';
-
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || '';
-}
-
-function setToken(t) {
-  localStorage.setItem(TOKEN_KEY, t);
-}
-
-function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
+let fleetToken = '';
 
 async function fleetFetch(path) {
-  const token = getToken();
+  if (!fleetToken) {
+    const s = await api.status();
+    fleetToken = s.fleet_api_token || '';
+  }
+  if (!fleetToken) throw new Error('no token');
   const resp = await fetch(path, {
-    headers: { 'Authorization': `Bearer ${token}` },
+    headers: { 'Authorization': `Bearer ${fleetToken}` },
   });
-  if (resp.status === 401) throw new Error('unauthorized');
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
 }
 
 async function fleetProxy(peerID, targetPath) {
-  const token = getToken();
+  if (!fleetToken) {
+    const s = await api.status();
+    fleetToken = s.fleet_api_token || '';
+  }
   const resp = await fetch(`/api/fleet/nodes/${peerID}/proxy${targetPath}`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+    headers: { 'Authorization': `Bearer ${fleetToken}` },
   });
-  if (resp.status === 401) throw new Error('unauthorized');
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
 }
 
 export function renderFleet(container) {
-  const token = getToken();
-
-  if (!token) {
-    renderAuthGate(container);
-    return;
-  }
+  fleetToken = '';
 
   container.innerHTML = `
     <div class="page-header">
       <h2>Fleet Management</h2>
-      <p>Monitor and manage worker nodes from this coordinator</p>
+      <p>Monitor and manage worker nodes</p>
     </div>
     <div id="fleet-content">${cardSkeleton(4)}</div>
-    <div style="margin-top:24px">
-      <button class="btn" id="fleet-clear-token" style="font-size:0.85em;opacity:0.7">Clear stored token</button>
-    </div>
   `;
-
-  document.getElementById('fleet-clear-token')?.addEventListener('click', () => {
-    clearToken();
-    renderFleet(container);
-  });
 
   loadFleetData(container);
   window._pageInterval = setInterval(() => loadFleetData(container), 8000);
-}
-
-function renderAuthGate(container) {
-  container.innerHTML = `
-    <div class="page-header">
-      <h2>Fleet Management</h2>
-      <p>Enter the fleet API token to access fleet management</p>
-    </div>
-    <div class="section" style="max-width:480px">
-      <div class="form-row" style="flex-direction:column;gap:12px;align-items:stretch">
-        <input type="password" id="fleet-token-input" placeholder="Fleet API token"
-          style="padding:10px 12px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:0.95em;font-family:monospace">
-        <button class="btn btn-primary" id="fleet-token-submit" style="align-self:flex-start">Connect</button>
-        <div id="fleet-token-error" style="color:var(--red);font-size:0.9em;display:none"></div>
-      </div>
-    </div>
-  `;
-
-  const input = document.getElementById('fleet-token-input');
-  const btn = document.getElementById('fleet-token-submit');
-  const errEl = document.getElementById('fleet-token-error');
-
-  async function tryConnect() {
-    const token = input.value.trim();
-    if (!token) return;
-    setToken(token);
-    try {
-      await fleetFetch('/api/fleet/nodes');
-      renderFleet(container);
-    } catch {
-      clearToken();
-      errEl.textContent = 'Invalid token or fleet not available';
-      errEl.style.display = 'block';
-    }
-  }
-
-  btn.addEventListener('click', tryConnect);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') tryConnect(); });
 }
 
 async function loadFleetData(container) {
@@ -137,7 +80,7 @@ async function loadFleetData(container) {
       <div class="section">
         <h3>Worker Nodes</h3>
         ${nodes.length === 0
-          ? '<div class="empty-state"><p>No workers registered yet. Start a worker with <code>--fleet-role worker</code>.</p></div>'
+          ? '<div class="empty-state"><p>No workers connected yet. Add one from <a href="#/admin/actions">Actions</a>.</p></div>'
           : `<div class="table-wrap"><table>
               <thead><tr>
                 <th>Name</th>
@@ -180,12 +123,10 @@ async function loadFleetData(container) {
       });
     });
   } catch (err) {
-    if (err.message === 'unauthorized') {
-      clearToken();
-      renderFleet(container);
-      return;
-    }
-    content.innerHTML = `<div class="empty-state"><p>Fleet not available. This node may not be running as a coordinator.</p></div>`;
+    const msg = err.message === 'no token'
+      ? 'Fleet token not available. Access this page from <code>localhost</code> or enter the token from your terminal logs in <a href="#/admin/actions">Actions &gt; Fleet</a>.'
+      : 'Fleet not available. Start with <code>--fleet-role coordinator</code> or remove <code>--fleet-role standalone</code>.';
+    content.innerHTML = `<div class="empty-state"><p>${msg}</p></div>`;
   }
 }
 

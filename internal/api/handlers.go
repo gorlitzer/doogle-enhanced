@@ -82,9 +82,15 @@ func SearchHandler(deps *Deps) http.HandlerFunc {
 }
 
 // StatusHandler handles GET /api/status
+// Fleet-sensitive fields (API token, secret file) are only included for
+// requests originating from localhost to prevent token leakage over the network.
 func StatusHandler(deps *Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := deps.StatusFn()
+		if !isLoopback(r) {
+			status.FleetAPIToken = ""
+			status.FleetSecretFile = ""
+		}
 		writeJSON(w, http.StatusOK, status)
 	}
 }
@@ -400,9 +406,19 @@ func DumpHandler(deps *Deps) http.HandlerFunc {
 		tarWriter := tar.NewWriter(gzWriter)
 		defer tarWriter.Close()
 
+		// Sensitive files to exclude from backups.
+		skipFiles := map[string]bool{
+			"fleet.secret": true,
+		}
+
 		filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {
 			if err != nil {
 				return err
+			}
+
+			// Skip sensitive files.
+			if !fi.IsDir() && skipFiles[fi.Name()] {
+				return nil
 			}
 
 			relPath, err := filepath.Rel(filepath.Dir(absDir), path)

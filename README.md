@@ -212,13 +212,14 @@ Every Doogle node is **fleet-ready by default** — it runs as a coordinator out
 ### Adding Workers
 
 ```bash
-# 1. Start your node (fleet secret and API token are in the logs + Admin > Fleet)
+# 1. Start your node (fleet secret is in the logs + data/fleet.secret)
 make run
 
 # 2. On another machine, start a worker (use the secret from step 1)
 make fleet-worker COORD=/ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> SECRET=<hex>
 
-# 3. Open your node's UI → Admin → Fleet → enter API token to see workers
+# 3. Open your node's UI → Admin → Actions → Fleet section for credentials
+#    Or Admin → Fleet for the live worker dashboard
 ```
 
 ### CLI Flags
@@ -235,9 +236,11 @@ make fleet-worker COORD=/ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> SECRET=<hex>
 |-------|-----------|
 | Fleet Secret | 256-bit HMAC-SHA256 signs all fleet messages |
 | API Token | Derived bearer token required on all `/api/fleet/*` endpoints |
+| Localhost Token | Fleet API token is only returned to localhost requests — never exposed over the network |
 | Transport | End-to-end encrypted libp2p streams (Noise/TLS) |
 | Identity | Coordinator and workers verify each other's peer IDs |
 | Binding | Workers auto-bind API to `127.0.0.1` in fleet mode |
+| Backup Safety | `fleet.secret` is excluded from `/api/admin/dump` backups |
 
 ---
 

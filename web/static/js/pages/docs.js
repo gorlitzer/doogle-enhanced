@@ -828,7 +828,7 @@ function renderAPI(el) {
         \${icon('network', 24, 'var(--purple)')}
         <h2>Fleet Management API</h2>
       </div>
-      <p class="docs-section-desc">Fleet endpoints are available on every node by default (all nodes run as coordinators). All require a Bearer token derived from the fleet secret. Find your token in the logs or Admin &gt; Fleet.</p>
+      <p class="docs-section-desc">Fleet endpoints are available on every node by default (all nodes run as coordinators). All require a Bearer token derived from the fleet secret. Find your token in <strong>Admin &gt; Actions &gt; Fleet</strong> (localhost only), terminal logs, or via <code>GET /api/status</code> (token is only returned to localhost requests for security).</p>
 
       <div class="docs-endpoint-list">
         \${endpoint('GET', '/api/fleet/nodes', 'Fleet overview: all registered workers (requires Bearer token)', \`

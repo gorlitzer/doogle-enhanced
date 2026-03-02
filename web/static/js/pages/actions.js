@@ -104,6 +104,48 @@ export function renderActions(container) {
         </div>
       </div>
 
+      <!-- Fleet Management -->
+      <div class="actions-section" id="fleet-section" style="display:none">
+        <div class="actions-section-header">
+          ${icon('cpu', 20, 'var(--accent)')}
+          <h3>Fleet</h3>
+        </div>
+        <div class="actions-grid">
+          <div class="action-card">
+            <div class="action-card-header">
+              <div class="action-icon">${icon('zap', 24, 'var(--accent)')}</div>
+              <div>
+                <strong>Fleet Credentials</strong>
+                <p>Use these to connect workers to this node. Keep them secret — anyone with the token can manage your fleet.</p>
+              </div>
+            </div>
+            <div class="action-card-body">
+              <label class="action-label">API Token</label>
+              <div class="action-input-row">
+                <input type="password" id="fleet-token-display" class="action-input mono" readonly placeholder="Only visible from localhost">
+                <button class="btn" id="fleet-token-reveal-btn" title="Show / Hide">
+                  <span class="btn-label">${icon('fileText', 16)} Reveal</span>
+                </button>
+                <button class="btn btn-primary" id="fleet-token-copy-btn">
+                  <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                </button>
+              </div>
+              <div id="fleet-token-result" class="action-result"></div>
+
+              <label class="action-label" style="margin-top:12px">Worker Command</label>
+              <div class="action-input-row">
+                <input type="text" id="fleet-worker-cmd" class="action-input mono" readonly placeholder="Loading..." style="font-size:0.82em">
+                <button class="btn btn-primary" id="fleet-cmd-copy-btn">
+                  <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                </button>
+              </div>
+              <div id="fleet-cmd-result" class="action-result"></div>
+              <p class="action-hint" style="margin-top:6px">Run this on any machine to join a worker to your fleet. See <a href="#/admin/fleet">Fleet dashboard</a> for live status.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Data Management -->
       <div class="actions-section">
         <div class="actions-section-header">
@@ -183,6 +225,20 @@ async function loadCurrentName() {
     if (input && s.node_name) input.value = s.node_name;
     const idInput = document.getElementById('node-id-display');
     if (idInput && s.peer_id) idInput.value = s.peer_id;
+
+    // Fleet section — only show when running as coordinator with a token.
+    const fleetSection = document.getElementById('fleet-section');
+    if (fleetSection && s.fleet_role === 'coordinator' && s.fleet_api_token) {
+      fleetSection.style.display = '';
+      document.getElementById('fleet-token-display').value = s.fleet_api_token;
+
+      // Build worker command with the node's first TCP multiaddr.
+      const addr = (s.addrs || []).find(a => a.includes('/tcp/')) || '';
+      const cmd = addr
+        ? `make fleet-worker COORD="${addr}" SECRET="<hex from ${s.fleet_secret_file || 'data/fleet.secret'}>"`
+        : 'Multiaddr not available — check node logs';
+      document.getElementById('fleet-worker-cmd').value = cmd;
+    }
   } catch { /* ignore */ }
 }
 
@@ -225,6 +281,27 @@ function setupHandlers() {
       setTimeout(() => { result.innerHTML = ''; }, 2000);
     });
   });
+
+  // --- Fleet Token ---
+  const fleetRevealBtn = document.getElementById('fleet-token-reveal-btn');
+  const fleetTokenInput = document.getElementById('fleet-token-display');
+  if (fleetRevealBtn) {
+    fleetRevealBtn.addEventListener('click', () => {
+      const isHidden = fleetTokenInput.type === 'password';
+      fleetTokenInput.type = isHidden ? 'text' : 'password';
+      fleetRevealBtn.querySelector('.btn-label').innerHTML = `${icon('fileText', 16)} ${isHidden ? 'Hide' : 'Reveal'}`;
+    });
+  }
+
+  const fleetCopyBtn = document.getElementById('fleet-token-copy-btn');
+  if (fleetCopyBtn) {
+    fleetCopyBtn.addEventListener('click', () => copyField('fleet-token-display', 'fleet-token-result'));
+  }
+
+  const fleetCmdCopyBtn = document.getElementById('fleet-cmd-copy-btn');
+  if (fleetCmdCopyBtn) {
+    fleetCmdCopyBtn.addEventListener('click', () => copyField('fleet-worker-cmd', 'fleet-cmd-result'));
+  }
 
   // --- Backup ---
   document.getElementById('backup-btn').addEventListener('click', downloadBackup);
@@ -430,6 +507,21 @@ function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function copyField(inputId, resultId) {
+  const input = document.getElementById(inputId);
+  const result = document.getElementById(resultId);
+  if (!input || !input.value) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    result.innerHTML = '<span class="badge badge-green">Copied</span>';
+    setTimeout(() => { result.innerHTML = ''; }, 2000);
+  }).catch(() => {
+    input.select();
+    document.execCommand('copy');
+    result.innerHTML = '<span class="badge badge-green">Copied</span>';
+    setTimeout(() => { result.innerHTML = ''; }, 2000);
+  });
 }
 
 function escapeHtml(s) {

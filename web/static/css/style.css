@@ -2612,6 +2612,30 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   color: var(--text-secondary);
 }
 
+/* Role selection step */
+.wizard-role-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+.wizard-role-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  transition: border-color var(--transition), background var(--transition);
+}
+.wizard-role-card.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+}
+.wizard-role-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 /* Focus / categories step */
 .wizard-focus { padding: 10px 0; }
 .wizard-focus h2 { font-size: 1.6em; margin-bottom: 6px; }
