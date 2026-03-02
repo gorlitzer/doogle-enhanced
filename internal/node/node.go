@@ -117,7 +117,10 @@ func (n *Node) init() error {
 	}
 	n.host = h
 
-	// 3. Discovery (DHT + mDNS + IPFS routing discovery)
+	// 3. Pre-init shard manager so discovery callbacks can use it immediately.
+	n.shards = index.NewShardManager()
+
+	// 4. Discovery (DHT + mDNS + IPFS routing discovery)
 	disc, err := p2p.NewDiscovery(n.ctx, h, p2p.DiscoveryConfig{
 		BootstrapPeers:       n.cfg.P2P.BootstrapPeers,
 		EnableMDNS:           n.cfg.P2P.MDNS,
@@ -176,8 +179,7 @@ func (n *Node) init() error {
 	}
 	n.bleveIdx = bleveIdx
 
-	// 7. Shard manager — add self
-	n.shards = index.NewShardManager()
+	// 7. Shard manager — add self (ring was pre-created before discovery)
 	n.shards.AddNode(peerID.String())
 
 	// 7a. Register network notifiee for peer disconnect cleanup
