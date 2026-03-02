@@ -63,7 +63,7 @@ const NAV_ROUTES = {
 // STATE
 // ============================================================
 let diagram = null;
-let activeTab = 'status';
+let activeTab = 'architecture';
 let crawlHistory = [];
 let feedLastSeq = 0;
 let feedInterval = null;
@@ -75,28 +75,13 @@ let lastData = { status: null, crawler: null };
 // ============================================================
 export function renderCrawler(container) {
   container.innerHTML = `
-    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div>
-        <h2>Crawler</h2>
-        <p>Internal architecture — how URLs flow through the crawl pipeline</p>
-      </div>
-      <div class="view-toggle" id="view-toggle">
-        <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">
-          ${icon('gitBranch', 16)} Flow
-        </button>
-        <button class="view-toggle-btn ${currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Spotlight gauges">
-          ${icon('barChart2', 16)} Gauges
-        </button>
-      </div>
+    <div class="page-header">
+      <h2>Crawler</h2>
+      <p>Monitor, configure, and inspect the distributed crawl pipeline</p>
     </div>
-    <div class="spotlight-canvas-wrap">
-      <canvas id="crawler-spotlight"></canvas>
-    </div>
-    <div id="crawler-summary" class="spotlight-summary">
-      <div class="loading">Loading crawler data...</div>
-    </div>
-    <div class="tabs" id="crawler-tabs" style="margin-top:20px">
-      <button class="tab active" data-tab="status">Status</button>
+    <div class="tabs" id="crawler-tabs">
+      <button class="tab active" data-tab="architecture">Architecture</button>
+      <button class="tab" data-tab="status">Status</button>
       <button class="tab" data-tab="feed">Live Feed</button>
       <button class="tab" data-tab="analytics">Analytics</button>
       <button class="tab" data-tab="seeds">Seeds</button>
@@ -104,18 +89,6 @@ export function renderCrawler(container) {
     </div>
     <div id="crawler-content"></div>
   `;
-
-  // View toggle
-  document.getElementById('view-toggle').addEventListener('click', e => {
-    const btn = e.target.closest('.view-toggle-btn');
-    if (!btn) return;
-    const view = btn.dataset.view;
-    if (view === currentView) return;
-    currentView = view;
-    localStorage.setItem('doogle-crawler-view', view);
-    document.querySelectorAll('#view-toggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    rebuildDiagram();
-  });
 
   // Tabs
   document.querySelectorAll('#crawler-tabs .tab').forEach(tab => {
@@ -127,13 +100,12 @@ export function renderCrawler(container) {
     });
   });
 
-  buildDiagram();
   renderTab();
   loadDiagramData();
 
   window._pageInterval = setInterval(() => {
     loadDiagramData();
-    if (activeTab === 'status' || activeTab === 'analytics') renderTab();
+    if (activeTab === 'status' || activeTab === 'analytics' || activeTab === 'architecture') renderTab();
   }, 5000);
 
   window._pageCleanup = () => {
@@ -369,11 +341,60 @@ async function renderTab() {
     feedInterval = null;
   }
 
-  if (activeTab === 'status') await renderStatus(content);
+  // Destroy diagram when leaving the architecture tab
+  if (activeTab !== 'architecture' && diagram) {
+    diagram.destroy();
+    diagram = null;
+  }
+
+  if (activeTab === 'architecture') renderArchitecture(content);
+  else if (activeTab === 'status') await renderStatus(content);
   else if (activeTab === 'feed') renderFeed(content);
   else if (activeTab === 'analytics') await renderAnalytics(content);
   else if (activeTab === 'seeds') renderSeeds(content);
   else if (activeTab === 'features') renderFeatures(content);
+}
+
+function renderArchitecture(el) {
+  // Skip full rebuild if the diagram is already live on this tab
+  if (diagram && document.getElementById('crawler-spotlight')) return;
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      <div>
+        <h3 style="font-size:1.1em;font-weight:600;color:var(--text-primary);margin:0">Spotlight</h3>
+        <p style="color:var(--text-muted);font-size:0.85em;margin:4px 0 0">Live view of the crawl pipeline and its components</p>
+      </div>
+      <div class="view-toggle" id="view-toggle">
+        <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">
+          ${icon('gitBranch', 16)} Flow
+        </button>
+        <button class="view-toggle-btn ${currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Spotlight gauges">
+          ${icon('barChart2', 16)} Gauges
+        </button>
+      </div>
+    </div>
+    <div class="spotlight-canvas-wrap">
+      <canvas id="crawler-spotlight"></canvas>
+    </div>
+    <div id="crawler-summary" class="spotlight-summary">
+      <div class="loading">Loading crawler data...</div>
+    </div>
+  `;
+
+  document.getElementById('view-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('.view-toggle-btn');
+    if (!btn) return;
+    const view = btn.dataset.view;
+    if (view === currentView) return;
+    currentView = view;
+    localStorage.setItem('doogle-crawler-view', view);
+    document.querySelectorAll('#view-toggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    rebuildDiagram();
+  });
+
+  buildDiagram();
+  loadDiagramData();
 }
 
 async function renderStatus(el) {
