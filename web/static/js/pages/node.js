@@ -2,17 +2,17 @@
 // Toggle between Spotlight gauge columns and Architecture flow diagram
 import { api } from '../api.js';
 import { icon, getCSS, escapeHtml } from '../components.js';
-import { SpotlightDiagram, formatNum } from '../spotlight.js';
+import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
 // ── Spotlight Grid Config (gauge columns) ──
 const GRID_COMPONENTS = [
-  { id: 'p2p',      label: 'P2P Network',    col: 0, row: 0, boxH: 200 },
-  { id: 'trust',    label: 'Trust & Safety',  col: 0, row: 1, boxH: 140 },
-  { id: 'queue',    label: 'URL Queue',       col: 1, row: 0, boxH: 180 },
-  { id: 'crawler',  label: 'Crawler',          col: 1, row: 1, boxH: 180 },
-  { id: 'indexer',  label: 'Indexer',          col: 2, row: 0, boxH: 200 },
-  { id: 'search',   label: 'Search Engine',   col: 2, row: 1, boxH: 140 },
-  { id: 'storage',  label: 'Storage',          col: 3, row: 0, boxH: 340 },
+  { id: 'p2p',      label: 'P2P Network',    col: 0, row: 0, boxH: 150 },
+  { id: 'trust',    label: 'Trust & Safety',  col: 0, row: 1, boxH: 110 },
+  { id: 'queue',    label: 'URL Queue',       col: 1, row: 0, boxH: 140 },
+  { id: 'crawler',  label: 'Crawler',          col: 1, row: 1, boxH: 140 },
+  { id: 'indexer',  label: 'Indexer',          col: 2, row: 0, boxH: 150 },
+  { id: 'search',   label: 'Search Engine',   col: 2, row: 1, boxH: 110 },
+  { id: 'storage',  label: 'Storage',          col: 3, row: 0, boxH: 260 },
 ];
 
 const GRID_CONNECTIONS = [
@@ -29,8 +29,8 @@ const GRID_CONNECTIONS = [
 const FLOW_COMPONENTS = [
   { id: 'p2p',      label: 'P2P Network',    col: 1, row: 0 },
   { id: 'queue',    label: 'URL Queue',       col: 1, row: 1 },
+  { id: 'trust',    label: 'Trust & Safety',  col: 0, row: 2 },
   { id: 'crawler',  label: 'Crawler',          col: 1, row: 2 },
-  { id: 'trust',    label: 'Trust & Safety',  col: 2, row: 2 },
   { id: 'indexer',  label: 'Indexer',          col: 1, row: 3 },
   { id: 'storage',  label: 'Storage',          col: 0, row: 4 },
   { id: 'search',   label: 'Search Engine',   col: 2, row: 4 },
@@ -56,6 +56,9 @@ const NAV_ROUTES = {
 let diagram = null;
 let currentView = localStorage.getItem('doogle-node-view') || 'flow';
 let lastData = { status: null, crawler: null, indexer: null };
+let mobileBoxData = new Map();
+const MOBILE_BP = 700;
+let _mobileResizeHandler = null;
 
 export function renderNode(container) {
   container.innerHTML = `
@@ -73,9 +76,10 @@ export function renderNode(container) {
         </button>
       </div>
     </div>
-    <div class="spotlight-canvas-wrap">
+    <div class="spotlight-canvas-wrap" id="canvas-wrap">
       <canvas id="spotlight-canvas"></canvas>
     </div>
+    <div id="mobile-cards-wrap" class="mobile-cards-grid" style="display:none"></div>
     <div id="spotlight-summary" class="spotlight-summary">
       <div class="loading">Loading node status...</div>
     </div>
@@ -94,9 +98,40 @@ export function renderNode(container) {
   });
 
   buildDiagram();
+  _mobileResizeHandler = () => syncMobileView();
+  window.addEventListener('resize', _mobileResizeHandler);
+  syncMobileView();
   loadAllData();
   window._pageInterval = setInterval(loadAllData, 5000);
-  window._pageCleanup = () => { if (diagram) { diagram.destroy(); diagram = null; } };
+  window._pageCleanup = () => {
+    if (diagram) { diagram.destroy(); diagram = null; }
+    if (_mobileResizeHandler) { window.removeEventListener('resize', _mobileResizeHandler); _mobileResizeHandler = null; }
+    mobileBoxData.clear();
+  };
+}
+
+function syncMobileView() {
+  const isMobile = window.innerWidth < MOBILE_BP;
+  const canvasWrap = document.getElementById('canvas-wrap');
+  const cardsWrap = document.getElementById('mobile-cards-wrap');
+  const toggleEl = document.getElementById('view-toggle');
+  if (!canvasWrap || !cardsWrap) return;
+
+  if (isMobile) {
+    canvasWrap.style.display = 'none';
+    if (toggleEl) toggleEl.style.display = 'none';
+    cardsWrap.style.display = '';
+    if (mobileBoxData.size > 0)
+      renderMobileCards(cardsWrap, [...mobileBoxData.values()], NAV_ROUTES);
+  } else {
+    canvasWrap.style.display = '';
+    if (toggleEl) toggleEl.style.display = '';
+    cardsWrap.style.display = 'none';
+    if (!diagram) {
+      buildDiagram();
+      if (lastData.status) applyData(lastData.status, lastData.crawler, lastData.indexer);
+    }
+  }
 }
 
 function buildDiagram() {
@@ -111,8 +146,8 @@ function buildDiagram() {
     layout: isGrid ? 'grid' : 'flow',
     cols: isGrid ? 4 : 3,
     rows: isGrid ? 2 : 5,
-    boxW: isGrid ? 190 : 180,
-    boxH: isGrid ? 130 : 90,
+    boxW: isGrid ? 160 : 190,
+    boxH: isGrid ? 105 : 110,
     minHeight: isGrid ? 500 : 560,
     maxHeight: isGrid ? 600 : 700,
     onTooltipExtra: (box, data) => {
@@ -121,9 +156,9 @@ function buildDiagram() {
       const ix = data.indexer || {};
       const map = {
         p2p:     () => [`Uptime: ${s.uptime || '—'}`, `Addrs: ${(s.addrs || []).length}`],
-        crawler: () => [`Rate limit: ${cr.rate_limit || '—'}`, `Errors: ${cr.total_errors || 0}`],
-        indexer: () => [`Avg spam: ${(ix.avg_spam || 0).toFixed(2)}`, `Lang: ${ix.top_language || '—'}`],
-        trust:   () => [`Robots blocked: ${ix.robots_blocked || 0}`],
+        crawler: () => [`Rate limit: ${cr.rate_limit || '—'}`, `Errors: ${cr.total_errors || 0}`, `JS rendered: ${cr.js_rendered || 0}`],
+        indexer: () => [`Avg spam: ${(ix.avg_spam || 0).toFixed(2)}`, `Empty skipped: ${ix.empty_skipped || 0}`],
+        trust:   () => [`Spam: ${ix.spam_rejected || 0}`, `Dupes: ${ix.duplicates_skipped || 0}`],
       };
       return (map[box.id] || (() => []))();
     },
@@ -156,28 +191,41 @@ async function loadAllData() {
 }
 
 function applyData(status, crawler, indexer) {
-  if (!diagram) return;
   const s = status || {};
   const cr = crawler || {};
   const ix = indexer || {};
 
-  diagram.setData({ status, crawler, indexer });
+  if (diagram) diagram.setData({ status, crawler, indexer });
 
   const isGrid = currentView === 'grid';
   const activeW = cr.active_workers || 0;
-  const totalW = cr.workers || cr.total_workers || 4;
+  const totalW = cr.workers || 0;
   const totalCrawled = cr.total_crawled || s.crawled_urls || 0;
   const totalFailed = cr.total_failed || 0;
   const successRate = (totalCrawled + totalFailed) > 0 ? totalCrawled / (totalCrawled + totalFailed) : 1;
   const queueCount = s.urls_in_queue || 0;
   const spam = ix.spam_rejected || 0;
   const dupes = ix.duplicates_skipped || 0;
-  const avgQ = ix.avg_quality || ix.average_quality || 0;
+  const avgQ = ix.avg_quality || 0;
   const avgSpam = ix.avg_spam || 0;
+  const totalIndexed = ix.total_indexed || s.indexed_docs || 0;
+  const indexerIdle = totalIndexed === 0 && avgQ === 0;
+  const indexerHealth = indexerIdle ? 'amber' : avgQ > 0.5 ? 'green' : avgQ > 0.3 ? 'amber' : 'red';
+
+  // Build label lookup from whichever component set is active
+  const comps = isGrid ? GRID_COMPONENTS : FLOW_COMPONENTS;
+  const labelMap = {};
+  for (const c of comps) labelMap[c.id] = c.label;
+
+  // Helper: set data on diagram + track for mobile cards
+  function setBox(id, data) {
+    if (diagram) diagram.setBoxData(id, data);
+    mobileBoxData.set(id, { id, label: labelMap[id] || id, ...data });
+  }
 
   if (isGrid) {
     // ── Spotlight Gauges View ──
-    diagram.setBoxData('p2p', {
+    setBox('p2p', {
       health: (s.connected_peers || 0) > 0 ? 'green' : 'red',
       gauges: [
         { type: 'counter', value: s.connected_peers || 0, label: 'connected peers', color: getCSS('--green') },
@@ -185,7 +233,7 @@ function applyData(status, crawler, indexer) {
       ],
       metrics: [`Uptime: ${s.uptime || '—'}`, `ID: ${(s.peer_id || '').slice(0, 16)}...`],
     });
-    diagram.setBoxData('trust', {
+    setBox('trust', {
       health: spam > 100 ? 'amber' : 'green',
       gauges: [
         { type: 'bar', value: spam, max: Math.max(100, spam + dupes + 1), label: 'spam blocked', color: getCSS('--red') },
@@ -193,7 +241,7 @@ function applyData(status, crawler, indexer) {
       ],
       metrics: [],
     });
-    diagram.setBoxData('queue', {
+    setBox('queue', {
       health: queueCount > 0 ? 'green' : 'amber',
       gauges: [
         { type: 'counter', value: queueCount, label: 'URLs waiting', color: getCSS('--accent') },
@@ -202,80 +250,82 @@ function applyData(status, crawler, indexer) {
       ],
       metrics: [],
     });
-    diagram.setBoxData('crawler', {
+    setBox('crawler', {
       health: activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red'),
       gauges: [
         { type: 'ring', value: activeW, max: totalW, label: `${activeW}/${totalW} workers`, color: getCSS('--green') },
         { type: 'counter', value: totalCrawled, label: 'crawled', color: getCSS('--accent') },
         { type: 'ring', value: successRate, max: 1, label: 'success rate', color: successRate > 0.8 ? getCSS('--green') : getCSS('--red') },
       ],
-      metrics: [],
+      metrics: [`JS rendered: ${formatNum(cr.js_rendered || 0)}`],
     });
-    diagram.setBoxData('indexer', {
-      health: avgQ > 0.5 ? 'green' : avgQ > 0.3 ? 'amber' : 'red',
+    setBox('indexer', {
+      health: indexerHealth,
       gauges: [
         { type: 'ring', value: avgQ, max: 1, label: 'quality', color: getCSS('--green') },
         { type: 'ring', value: avgSpam, max: 1, label: 'spam score', color: getCSS('--red') },
       ],
       metrics: [`Indexed: ${formatNum(ix.total_indexed || s.indexed_docs || 0)}`],
     });
-    diagram.setBoxData('search', {
+    setBox('search', {
       health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
       gauges: [
         { type: 'counter', value: s.indexed_docs || 0, label: 'searchable docs', color: getCSS('--accent') },
       ],
       metrics: ['BM25 full-text', 'Fan-out to peers'],
     });
-    diagram.setBoxData('storage', {
+    setBox('storage', {
       health: 'green',
       gauges: [
         { type: 'cylinder', value: s.indexed_docs || 0, max: Math.max(5000, s.indexed_docs || 1), label: 'Bleve docs', color: getCSS('--green') },
         { type: 'cylinder', value: s.crawled_urls || 0, max: Math.max(5000, s.crawled_urls || 1), label: 'Badger URLs', color: getCSS('--blue') },
         { type: 'cylinder', value: queueCount, max: Math.max(50000, queueCount || 1), label: 'Queue store', color: getCSS('--accent') },
       ],
-      metrics: [],
+      metrics: [`Local: ${formatNum(s.local_docs || 0)} / Peer: ${formatNum(s.peer_docs || 0)}`],
     });
   } else {
-    // ── Architecture Flow View (text metrics, no gauges) ──
-    diagram.setBoxData('p2p', {
-      health: (s.connected_peers || 0) > 0 ? 'green' : 'red',
-      gauges: [],
-      metrics: [`Peers: ${s.connected_peers || 0}`, `ID: ${(s.peer_id || '').slice(0, 16)}...`],
+    // ── Architecture Flow View (compact gauges + key metrics) ──
+    const peers = s.connected_peers || 0;
+    setBox('p2p', {
+      health: peers > 0 ? 'green' : 'red',
+      gauges: [{ type: 'ring', value: peers, max: Math.max(10, peers), label: 'peers', color: getCSS('--green') }],
+      metrics: [`Uptime: ${s.uptime || '—'}`],
     });
-    diagram.setBoxData('queue', {
+    setBox('queue', {
       health: queueCount > 0 ? 'green' : 'amber',
-      gauges: [],
-      metrics: [`Queued: ${formatNum(queueCount)}`],
+      gauges: [{ type: 'counter', value: queueCount, label: 'queued', color: getCSS('--accent') }],
+      metrics: [],
     });
-    diagram.setBoxData('crawler', {
+    setBox('crawler', {
       health: activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red'),
-      gauges: [],
-      metrics: [`Workers: ${activeW}/${totalW}`, `Crawled: ${formatNum(totalCrawled)}`],
+      gauges: [{ type: 'ring', value: activeW, max: totalW, label: `${activeW}/${totalW}`, color: getCSS('--green') }],
+      metrics: [`Crawled: ${formatNum(totalCrawled)}`, `JS: ${formatNum(cr.js_rendered || 0)}`],
     });
-    diagram.setBoxData('trust', {
+    setBox('trust', {
       health: spam > 100 ? 'amber' : 'green',
-      gauges: [],
-      metrics: [`Spam blocked: ${formatNum(spam)}`, `Dupes skipped: ${formatNum(dupes)}`],
+      gauges: [{ type: 'counter', value: spam, label: 'spam blocked', color: getCSS('--red') }],
+      metrics: [`Dupes: ${formatNum(dupes)}`],
     });
-    diagram.setBoxData('indexer', {
-      health: avgQ > 0.5 ? 'green' : avgQ > 0.3 ? 'amber' : 'red',
-      gauges: [],
-      metrics: [`Indexed: ${formatNum(ix.total_indexed || s.indexed_docs || 0)}`, `Quality: ${avgQ.toFixed(2)}`],
+    setBox('indexer', {
+      health: indexerHealth,
+      gauges: [{ type: 'ring', value: avgQ, max: 1, label: 'quality', color: getCSS('--green') }],
+      metrics: [`Indexed: ${formatNum(ix.total_indexed || s.indexed_docs || 0)}`],
     });
-    diagram.setBoxData('storage', {
+    setBox('storage', {
       health: 'green',
-      gauges: [],
-      metrics: [`Docs: ${formatNum(s.indexed_docs || 0)}`, `URLs: ${formatNum(s.crawled_urls || 0)}`],
+      gauges: [{ type: 'counter', value: s.indexed_docs || 0, label: 'documents', color: getCSS('--blue') }],
+      metrics: [`Local: ${formatNum(s.local_docs || 0)} / Peer: ${formatNum(s.peer_docs || 0)}`],
     });
-    diagram.setBoxData('search', {
+    setBox('search', {
       health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
-      gauges: [],
-      metrics: [`Searchable: ${formatNum(s.indexed_docs || 0)}`],
+      gauges: [{ type: 'counter', value: s.indexed_docs || 0, label: 'searchable', color: getCSS('--accent') }],
+      metrics: [],
     });
   }
 
-  diagram.setSpawnRate(Math.max(1, activeW));
+  if (diagram) diagram.setSpawnRate(Math.max(1, activeW));
   renderSummaryStrip(status, crawler, indexer);
+  syncMobileView();
 }
 
 function renderSummaryStrip(status, crawler, indexer) {
@@ -286,40 +336,56 @@ function renderSummaryStrip(status, crawler, indexer) {
   const ix = indexer || {};
 
   el.innerHTML = `
-    <div class="spotlight-metric">
-      ${icon('radio', 16, 'var(--accent)')}
-      <span class="spotlight-metric-value">${s.connected_peers || 0}</span>
-      <span class="spotlight-metric-label">Peers</span>
+    <div class="spotlight-group">
+      <span class="spotlight-group-label">This Node</span>
+      <div class="spotlight-metrics-row">
+        <div class="spotlight-metric">
+          ${icon('globe', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(cr.total_crawled || s.crawled_urls || 0)}</span>
+          <span class="spotlight-metric-label">My Crawls</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('fileText', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(s.local_docs || 0)}</span>
+          <span class="spotlight-metric-label">My Docs</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('radio', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${s.connected_peers || 0}</span>
+          <span class="spotlight-metric-label">Peers</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('monitor', 16, 'var(--text-muted)')}
+          <span class="spotlight-metric-value" style="font-size:0.85em">${escapeHtml(s.uptime || '—')}</span>
+          <span class="spotlight-metric-label">Uptime</span>
+        </div>
+      </div>
     </div>
-    <div class="spotlight-metric">
-      ${icon('link', 16, 'var(--accent)')}
-      <span class="spotlight-metric-value">${formatNum(s.urls_in_queue || 0)}</span>
-      <span class="spotlight-metric-label">Queue</span>
-    </div>
-    <div class="spotlight-metric">
-      ${icon('globe', 16, 'var(--accent)')}
-      <span class="spotlight-metric-value">${formatNum(cr.total_crawled || s.crawled_urls || 0)}</span>
-      <span class="spotlight-metric-label">Crawled</span>
-    </div>
-    <div class="spotlight-metric">
-      ${icon('cpu', 16, 'var(--accent)')}
-      <span class="spotlight-metric-value">${formatNum(ix.total_indexed || s.indexed_docs || 0)}</span>
-      <span class="spotlight-metric-label">Indexed</span>
-    </div>
-    <div class="spotlight-metric">
-      ${icon('search', 16, 'var(--accent)')}
-      <span class="spotlight-metric-value">${formatNum(s.indexed_docs || 0)}</span>
-      <span class="spotlight-metric-label">Searchable</span>
-    </div>
-    <div class="spotlight-metric">
-      ${icon('shield', 16, 'var(--accent)')}
-      <span class="spotlight-metric-value">${formatNum(ix.spam_rejected || 0)}</span>
-      <span class="spotlight-metric-label">Spam Blocked</span>
-    </div>
-    <div class="spotlight-metric">
-      ${icon('monitor', 16, 'var(--text-muted)')}
-      <span class="spotlight-metric-value" style="font-size:0.85em">${escapeHtml(s.uptime || '—')}</span>
-      <span class="spotlight-metric-label">Uptime</span>
+    <div class="spotlight-metric-sep"></div>
+    <div class="spotlight-group">
+      <span class="spotlight-group-label">Index Total</span>
+      <div class="spotlight-metrics-row">
+        <div class="spotlight-metric">
+          ${icon('users', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(s.peer_docs || 0)}</span>
+          <span class="spotlight-metric-label">From Peers</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('search', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(s.indexed_docs || 0)}</span>
+          <span class="spotlight-metric-label">Searchable</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('link', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(s.urls_in_queue || 0)}</span>
+          <span class="spotlight-metric-label">Queue</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('shield', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(ix.spam_rejected || 0)}</span>
+          <span class="spotlight-metric-label">Spam Blocked</span>
+        </div>
+      </div>
     </div>
   `;
 }
