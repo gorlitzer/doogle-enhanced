@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,7 +13,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
@@ -66,25 +65,14 @@ func NewDiscovery(ctx context.Context, h host.Host, cfg DiscoveryConfig) (*Disco
 		d.connectBootstrapPeers(ctx, cfg.BootstrapPeers)
 	}
 
-	// Connect to IPFS public DHT bootstrap peers and set up routing discovery
+	// Connect to IPFS public DHT bootstrap peers and set up routing discovery.
+	// We use raw RoutingDiscovery (no BackoffDiscovery wrapper) because our
+	// 30s polling interval is already reasonable rate-limiting. BackoffDiscovery
+	// caches FindPeers results with exponential backoff up to 5min, which
+	// prevents fresh DHT lookups and returns stale peer records.
 	if cfg.EnableDHTDiscovery {
 		d.connectIPFSBootstrapPeers(ctx)
-
-		routingDisc := drouting.NewRoutingDiscovery(kadDHT)
-		backoffFactory := backoff.NewExponentialBackoff(
-			time.Second,
-			5*time.Minute,
-			backoff.FullJitter,
-			time.Second,
-			2.0,
-			0,
-			rand.NewSource(time.Now().UnixNano()),
-		)
-		backedOff, err := backoff.NewBackoffDiscovery(routingDisc, backoffFactory)
-		if err != nil {
-			return nil, fmt.Errorf("backoff discovery: %w", err)
-		}
-		d.routingDisc = backedOff
+		d.routingDisc = drouting.NewRoutingDiscovery(kadDHT)
 	}
 
 	// Start mDNS for local discovery
@@ -124,6 +112,40 @@ func (d *Discovery) StartAdvertising(ctx context.Context) {
 	}
 	log.Printf("DHT discovery: advertising as %q", d.cfg.DHTRendezvous)
 	dutil.Advertise(ctx, d.routingDisc, d.cfg.DHTRendezvous)
+
+	// Log host addresses after a delay so AutoRelay has time to obtain relay addresses.
+	go func() {
+		select {
+		case <-time.After(30 * time.Second):
+		case <-ctx.Done():
+			return
+		}
+		d.logHostAddresses()
+	}()
+}
+
+// logHostAddresses logs the node's current addresses, highlighting circuit relay addresses.
+func (d *Discovery) logHostAddresses() {
+	addrs := d.host.Addrs()
+	var relayAddrs, directAddrs []string
+	for _, a := range addrs {
+		s := a.String()
+		if strings.Contains(s, "p2p-circuit") {
+			relayAddrs = append(relayAddrs, s)
+		} else {
+			directAddrs = append(directAddrs, s)
+		}
+	}
+	log.Printf("host addresses: %d direct, %d relay", len(directAddrs), len(relayAddrs))
+	for _, a := range directAddrs {
+		log.Printf("  direct: %s", a)
+	}
+	for _, a := range relayAddrs {
+		log.Printf("  relay:  %s", a)
+	}
+	if len(relayAddrs) == 0 {
+		log.Println("host addresses: no relay addresses yet (AutoRelay may still be searching)")
+	}
 }
 
 // StartFindingPeers periodically searches the DHT for other Doogle nodes.
@@ -132,12 +154,16 @@ func (d *Discovery) StartFindingPeers(ctx context.Context) {
 		return
 	}
 
-	// Initial delay to let DHT bootstrap settle
+	// Wait for DHT routing tables to populate from IPFS bootstrap peers.
+	// This needs enough time for the DHT to exchange routing info with
+	// bootstrap peers so that provider record lookups can succeed.
+	log.Println("DHT discovery: waiting 15s for DHT bootstrap to settle...")
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 	case <-ctx.Done():
 		return
 	}
+	log.Printf("DHT discovery: DHT routing table size: %d", d.dht.RoutingTable().Size())
 
 	ticker := time.NewTicker(d.cfg.DHTDiscoveryInterval)
 	defer ticker.Stop()
@@ -154,8 +180,8 @@ func (d *Discovery) StartFindingPeers(ctx context.Context) {
 }
 
 func (d *Discovery) findAndConnectPeers(ctx context.Context) {
-	// Connection limits are handled by the connmgr; always search for Doogle peers.
-	log.Printf("DHT discovery: searching for peers under %q...", d.cfg.DHTRendezvous)
+	log.Printf("DHT discovery: searching for peers under %q (rt size: %d, connected: %d)...",
+		d.cfg.DHTRendezvous, d.dht.RoutingTable().Size(), len(d.host.Network().Peers()))
 
 	findCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -166,30 +192,46 @@ func (d *Discovery) findAndConnectPeers(ctx context.Context) {
 		return
 	}
 
-	found := 0
+	found, connected, alreadyConn, failed := 0, 0, 0, 0
 	for pi := range peerCh {
 		if pi.ID == d.host.ID() {
 			continue
 		}
 		found++
+
 		if d.host.Network().Connectedness(pi.ID) == network.Connected {
+			alreadyConn++
+			// Still fire the callback — if this peer was found via rendezvous,
+			// it's a Doogle peer even if already connected (e.g. via DHT routing).
+			if d.cfg.OnDooglePeerConnected != nil {
+				d.cfg.OnDooglePeerConnected(pi.ID)
+			}
 			continue
 		}
 
-		log.Printf("DHT discovery: found peer %s, dialing...", pi.ID.String()[:12])
-		connCtx, connCancel := context.WithTimeout(ctx, 10*time.Second)
+		if len(pi.Addrs) == 0 {
+			log.Printf("DHT discovery: peer %s has no addresses, skipping", pi.ID.String()[:12])
+			failed++
+			continue
+		}
+
+		log.Printf("DHT discovery: found peer %s (%d addrs), dialing...", pi.ID.String()[:12], len(pi.Addrs))
+		connCtx, connCancel := context.WithTimeout(ctx, 15*time.Second)
 		err := d.host.Connect(connCtx, pi)
 		connCancel()
 		if err != nil {
 			log.Printf("DHT discovery: failed to connect to %s: %v", pi.ID.String()[:12], err)
+			failed++
 		} else {
 			log.Printf("DHT discovery: connected to Doogle peer %s", pi.ID.String()[:12])
+			connected++
 			if d.cfg.OnDooglePeerConnected != nil {
 				d.cfg.OnDooglePeerConnected(pi.ID)
 			}
 		}
 	}
-	log.Printf("DHT discovery: round complete, found %d peer(s)", found)
+	log.Printf("DHT discovery: round complete — found %d, new connections %d, already connected %d, failed %d",
+		found, connected, alreadyConn, failed)
 }
 
 // DHT returns the underlying Kademlia DHT.
