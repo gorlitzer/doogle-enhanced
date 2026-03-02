@@ -1726,11 +1726,12 @@ function renderWelcome(el) {
       <h1>Welcome to <a href="#/" class="wizard-doogle-link" id="wizard-doogle">Doogle</a></h1>
       <p>A decentralized search engine — no central server, no tracking, no gatekeepers. Every node crawls a slice of the web and shares what it finds with the network.</p>
 
-      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:24px auto;max-width:480px">
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('edit', 14, 'var(--accent)')} Name your node</span>
-        ${fleetRole ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('network', 14, 'var(--accent)')} Fleet setup</span>` : ''}
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('globe', 14, 'var(--accent)')} Choose topics</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('zap', 14, 'var(--accent)')} Launch</span>
+      <div style="display:inline-flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:24px auto;max-width:540px">
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('monitor', 14, 'var(--accent)')} Identity</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('network', 14, 'var(--accent)')} Fleet Role</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('globe', 14, 'var(--accent)')} Topics</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('cpu', 14, 'var(--accent)')} Settings</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('zap', 14, 'var(--accent)')} Launch</span>
       </div>
 
       <p style="font-size:0.9em;color:var(--text-tertiary);margin-bottom:28px">Takes about a minute. You can change everything later.</p>
@@ -1898,18 +1899,39 @@ function renderRoleStep(el) {
         `).join('')}
       </div>
 
-      <div id="wizard-role-detail">
+      <div id="wizard-role-detail" style="min-height:120px;transition:opacity 0.15s ease">
         ${isCurrent ? renderRoleCurrentDetail(selected.id) : renderRoleSwitchCommand(selected.id)}
       </div>
     </div>
   `;
 
-  // Bind card clicks.
+  // Bind card clicks — update in place, no full re-render.
   el.querySelectorAll('.wizard-role-card').forEach(card => {
     card.style.cursor = 'pointer';
     card.addEventListener('click', () => {
-      selectedRole = card.dataset.role;
-      renderRoleStep(el);
+      const newRole = card.dataset.role;
+      if (newRole === selectedRole) return;
+      selectedRole = newRole;
+
+      // Update active states on cards.
+      el.querySelectorAll('.wizard-role-card').forEach(c => {
+        const isActive = c.dataset.role === selectedRole;
+        c.classList.toggle('active', isActive);
+        const iconEl = c.querySelector('svg');
+        if (iconEl) iconEl.style.color = isActive ? 'var(--accent)' : 'var(--text-secondary)';
+      });
+
+      // Update detail section with fade.
+      const detail = document.getElementById('wizard-role-detail');
+      if (detail) {
+        detail.style.opacity = '0';
+        setTimeout(() => {
+          const sel = roles.find(r => r.id === selectedRole) || roles[0];
+          detail.innerHTML = sel.current ? renderRoleCurrentDetail(sel.id) : renderRoleSwitchCommand(sel.id);
+          bindRoleCopyHandlers();
+          detail.style.opacity = '1';
+        }, 150);
+      }
     });
   });
 
