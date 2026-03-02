@@ -12,7 +12,7 @@ help:
 	@echo ""
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
 	@echo "    make build              Compile binary to bin/"
-	@echo "    make run                Build + launch node (API on :7002)"
+	@echo "    make run                Build + launch node (0.0.0.0:7002)"
 	@echo "    make run ARGS='...'     Pass extra flags to the binary"
 	@echo "    make dev                Docker detached on :7002 (stop with: make stop)"
 	@echo "    make stop               Stop docker containers"
