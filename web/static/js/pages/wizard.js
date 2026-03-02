@@ -514,6 +514,41 @@ const CATEGORY_GROUPS = [
           ]},
         ],
       },
+      {
+        id: 'adult-controversial', name: 'Adult & Controversial (18+)', icon: 'alertTriangle',
+        desc: 'Mature content categories useful for testing safe-search filters, content classification, and trust & safety systems.',
+        subcategories: [
+          { id: 'adult-content', name: 'Adult Content', seeds: [
+            { url: 'https://www.pornhub.com', label: 'Pornhub' },
+            { url: 'https://www.xvideos.com', label: 'XVideos' },
+            { url: 'https://www.reddit.com/r/nsfw', label: 'Reddit NSFW' },
+          ]},
+          { id: 'piracy-torrents', name: 'Piracy & Torrents', seeds: [
+            { url: 'https://www.torrentfreak.com', label: 'TorrentFreak (news)' },
+            { url: 'https://1337x.to', label: '1337x' },
+            { url: 'https://www.reddit.com/r/piracy', label: 'Reddit Piracy' },
+          ]},
+          { id: 'drug-info', name: 'Drug Information', seeds: [
+            { url: 'https://www.erowid.org', label: 'Erowid (harm reduction)' },
+            { url: 'https://www.drugsand.me', label: 'DrugsAnd.Me (safety)' },
+            { url: 'https://www.reddit.com/r/drugs', label: 'Reddit Drugs' },
+          ]},
+          { id: 'conspiracy-fringe', name: 'Conspiracy & Fringe', seeds: [
+            { url: 'https://www.infowars.com', label: 'InfoWars' },
+            { url: 'https://www.godlikeproductions.com', label: 'GodlikeProductions' },
+            { url: 'https://www.reddit.com/r/conspiracy', label: 'Reddit Conspiracy' },
+          ]},
+          { id: 'graphic-content', name: 'Graphic Content', seeds: [
+            { url: 'https://www.crazyshit.com', label: 'CrazyShit' },
+            { url: 'https://www.documentingreality.com', label: 'Documenting Reality' },
+          ]},
+          { id: 'low-quality-spam', name: 'Low Quality & Spam', seeds: [
+            { url: 'https://www.made-in-china.com', label: 'Made in China' },
+            { url: 'https://www.dhgate.com', label: 'DHgate' },
+            { url: 'https://www.wish.com', label: 'Wish' },
+          ]},
+        ],
+      },
     ],
   },
 
