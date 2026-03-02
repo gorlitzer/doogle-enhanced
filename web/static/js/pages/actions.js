@@ -145,22 +145,24 @@ export function renderActions(container) {
             </div>
             <div class="action-card-body">
               <div class="action-input-col">
-                <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px">Coordinator Multiaddr</label>
-                <div style="display:flex;gap:6px;align-items:center">
-                  <input type="text" id="fleet-worker-addr" class="action-input mono" readonly placeholder="Loading..." style="flex:1">
-                  <button class="btn btn-primary" id="fleet-addr-copy-btn" title="Copy multiaddr">
-                    <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                <label style="font-size:0.82em;color:var(--text-secondary)">Coordinator Multiaddr</label>
+                <input type="text" id="fleet-worker-addr" class="action-input mono" readonly placeholder="Loading...">
+                <div class="action-btn-group">
+                  <button class="btn btn-primary" id="fleet-addr-copy-btn">
+                    <span class="btn-label">${icon('fileText', 16)} Copy Multiaddr</span>
                   </button>
                 </div>
                 <div id="fleet-addr-result" class="action-result"></div>
-                <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px;margin-top:8px">Fleet Secret</label>
-                <div style="display:flex;gap:6px;align-items:center">
-                  <input type="password" id="fleet-worker-secret" class="action-input mono" readonly placeholder="Loading..." style="flex:1">
-                  <button class="btn" id="fleet-secret-reveal-btn" title="Show / Hide">
-                    <span class="btn-label">${icon('eye', 16)}</span>
+              </div>
+              <div class="action-input-col" style="margin-top:12px">
+                <label style="font-size:0.82em;color:var(--text-secondary)">Fleet Secret</label>
+                <input type="password" id="fleet-worker-secret" class="action-input mono" readonly placeholder="Loading...">
+                <div class="action-btn-group">
+                  <button class="btn" id="fleet-secret-reveal-btn">
+                    <span class="btn-label">${icon('eye', 16)} Reveal</span>
                   </button>
-                  <button class="btn btn-primary" id="fleet-secret-copy-btn" title="Copy secret">
-                    <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                  <button class="btn btn-primary" id="fleet-secret-copy-btn">
+                    <span class="btn-label">${icon('fileText', 16)} Copy Secret</span>
                   </button>
                 </div>
                 <div id="fleet-secret-result" class="action-result"></div>
