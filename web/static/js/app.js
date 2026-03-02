@@ -105,6 +105,16 @@ function startStatusPolling() {
         const name = s.node_name || `${s.peer_id.slice(0, 12)}...`;
         badge.textContent = `${name} | ${s.indexed_docs} docs | ${s.connected_peers} peers`;
       }
+      // Update sidebar wizard status icon.
+      const wizardLink = document.getElementById('sidebar-wizard');
+      if (wizardLink) {
+        const done = !!localStorage.getItem('doogle_wizard_dismissed') || s.indexed_docs > 0;
+        const dot = done
+          ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle" title="Setup complete"></span>'
+          : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);margin-right:6px;vertical-align:middle" title="Setup pending"></span>';
+        wizardLink.innerHTML = `${dot}Setup Wizard`;
+      }
+
       if (firstPoll) {
         firstPoll = false;
         // Fresh node (no data at all) — clear stale wizard dismissal from previous runs.
