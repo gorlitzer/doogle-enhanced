@@ -14,7 +14,7 @@ help:
 	@echo "    make build              Compile binary to bin/"
 	@echo "    make run                Build + launch node (fleet-ready on 0.0.0.0:7002)"
 	@echo "    make run ARGS='...'     Pass extra flags (run ./bin/doogle --help for all flags)"
-	@echo "    make dev                Docker detached on :7002 (stop with: make stop)"
+	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Stop docker containers"
 	@echo "    make test               Run all tests"
 	@echo "    make clean              Remove binary and node data"
@@ -82,9 +82,7 @@ test:
 	$(GO) test ./...
 
 dev:
-	docker compose up --build -d
-	@sleep 2
-	@echo "Running detached on :7002 — stop with: make stop"
+	docker compose up --build
 
 stop:
 	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
