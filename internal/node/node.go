@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -156,6 +157,9 @@ func (n *Node) init() error {
 	}
 	n.badger = bs
 
+	// 5-restore. Restore persisted peer names from previous runs.
+	n.loadPeerNames()
+
 	// 5a. Foundation stores
 	n.dedupStore = store.NewDedupStore(bs)
 	n.urlStore = store.NewURLStore(bs, n.dedupStore)
@@ -193,9 +197,7 @@ func (n *Node) init() error {
 			}
 			h.ConnManager().Unprotect(remotePeer, "doogle")
 			n.shards.RemoveNode(pid)
-			n.peerNamesMu.Lock()
-			delete(n.peerNames, pid)
-			n.peerNamesMu.Unlock()
+			// Keep peer name in memory for leaderboard (persisted in badger too).
 			slog.Debug("shard ring: removed Doogle peer", "peer", pid[:12], "total", n.shards.NodeCount())
 		},
 	})
@@ -575,6 +577,40 @@ func (n *Node) PeerName(id string) string {
 	return n.peerNames[id]
 }
 
+const peerNamePrefix = "pn:"
+
+// setPeerName stores a peer name in memory and persists it to BadgerDB.
+func (n *Node) setPeerName(peerID, name string) {
+	n.peerNamesMu.Lock()
+	n.peerNames[peerID] = name
+	n.peerNamesMu.Unlock()
+	// Persist so names survive restarts and disconnects.
+	_ = n.badger.Set([]byte(peerNamePrefix+peerID), []byte(name))
+}
+
+// loadPeerNames restores all persisted peer names from BadgerDB into memory.
+func (n *Node) loadPeerNames() {
+	prefix := []byte(peerNamePrefix)
+	_ = n.badger.DB().View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := string(it.Item().Key())
+			peerID := key[len(peerNamePrefix):]
+			_ = it.Item().Value(func(val []byte) error {
+				n.peerNamesMu.Lock()
+				n.peerNames[peerID] = string(val)
+				n.peerNamesMu.Unlock()
+				return nil
+			})
+		}
+		return nil
+	})
+}
+
 // onDocumentCrawled is called by the crawler when a page is fetched.
 func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) {
 	// Track content changes for incremental reindexing
@@ -743,9 +779,7 @@ func (n *Node) shardCatalogLoop() {
 		// Ensure the peer is in our shard ring
 		n.shards.AddNode(catalog.PeerID)
 		if catalog.NodeName != "" {
-			n.peerNamesMu.Lock()
-			n.peerNames[catalog.PeerID] = catalog.NodeName
-			n.peerNamesMu.Unlock()
+			n.setPeerName(catalog.PeerID, catalog.NodeName)
 		}
 		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
 	}
@@ -810,9 +844,7 @@ func (n *Node) handlePeerIndexDoc(senderPeerID string, doc *models.Document) err
 func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 	n.shards.AddNode(catalog.PeerID)
 	if catalog.NodeName != "" {
-		n.peerNamesMu.Lock()
-		n.peerNames[catalog.PeerID] = catalog.NodeName
-		n.peerNamesMu.Unlock()
+		n.setPeerName(catalog.PeerID, catalog.NodeName)
 	}
 	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "docs", catalog.DocCount)
 	return nil
