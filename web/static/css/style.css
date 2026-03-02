@@ -3905,10 +3905,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   font-variant-numeric: tabular-nums;
 }
 .lb-gold-count {
-  background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #f59e0b;
 }
 .lb-doc-label {
   font-size: 0.78em;
@@ -4151,10 +4148,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   font-family: 'Courier New', monospace;
 }
 [data-theme="crt"] .lb-gold-count {
-  background: none;
-  -webkit-background-clip: unset;
-  -webkit-text-fill-color: #33ff33;
-  background-clip: unset;
+  color: #33ff33;
 }
 [data-theme="crt"] .lb-name {
   text-shadow: 0 0 4px rgba(51,255,51,0.3);
@@ -4231,7 +4225,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
              lbModernGlow 4s ease-in-out infinite 0.8s;
 }
 [data-theme="modern"] .lb-gold-count {
-  background: linear-gradient(135deg, #a5b4fc, #6366f1, #4f46e5);
+  color: #818cf8;
 }
 [data-theme="modern"] .lb-silver {
   border-color: #6366f1;
@@ -4292,7 +4286,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   box-shadow: 0 2px 8px rgba(217,119,6,0.3);
 }
 [data-theme="light"] .lb-gold-count {
-  background: linear-gradient(135deg, #d97706, #b45309, #92400e);
+  color: #b45309;
 }
 [data-theme="light"] .lb-silver {
   border-color: #9ca3af;
@@ -4347,7 +4341,7 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   animation: lbStormAppear 0.6s ease both, lbStormLightning 5s ease-in-out infinite 1s;
 }
 [data-theme="storm"] .lb-gold-count {
-  background: linear-gradient(135deg, #7eb8da, #5a9abf, #3a7a9f);
+  color: #7eb8da;
 }
 [data-theme="storm"] .lb-silver {
   border-color: #5a8aaa;
