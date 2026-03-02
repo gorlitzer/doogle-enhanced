@@ -3,7 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"sync"
 	"time"
@@ -92,13 +92,13 @@ func (n *Node) init() error {
 		return fmt.Errorf("identity: %w", err)
 	}
 	n.peerID = peerID
-	log.Printf("node: peer ID = %s", peerID)
+	slog.Info("node: peer ID", "peer_id", peerID)
 
 	// 1b. Restore persisted node name (if not set via flag/config)
 	if n.cfg.NodeName == "" {
 		if saved := LoadNodeName(dataDir); saved != "" {
 			n.cfg.NodeName = saved
-			log.Printf("node: restored name = %q", saved)
+			slog.Info("node: restored name", "name", saved)
 		}
 	}
 
@@ -121,7 +121,7 @@ func (n *Node) init() error {
 			pidStr := pid.String()
 			n.shards.AddNode(pidStr)
 			h.ConnManager().Protect(pid, "doogle")
-			log.Printf("shard ring: added Doogle peer %s (total: %d)", pidStr[:12], n.shards.NodeCount())
+			slog.Debug("shard ring: added Doogle peer", "peer", pidStr[:12], "total", n.shards.NodeCount())
 		},
 	})
 	if err != nil {
@@ -185,7 +185,7 @@ func (n *Node) init() error {
 			n.peerNamesMu.Lock()
 			delete(n.peerNames, pid)
 			n.peerNamesMu.Unlock()
-			log.Printf("shard ring: removed Doogle peer %s (total: %d)", pid[:12], n.shards.NodeCount())
+			slog.Debug("shard ring: removed Doogle peer", "peer", pid[:12], "total", n.shards.NodeCount())
 		},
 	})
 
@@ -304,7 +304,7 @@ func (n *Node) Run() error {
 
 // Shutdown gracefully stops all subsystems.
 func (n *Node) Shutdown() {
-	log.Println("node: shutting down...")
+	slog.Info("node: shutting down")
 	n.cancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -319,7 +319,7 @@ func (n *Node) Shutdown() {
 	n.bleveIdx.Close()
 	n.badger.Close()
 
-	log.Println("node: shutdown complete")
+	slog.Info("node: shutdown complete")
 }
 
 // Status returns the current node status.
@@ -419,7 +419,7 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 
 	// Index the document locally
 	if err := n.indexer.Index(doc); err != nil {
-		log.Printf("node: index error: %v", err)
+		slog.Error("node: index error", "err", err)
 	}
 
 	// Record link graph edges
@@ -453,7 +453,7 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 			PeerID:    n.peerID.String(),
 		}
 		if err := n.gossip.Publish(n.ctx, ann); err != nil {
-			log.Printf("node: gossip publish error: %v", err)
+			slog.Error("node: gossip publish error", "err", err)
 		}
 	}
 }
@@ -485,7 +485,7 @@ func (n *Node) replicateDocument(doc *models.Document) {
 				Generation: n.genStore.Current(),
 			}
 			if _, err := p2p.ReplicateDocuments(n.ctx, n.host, peerID, req, 10*time.Second); err != nil {
-				log.Printf("node: replicate to %s error: %v", peerID.String()[:12], err)
+				slog.Error("node: replicate error", "peer", peerID.String()[:12], "err", err)
 			}
 		}(pid)
 	}
@@ -507,7 +507,7 @@ func (n *Node) recordLinks(doc *models.Document) {
 			IsCross:    link.IsExternal,
 		}
 		if err := n.linkStore.AddLink(fromID, toID, edge); err != nil {
-			log.Printf("node: record link error: %v", err)
+			slog.Error("node: record link error", "err", err)
 		}
 	}
 }
@@ -573,8 +573,7 @@ func (n *Node) shardCatalogLoop() {
 			n.peerNames[catalog.PeerID] = catalog.NodeName
 			n.peerNamesMu.Unlock()
 		}
-		log.Printf("shard catalog: received from %s [%s] (%d domains, %d docs, gen %d)",
-			catalog.PeerID[:12], catalog.NodeName, len(catalog.Domains), catalog.DocCount, catalog.Generation)
+		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
 	}
 }
 
@@ -594,7 +593,7 @@ func (n *Node) shardCatalogPublisher() {
 				Generation: n.genStore.Current(),
 			}
 			if err := n.gossip.PublishShardCatalog(n.ctx, catalog); err != nil {
-				log.Printf("node: shard catalog publish error: %v", err)
+				slog.Error("node: shard catalog publish error", "err", err)
 			}
 		case <-n.ctx.Done():
 			return
@@ -624,7 +623,7 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 		n.peerNames[catalog.PeerID] = catalog.NodeName
 		n.peerNamesMu.Unlock()
 	}
-	log.Printf("shard protocol: catalog from %s [%s] (%d docs)", catalog.PeerID[:12], catalog.NodeName, catalog.DocCount)
+	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "docs", catalog.DocCount)
 	return nil
 }
 
@@ -637,7 +636,7 @@ func (n *Node) handleReplicateRequest(req *p2p.ReplicateRequest) (*p2p.Replicate
 		}
 
 		if err := n.indexer.Index(doc); err != nil {
-			log.Printf("replicate: index error for %s: %v", doc.URL, err)
+			slog.Error("replicate: index error", "url", doc.URL, "err", err)
 			continue
 		}
 		accepted++
@@ -673,7 +672,7 @@ func (n *Node) ReportURL(rawURL, reason, detail string) error {
 
 	// Broadcast to peers
 	if err := n.gossip.PublishSpamReport(n.ctx, report); err != nil {
-		log.Printf("node: spam report publish error: %v", err)
+		slog.Error("node: spam report publish error", "err", err)
 	}
 
 	return nil
@@ -695,12 +694,12 @@ func (n *Node) spamReportLoop() {
 
 		// Don't accept reports from quarantined peers
 		if n.trustManager.IsQuarantined(report.ReporterID) {
-			log.Printf("trust: ignoring report from quarantined peer %s", report.ReporterID[:12])
+			slog.Warn("trust: ignoring report from quarantined peer", "peer", report.ReporterID[:12])
 			continue
 		}
 
 		if _, err := n.trustManager.HandleReport(report); err != nil {
-			log.Printf("trust: error handling peer report: %v", err)
+			slog.Error("trust: error handling peer report", "err", err)
 		}
 	}
 }

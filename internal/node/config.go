@@ -12,6 +12,7 @@ import (
 // Config holds all node configuration.
 type Config struct {
 	NodeName string        `yaml:"node_name"`
+	LogLevel string        `yaml:"log_level"`
 	P2P      P2PConfig     `yaml:"p2p"`
 	API      APIConfig     `yaml:"api"`
 	Crawler  CrawlerConfig `yaml:"crawler"`
@@ -77,6 +78,7 @@ type SearchConfig struct {
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() *Config {
 	return &Config{
+		LogLevel: "info",
 		P2P: P2PConfig{
 			Port:                 7001,
 			MDNS:                 true,
@@ -161,6 +163,7 @@ func ParseFlags(cfg *Config) {
 	flag.BoolVar(&cfg.P2P.MDNS, "mdns", cfg.P2P.MDNS, "Enable mDNS discovery")
 	flag.BoolVar(&cfg.P2P.DHTDiscovery, "dht-discovery", cfg.P2P.DHTDiscovery, "Enable DHT-based peer discovery via IPFS bootstrap nodes")
 	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
+	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level: debug, info, warn, error")
 	flag.Parse()
 
 	// If a config file was specified, reload

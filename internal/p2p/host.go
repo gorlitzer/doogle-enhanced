@@ -3,7 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -75,9 +75,9 @@ func NewHost(ctx context.Context, privKey crypto.PrivKey, port int) (host.Host, 
 		return nil, fmt.Errorf("create libp2p host: %w", err)
 	}
 
-	log.Printf("libp2p host started: %s", h.ID())
+	slog.Info("libp2p host started", "peer_id", h.ID())
 	for _, addr := range h.Addrs() {
-		log.Printf("  listening on: %s/p2p/%s", addr, h.ID())
+		slog.Info("listening", "addr", fmt.Sprintf("%s/p2p/%s", addr, h.ID()))
 	}
 
 	return h, nil

@@ -7,7 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,8 +22,6 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-
 	// Check for subcommands before flag.Parse()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -43,13 +41,29 @@ func main() {
 	cfg := node.DefaultConfig()
 	node.ParseFlags(cfg)
 
-	log.Println("=== Doogle v2 — P2P Decentralized Search Engine ===")
-	log.Printf("P2P port: %d | API port: %d | Data dir: %s", cfg.P2P.Port, cfg.API.Port, cfg.Storage.DataDir)
+	// Set up structured logging
+	var level slog.Level
+	switch strings.ToLower(cfg.LogLevel) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(handler))
+
+	slog.Info("Doogle v2 — P2P Decentralized Search Engine")
+	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "log_level", cfg.LogLevel)
 
 	// Create and initialize the node
 	n, err := node.New(cfg)
 	if err != nil {
-		log.Fatalf("failed to create node: %v", err)
+		slog.Error("failed to create node", "err", err)
+		os.Exit(1)
 	}
 
 	// Graceful shutdown on SIGINT/SIGTERM
@@ -57,14 +71,15 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
-		log.Printf("received signal: %v", sig)
+		slog.Info("received signal, shutting down", "signal", sig)
 		n.Shutdown()
 		os.Exit(0)
 	}()
 
 	// Run the node (blocks on HTTP server)
 	if err := n.Run(); err != nil {
-		log.Fatalf("node error: %v", err)
+		slog.Error("node error", "err", err)
+		os.Exit(1)
 	}
 }
 
