@@ -378,7 +378,7 @@ func (n *Node) Status() *models.NodeStatus {
 		}
 	}
 
-	return &models.NodeStatus{
+	status := &models.NodeStatus{
 		PeerID:         n.peerID.String(),
 		NodeName:       n.cfg.NodeName,
 		Addrs:          multiaddrsToStrings(n.host),
@@ -390,6 +390,18 @@ func (n *Node) Status() *models.NodeStatus {
 		Uptime:         time.Since(n.startedAt).Round(time.Second).String(),
 		StartedAt:      n.startedAt,
 	}
+
+	// Fleet info.
+	if n.coordinator != nil {
+		status.FleetRole = "coordinator"
+		status.FleetAPIToken = n.fleetAPIToken
+		status.FleetSecretFile = filepath.Join(n.cfg.Storage.DataDir, "fleet.secret")
+	} else if n.worker != nil {
+		status.FleetRole = "worker"
+		status.FleetCoordinatorID = n.worker.CoordinatorID().String()
+	}
+
+	return status
 }
 
 // CrawlerInfo returns crawler configuration and stats for the admin API.

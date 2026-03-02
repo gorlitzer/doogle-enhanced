@@ -83,6 +83,12 @@ type NodeStatus struct {
 	URLsInQueue    int       `json:"urls_in_queue"`
 	Uptime         string    `json:"uptime"`
 	StartedAt      time.Time `json:"started_at"`
+
+	// Fleet (omitted when standalone)
+	FleetRole          string `json:"fleet_role,omitempty"`           // "coordinator" or "worker"
+	FleetAPIToken      string `json:"fleet_api_token,omitempty"`      // coordinator only
+	FleetCoordinatorID string `json:"fleet_coordinator_id,omitempty"` // worker only
+	FleetSecretFile    string `json:"fleet_secret_file,omitempty"`    // coordinator only
 }
 
 // CrawlerInfo holds crawler-specific stats for the admin dashboard.
