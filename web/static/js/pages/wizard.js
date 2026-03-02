@@ -1724,9 +1724,17 @@ function renderWelcome(el) {
         </svg>
       </div>
       <h1>Welcome to <a href="#/" class="wizard-doogle-link" id="wizard-doogle">Doogle</a></h1>
-      <p>Doogle is a decentralized search engine — no central server, no tracking, no gatekeepers. Every node crawls a slice of the web and shares what it finds with the network.</p>
-      <p>This wizard will walk you through <strong>a few quick steps</strong>: name your node, ${fleetRole ? 'review your fleet setup, ' : ''}choose topics to crawl, review settings, and launch. It takes about a minute, and you can always change everything later.</p>
-      <p class="wizard-append-note" id="wizard-append-note" style="display:none">You already have indexed data. Running the wizard again will <strong>add</strong> new topics to your existing index — nothing gets deleted.</p>
+      <p>A decentralized search engine — no central server, no tracking, no gatekeepers. Every node crawls a slice of the web and shares what it finds with the network.</p>
+
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:24px auto;max-width:480px">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('edit', 14, 'var(--accent)')} Name your node</span>
+        ${fleetRole ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('network', 14, 'var(--accent)')} Fleet setup</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('globe', 14, 'var(--accent)')} Choose topics</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.88em;color:var(--text-secondary)">${icon('zap', 14, 'var(--accent)')} Launch</span>
+      </div>
+
+      <p style="font-size:0.9em;color:var(--text-tertiary);margin-bottom:28px">Takes about a minute. You can change everything later.</p>
+      <p class="wizard-append-note" id="wizard-append-note" style="display:none">You already have indexed data. Running the wizard again will <strong>add</strong> new topics — nothing gets deleted.</p>
       <button class="btn btn-primary wizard-begin-btn" id="wizard-begin">Begin Setup</button>
     </div>
   `;
