@@ -307,8 +307,8 @@ export class SpotlightDiagram {
       // Spotlight-style: panels fill available space in a column grid
       // Components specify { col, row } where col is the grid column
       // and row is vertical position within that column (0-indexed)
-      const pad = 12;
-      const gap = 10;
+      const pad = 20;
+      const gap = 18;
 
       // Group components by column
       const colGroups = new Map();
@@ -609,7 +609,7 @@ export class SpotlightDiagram {
 
   _drawGrid(ctx, W, H) {
     ctx.save();
-    ctx.strokeStyle = hexToRgba(getCSS('--border'), 0.15);
+    ctx.strokeStyle = hexToRgba(getCSS('--border'), 0.08);
     ctx.lineWidth = 0.5;
     const step = 40;
     for (let x = step; x < W; x += step) {
@@ -638,9 +638,6 @@ export class SpotlightDiagram {
       const tp = this._edgePoint(to, from);
 
       ctx.save();
-      ctx.strokeStyle = hexToRgba(getCSS('--border-light'), 0.4);
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
 
       const dx = tp.x - fp.x;
       const dy = tp.y - fp.y;
@@ -649,6 +646,18 @@ export class SpotlightDiagram {
       const cp2x = fp.x + dx * 0.6;
       const cp2y = tp.y;
 
+      // Subtle glow layer
+      ctx.strokeStyle = hexToRgba(getCSS('--accent'), 0.08);
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(fp.x, fp.y);
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tp.x, tp.y);
+      ctx.stroke();
+
+      // Main connection line
+      ctx.strokeStyle = hexToRgba(getCSS('--border-light'), 0.45);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
       ctx.beginPath();
       ctx.moveTo(fp.x, fp.y);
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tp.x, tp.y);
@@ -657,11 +666,12 @@ export class SpotlightDiagram {
 
       // Arrow head
       const angle = Math.atan2(tp.y - cp2y, tp.x - cp2x);
-      ctx.fillStyle = hexToRgba(getCSS('--border-light'), 0.5);
+      const arrowLen = 9;
+      ctx.fillStyle = hexToRgba(getCSS('--border-light'), 0.55);
       ctx.beginPath();
       ctx.moveTo(tp.x, tp.y);
-      ctx.lineTo(tp.x - 8 * Math.cos(angle - 0.4), tp.y - 8 * Math.sin(angle - 0.4));
-      ctx.lineTo(tp.x - 8 * Math.cos(angle + 0.4), tp.y - 8 * Math.sin(angle + 0.4));
+      ctx.lineTo(tp.x - arrowLen * Math.cos(angle - 0.35), tp.y - arrowLen * Math.sin(angle - 0.35));
+      ctx.lineTo(tp.x - arrowLen * Math.cos(angle + 0.35), tp.y - arrowLen * Math.sin(angle + 0.35));
       ctx.closePath();
       ctx.fill();
 
@@ -731,12 +741,27 @@ export class SpotlightDiagram {
 
       const alpha = t < 0.1 ? t / 0.1 : t > 0.9 ? (1 - t) / 0.1 : 1;
 
+      // Trail (3 fading dots behind the particle)
+      for (let ti = 3; ti >= 1; ti--) {
+        const tt = Math.max(0, t - ti * 0.018);
+        const tit = 1 - tt;
+        const tx = tit*tit*tit*fp.x + 3*tit*tit*tt*cp1x + 3*tit*tt*tt*cp2x + tt*tt*tt*tp.x;
+        const ty = tit*tit*tit*fp.y + 3*tit*tit*tt*cp1y + 3*tit*tt*tt*cp2y + tt*tt*tt*tp.y;
+        ctx.save();
+        ctx.globalAlpha = alpha * (0.15 - ti * 0.035);
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 3 - ti * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       // Glow
       ctx.save();
-      ctx.globalAlpha = alpha * 0.3;
+      ctx.globalAlpha = alpha * 0.35;
       ctx.fillStyle = accent;
       ctx.shadowColor = accent;
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 12;
       ctx.beginPath();
       ctx.arc(x, y, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -745,9 +770,9 @@ export class SpotlightDiagram {
       // Core
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = accent;
+      ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
