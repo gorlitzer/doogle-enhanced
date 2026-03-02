@@ -155,6 +155,8 @@ func (d *Discovery) StartFindingPeers(ctx context.Context) {
 
 func (d *Discovery) findAndConnectPeers(ctx context.Context) {
 	// Connection limits are handled by the connmgr; always search for Doogle peers.
+	log.Printf("DHT discovery: searching for peers under %q...", d.cfg.DHTRendezvous)
+
 	findCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -164,14 +166,17 @@ func (d *Discovery) findAndConnectPeers(ctx context.Context) {
 		return
 	}
 
+	found := 0
 	for pi := range peerCh {
 		if pi.ID == d.host.ID() {
 			continue
 		}
+		found++
 		if d.host.Network().Connectedness(pi.ID) == network.Connected {
 			continue
 		}
 
+		log.Printf("DHT discovery: found peer %s, dialing...", pi.ID.String()[:12])
 		connCtx, connCancel := context.WithTimeout(ctx, 10*time.Second)
 		err := d.host.Connect(connCtx, pi)
 		connCancel()
@@ -184,6 +189,7 @@ func (d *Discovery) findAndConnectPeers(ctx context.Context) {
 			}
 		}
 	}
+	log.Printf("DHT discovery: round complete, found %d peer(s)", found)
 }
 
 // DHT returns the underlying Kademlia DHT.
