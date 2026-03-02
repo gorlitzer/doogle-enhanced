@@ -13,12 +13,15 @@ import (
 )
 
 // IndexDocHandler processes incoming documents forwarded for indexing.
-type IndexDocHandler func(doc *models.Document) error
+// senderPeerID is the remote peer that opened the stream.
+type IndexDocHandler func(senderPeerID string, doc *models.Document) error
 
 // RegisterIndexProtocol sets up the /doogle/index/1.0.0 stream handler.
 func RegisterIndexProtocol(h host.Host, handler IndexDocHandler) {
 	h.SetStreamHandler(IndexProtocol, func(s network.Stream) {
 		defer s.Close()
+
+		senderPeerID := s.Conn().RemotePeer().String()
 
 		reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 		data, err := reader.ReadBytes('\n')
@@ -33,7 +36,7 @@ func RegisterIndexProtocol(h host.Host, handler IndexDocHandler) {
 			return
 		}
 
-		if err := handler(&doc); err != nil {
+		if err := handler(senderPeerID, &doc); err != nil {
 			log.Printf("index protocol: handler error: %v", err)
 			s.Write([]byte(`{"status":"error"}` + "\n"))
 			return

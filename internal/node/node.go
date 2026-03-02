@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -235,6 +236,17 @@ func (n *Node) init() error {
 
 	// 12. Search engines (shard-aware distributed search)
 	n.localEng = search.NewEngine(bleveIdx)
+	n.localEng.QuarantinedPeersFn = func() []string {
+		quarantined, err := n.trustStore.QuarantinedPeers()
+		if err != nil {
+			return nil
+		}
+		ids := make([]string, 0, len(quarantined))
+		for _, rep := range quarantined {
+			ids = append(ids, rep.PeerID)
+		}
+		return ids
+	}
 	n.search = search.NewDistributedSearch(
 		h, n.localEng, n.shards,
 		n.cfg.Index.ReplicationFactor,
@@ -282,7 +294,9 @@ func (n *Node) init() error {
 			n.search.LocalName = name
 			_ = SaveNodeName(dataDir, name)
 		},
-		DataDir: dataDir,
+		DataDir:        dataDir,
+		StorageFn:      n.StorageInfo,
+		LeaderboardFn:  n.Leaderboard,
 	}
 
 	// Wire fleet deps if coordinator.
@@ -386,6 +400,8 @@ func (n *Node) Status() *models.NodeStatus {
 		}
 	}
 
+	localDocs, peerDocs, _ := n.bleveIdx.CountByPeer(n.peerID.String())
+
 	status := &models.NodeStatus{
 		PeerID:         n.peerID.String(),
 		NodeName:       n.cfg.NodeName,
@@ -397,6 +413,8 @@ func (n *Node) Status() *models.NodeStatus {
 		URLsInQueue:    n.scheduler.Pending(),
 		Uptime:         time.Since(n.startedAt).Round(time.Second).String(),
 		StartedAt:      n.startedAt,
+		LocalDocs:      localDocs,
+		PeerDocs:       peerDocs,
 	}
 
 	// Fleet info.
@@ -432,6 +450,95 @@ func (n *Node) CrawlerInfo() *models.CrawlerInfo {
 // IndexerStats returns indexer statistics for the admin API.
 func (n *Node) IndexerStats() *models.IndexerInfo {
 	return n.indexer.Stats()
+}
+
+// StorageInfo returns disk usage stats for the data directory.
+func (n *Node) StorageInfo() (*models.StorageInfo, error) {
+	dataDir := n.cfg.Storage.DataDir
+	blevePath := filepath.Join(dataDir, n.cfg.Index.BleveDir)
+	badgerPath := filepath.Join(dataDir, n.cfg.Storage.BadgerDir)
+
+	bleveBytes := dirSize(blevePath)
+	badgerBytes := dirSize(badgerPath)
+	totalBytes := dirSize(dataDir)
+
+	otherBytes := totalBytes - bleveBytes - badgerBytes
+	if otherBytes < 0 {
+		otherBytes = 0
+	}
+
+	return &models.StorageInfo{
+		TotalBytes:  totalBytes,
+		BleveBytes:  bleveBytes,
+		BadgerBytes: badgerBytes,
+		OtherBytes:  otherBytes,
+		FreeBytes:   freeSpace(dataDir),
+		DataDir:     dataDir,
+	}, nil
+}
+
+// Leaderboard returns peer contribution rankings.
+func (n *Node) Leaderboard() (*models.LeaderboardResponse, error) {
+	counts, err := n.bleveIdx.DocCountsByPeer()
+	if err != nil {
+		return nil, fmt.Errorf("doc counts: %w", err)
+	}
+
+	selfID := n.peerID.String()
+
+	// Merge orphan docs (empty key) into self
+	if orphan, ok := counts[""]; ok {
+		counts[selfID] += orphan
+		delete(counts, "")
+	}
+
+	// Fetch trust data for enrichment
+	reps, _ := n.trustStore.AllReputations()
+	repMap := make(map[string]*models.PeerReputation, len(reps))
+	for i := range reps {
+		repMap[reps[i].PeerID] = &reps[i]
+	}
+
+	totalDocs := 0
+	explorers := make([]models.ExplorerStats, 0, len(counts))
+	for peerID, docCount := range counts {
+		totalDocs += docCount
+
+		es := models.ExplorerStats{
+			PeerID:   peerID,
+			DocCount: docCount,
+			IsLocal:  peerID == selfID,
+		}
+
+		// Node name
+		if peerID == selfID {
+			es.NodeName = n.cfg.NodeName
+		} else {
+			es.NodeName = n.PeerName(peerID)
+		}
+
+		// Trust enrichment
+		if rep, ok := repMap[peerID]; ok {
+			es.TrustScore = rep.TrustScore
+			es.FirstSeen = rep.FirstSeen
+			es.LastSeen = rep.LastSeen
+		} else {
+			es.TrustScore = 0.5 // default
+		}
+
+		explorers = append(explorers, es)
+	}
+
+	// Sort by DocCount descending
+	sort.Slice(explorers, func(i, j int) bool {
+		return explorers[i].DocCount > explorers[j].DocCount
+	})
+
+	return &models.LeaderboardResponse{
+		Explorers:   explorers,
+		TotalDocs:   totalDocs,
+		LocalPeerID: selfID,
+	}, nil
 }
 
 // PeersInfo returns detailed info about connected Doogle peers.
@@ -480,6 +587,9 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 			})
 		}
 	}
+
+	// Stamp origin: this document was crawled by us
+	doc.OriginPeerID = n.peerID.String()
 
 	// Index the document locally
 	if err := n.indexer.Index(doc); err != nil {
@@ -643,25 +753,39 @@ func (n *Node) shardCatalogLoop() {
 
 // shardCatalogPublisher periodically publishes our shard catalog.
 func (n *Node) shardCatalogPublisher() {
+	// Publish once shortly after startup so peers learn our name immediately
+	// rather than waiting for the first 60-second tick.
+	select {
+	case <-time.After(5 * time.Second):
+		n.publishShardCatalog()
+	case <-n.ctx.Done():
+		return
+	}
+
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			docCount, _ := n.bleveIdx.DocCount()
-			catalog := &p2p.ShardCatalog{
-				PeerID:     n.peerID.String(),
-				NodeName:   n.cfg.NodeName,
-				DocCount:   docCount,
-				Generation: n.genStore.Current(),
-			}
-			if err := n.gossip.PublishShardCatalog(n.ctx, catalog); err != nil {
-				slog.Error("node: shard catalog publish error", "err", err)
-			}
+			n.publishShardCatalog()
 		case <-n.ctx.Done():
 			return
 		}
+	}
+}
+
+// publishShardCatalog broadcasts this node's shard catalog to peers.
+func (n *Node) publishShardCatalog() {
+	docCount, _ := n.bleveIdx.DocCount()
+	catalog := &p2p.ShardCatalog{
+		PeerID:     n.peerID.String(),
+		NodeName:   n.cfg.NodeName,
+		DocCount:   docCount,
+		Generation: n.genStore.Current(),
+	}
+	if err := n.gossip.PublishShardCatalog(n.ctx, catalog); err != nil {
+		slog.Error("node: shard catalog publish error", "err", err)
 	}
 }
 
@@ -676,7 +800,10 @@ func (n *Node) handlePeerCrawlTask(task *models.CrawlTask) error {
 	return nil
 }
 
-func (n *Node) handlePeerIndexDoc(doc *models.Document) error {
+func (n *Node) handlePeerIndexDoc(senderPeerID string, doc *models.Document) error {
+	if doc.OriginPeerID == "" {
+		doc.OriginPeerID = senderPeerID
+	}
 	return n.indexer.Index(doc)
 }
 
@@ -691,12 +818,17 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 	return nil
 }
 
-func (n *Node) handleReplicateRequest(req *p2p.ReplicateRequest) (*p2p.ReplicateResponse, error) {
+func (n *Node) handleReplicateRequest(senderPeerID string, req *p2p.ReplicateRequest) (*p2p.ReplicateResponse, error) {
 	accepted := 0
 	for _, doc := range req.Documents {
 		// Skip documents from flagged domains
 		if n.trustManager.IsDomainFlagged(doc.Domain) {
 			continue
+		}
+
+		// Stamp origin if the sending peer didn't set it (backward compat)
+		if doc.OriginPeerID == "" {
+			doc.OriginPeerID = senderPeerID
 		}
 
 		if err := n.indexer.Index(doc); err != nil {

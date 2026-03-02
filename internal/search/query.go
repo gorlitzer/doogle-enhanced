@@ -18,6 +18,8 @@ var (
 	beforeRe   = regexp.MustCompile(`(?i)before:(\S+)`)
 	afterRe    = regexp.MustCompile(`(?i)after:(\S+)`)
 	hasRe      = regexp.MustCompile(`(?i)has:(\S+)`)
+	peerRe     = regexp.MustCompile(`(?i)peer:(\S+)`)
+	negPeerRe  = regexp.MustCompile(`(?i)-peer:(\S+)`)
 )
 
 // stopWords to remove from query terms.
@@ -216,6 +218,19 @@ func ParseQuery(raw string) *models.ParsedQuery {
 		pq.After = m[1]
 	}
 	remaining = afterRe.ReplaceAllString(remaining, " ")
+
+	// 2e. Extract -peer:PEERID (must come before generic -term handling)
+	negPeerMatches := negPeerRe.FindAllStringSubmatch(remaining, -1)
+	for _, m := range negPeerMatches {
+		pq.ExcludePeers = append(pq.ExcludePeers, m[1])
+	}
+	remaining = negPeerRe.ReplaceAllString(remaining, " ")
+
+	// 2f. Extract peer:PEERID
+	if m := peerRe.FindStringSubmatch(remaining); len(m) > 1 {
+		pq.PeerFilter = m[1]
+	}
+	remaining = peerRe.ReplaceAllString(remaining, " ")
 
 	if m := hasRe.FindStringSubmatch(remaining); len(m) > 1 {
 		if strings.ToLower(m[1]) == "https" {

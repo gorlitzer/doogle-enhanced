@@ -48,6 +48,9 @@ type IndexDocument struct {
 	DomainAuthorityScore float64 `json:"domain_authority_score"`
 	URLQualityScore      float64 `json:"url_quality_score"`
 
+	// Provenance — which peer originally indexed this document
+	OriginPeerID string `json:"origin_peer_id"`
+
 	// Index generation (for incremental reindexing)
 	Generation uint64 `json:"generation"`
 

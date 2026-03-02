@@ -59,6 +59,8 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Get("/documents", DocumentsHandler(deps))
 			r.Get("/documents/{id}", DocumentDetailHandler(deps))
 			r.Get("/trust", TrustHandler(deps))
+			r.Get("/storage", StorageHandler(deps))
+			r.Get("/leaderboard", LeaderboardHandler(deps))
 			r.Get("/dump", DumpHandler(deps))
 			r.Post("/restore", RestoreHandler(deps))
 			r.Delete("/data", DeleteDataHandler(deps))

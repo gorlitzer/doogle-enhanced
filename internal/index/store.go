@@ -14,6 +14,9 @@ type Store interface {
 	ListAll(callback func(doc *IndexDocument) bool) error
 	ListIDsByDomain(domain string) ([]string, error)
 	ListDomains() ([]string, error)
+	ListRecentByPeer(peerID string, offset, limit int) ([]IndexDocument, int, error)
+	CountByPeer(selfPeerID string) (local int, remote int, err error)
+	DocCountsByPeer() (map[string]int, error)
 	Close() error
 }
 

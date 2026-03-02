@@ -56,6 +56,9 @@ type Document struct {
 	// PageRank (set by PageRank computer)
 	PageRankScore float64 `json:"pagerank_score"`
 
+	// Provenance — which peer originally indexed this document
+	OriginPeerID string `json:"origin_peer_id,omitempty"`
+
 	// URL quality (set by indexer)
 	URLQualityScore float64 `json:"url_quality_score"`
 

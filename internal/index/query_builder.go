@@ -255,5 +255,19 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		boolQ.AddMust(httpsQ)
 	}
 
+	// Peer filter: restrict to specific origin peer
+	if pq.PeerFilter != "" {
+		peerQ := bleve.NewTermQuery(pq.PeerFilter)
+		peerQ.SetField("origin_peer_id")
+		boolQ.AddMust(peerQ)
+	}
+
+	// Exclude peers: exclude specific origin peers
+	for _, pid := range pq.ExcludePeers {
+		exPeerQ := bleve.NewTermQuery(pid)
+		exPeerQ.SetField("origin_peer_id")
+		boolQ.AddMustNot(exPeerQ)
+	}
+
 	return boolQ
 }
