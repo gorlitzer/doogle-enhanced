@@ -290,8 +290,8 @@ make setup`, 'bash')}
 const archCardDetails = [
   // Application layer
   { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 10 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
-  { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
-  { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
+  { title: 'Indexer', html: `<p>12-signal scoring pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, domain authority, URL quality analysis, readability extraction (Arc90 algorithm), PageRank, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
+  { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Intent classification, synonym expansion (100+ pairs), spelling correction ("Did you mean?"), phrases, fuzzy matching, boolean operators, and site: filters. Domain diversity (max 2 per domain in top 10) and passage-based snippets with highlights. Results ranked by <code>BM25 * StaticScore * freshnessDecay * intentMultiplier</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 6 switchable themes.</p>` },
   // P2P layer
   { title: 'Kademlia DHT', html: `<p>Distributed peer routing via <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a>. Enables internet-wide peer discovery and routing. By default, connects to IPFS public bootstrap peers and uses <code>RoutingDiscovery</code> to advertise under <code>doogle/network/v2</code> — peers find each other automatically within 30–60 seconds. Also supports mDNS for LAN discovery and manual <code>--bootstrap</code>. Part of <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
@@ -390,14 +390,14 @@ function renderArchitecture(el) {
               ${icon('cpu', 18, 'var(--accent)')}
               <div>
                 <strong>Indexer</strong>
-                <p>NLP pipeline: language detect, keyword extract, E-E-A-T scoring, spam filter, batch indexing.</p>
+                <p>12-signal scoring, domain authority, URL quality, readability extraction (Arc90), PageRank, spam filter, batch indexing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="2" style="cursor:pointer">
               ${icon('search', 18, 'var(--accent)')}
               <div>
                 <strong>Search</strong>
-                <p>BM25 full-text. Query parsing (phrases, fuzzy). Shard-aware distributed routing.</p>
+                <p>BM25 full-text. Intent classification, synonym expansion, spelling correction, domain diversity, passage snippets. Shard-aware routing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="3" style="cursor:pointer">
@@ -1225,7 +1225,7 @@ function renderConfig(el) {
             <tr><th>Component</th><th>Minimum</th><th>Recommended</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr><td>OS</td><td colspan="2">macOS (tested), Linux / Windows (untested)</td><td>Go cross-compiles; see <a href="#" onclick="document.querySelector('[data-tab=platforms]').click();return false">Platforms</a></td></tr>
+            <tr><td>OS</td><td colspan="2">macOS (verified on Apple Silicon &amp; Intel), Linux / Windows (untested)</td><td>Go cross-compiles; see <a href="#" onclick="document.querySelector('[data-tab=platforms]').click();return false">Platforms</a></td></tr>
             <tr><td>Go</td><td colspan="2">1.22+</td><td>Build from source only</td></tr>
             <tr><td>CPU</td><td>1 core</td><td>2-4 cores</td><td>More cores = faster crawling</td></tr>
             <tr><td>RAM</td><td>256 MB</td><td>512 MB - 1 GB</td><td>Scales with index size + workers</td></tr>
@@ -1407,7 +1407,7 @@ const testedPlatforms = [
     color: 'var(--accent)',
     devices: [
       { device: 'Apple Silicon Mac', os: 'macOS 15 Sequoia', arch: 'arm64', status: 'verified', notes: 'Primary development platform. All features tested.' },
-      { device: 'Intel Mac', os: 'macOS', arch: 'amd64', status: 'untested', notes: 'Should build fine via Go. Not yet tested — help wanted!' },
+      { device: 'Intel Mac', os: 'macOS', arch: 'amd64', status: 'verified', notes: 'Tested and confirmed working.' },
     ],
   },
   {
@@ -1495,7 +1495,7 @@ function renderPlatforms(el) {
         ${icon('cpu', 24, 'var(--green)')}
         <h2>Build Targets</h2>
       </div>
-      <p class="docs-section-desc">Doogle compiles to a single binary. Go supports cross-compilation out of the box, but we've only verified the target we develop on. The rest should compile fine — we just haven't run them yet.</p>
+      <p class="docs-section-desc">Doogle compiles to a single binary. Go supports cross-compilation out of the box. We've verified macOS on both Apple Silicon and Intel. The rest should compile fine — we just haven't run them yet.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -1503,7 +1503,7 @@ function renderPlatforms(el) {
           </thead>
           <tbody>
             <tr><td>darwin</td><td>arm64</td><td><span class="badge badge-green">verified</span></td><td>Apple Silicon Macs — primary dev target</td></tr>
-            <tr><td>darwin</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Intel Macs</td></tr>
+            <tr><td>darwin</td><td>amd64</td><td><span class="badge badge-green">verified</span></td><td>Intel Macs — tested and confirmed</td></tr>
             <tr><td>linux</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Most common server/desktop target</td></tr>
             <tr><td>linux</td><td>arm64</td><td><span class="badge badge-amber">untested</span></td><td>Raspberry Pi 4/5, ARM servers</td></tr>
             <tr><td>windows</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Native Windows build</td></tr>
@@ -1549,7 +1549,7 @@ GOOS=windows GOARCH=amd64 go build -o doogle.exe ./cmd/doogle`, 'bash')}
         ${icon('heart', 24, 'var(--red)')}
         <h2>Help Us Test</h2>
       </div>
-      <p class="docs-section-desc">We've only verified Doogle on macOS (Apple Silicon) so far. If you run it on Linux, Windows, Raspberry Pi, or anything else — we'd love to hear about it.</p>
+      <p class="docs-section-desc">We've verified Doogle on macOS (Apple Silicon and Intel). If you run it on Linux, Windows, Raspberry Pi, or anything else — we'd love to hear about it.</p>
       <div class="docs-env-grid">
         ${infoCard('code', 'Run It', 'Build from source or use Docker on your platform. Try crawling, searching, and multi-node P2P.', 'var(--accent)')}
         ${infoCard('megaphone', 'Report Back', 'Open an issue or PR on GitHub with your platform, what worked, and what didn\'t. We\'ll mark it as verified.', 'var(--green)')}
