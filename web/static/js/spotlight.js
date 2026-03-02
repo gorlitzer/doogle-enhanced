@@ -94,8 +94,14 @@ function drawBarGauge(ctx, x, y, w, h, value, max, color, label) {
     ctx.fillStyle = getCSS('--text-muted');
     ctx.font = '9px system-ui';
     ctx.textAlign = 'left';
-    ctx.fillText(label, x, y - 3);
+    ctx.fillText(label, x, y - 8);
   }
+
+  // Value text on right (above bar, aligned with label)
+  ctx.fillStyle = getCSS('--canvas-text-bold');
+  ctx.font = 'bold 9px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText(formatNum(value), x + w, y - 8);
 
   // Background
   roundRect(ctx, x, y, w, h, 3);
@@ -117,12 +123,6 @@ function drawBarGauge(ctx, x, y, w, h, value, max, color, label) {
     ctx.fill();
     ctx.restore();
   }
-
-  // Value text on right
-  ctx.fillStyle = getCSS('--canvas-text-bold');
-  ctx.font = 'bold 9px system-ui';
-  ctx.textAlign = 'right';
-  ctx.fillText(formatNum(value), x + w, y - 3);
 }
 
 /** 3D cylinder gauge for storage */
@@ -770,7 +770,7 @@ export class SpotlightDiagram {
       // Core
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = getCSS('--canvas-text-bold');
       ctx.beginPath();
       ctx.arc(x, y, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -944,7 +944,7 @@ export class SpotlightDiagram {
     if (tipY < 8) tipY = box.y + box.h + 10;
 
     ctx.fillStyle = getCSS('--canvas-tooltip-bg');
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowColor = hexToRgba(getCSS('--bg-primary'), 0.7);
     ctx.shadowBlur = 16;
     roundRect(ctx, tipX, tipY, maxW, tipH, 6);
     ctx.fill();
@@ -958,5 +958,60 @@ export class SpotlightDiagram {
       ctx.fillText(allLines[i], tipX + 12, tipY + 18 + i * 18);
     }
     ctx.restore();
+  }
+}
+
+// ============================================================
+// MOBILE CARD FALLBACK — replaces canvas below MOBILE_BP
+// ============================================================
+const HEALTH_COLORS = { green: 'var(--green)', amber: 'var(--amber)', red: 'var(--red)' };
+
+export function renderMobileCards(container, boxes, navRoutes) {
+  container.innerHTML = '';
+  for (const box of boxes) {
+    const route = navRoutes && navRoutes[box.id];
+    const card = document.createElement(route ? 'a' : 'div');
+    card.className = 'mobile-card';
+    if (route) { card.href = route; card.style.textDecoration = 'none'; card.style.color = 'inherit'; }
+
+    const dot = HEALTH_COLORS[box.health] || HEALTH_COLORS.green;
+    const gauges = box.gauges || [];
+    const metrics = box.metrics || [];
+
+    // Pick primary gauge — first counter or first ring
+    const primary = gauges.find(g => g.type === 'counter') || gauges[0];
+    let primaryHTML = '';
+    if (primary) {
+      const val = primary.max != null && primary.max <= 1
+        ? (primary.max > 0 ? ((Math.min(1, primary.value / primary.max) * 100).toFixed(0) + '%') : '0%')
+        : formatNum(primary.value);
+      primaryHTML = `
+        <div class="mc-primary" style="color:${primary.color || 'var(--accent)'}">${val}</div>
+        <div class="mc-primary-label">${primary.label || ''}</div>
+      `;
+    }
+
+    // Secondary gauges (skip the primary)
+    const secondary = gauges.filter(g => g !== primary);
+    let secHTML = '';
+    for (const g of secondary) {
+      const val = g.max != null && g.max <= 1
+        ? (g.max > 0 ? ((Math.min(1, g.value / g.max) * 100).toFixed(0) + '%') : '0%')
+        : formatNum(g.value);
+      secHTML += `<div>${g.label || ''}: ${val}</div>`;
+    }
+    for (const m of metrics) {
+      secHTML += `<div>${m}</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="mc-header">
+        <span class="mc-dot" style="background:${dot}"></span>
+        <span class="mc-label">${box.label || box.id}</span>
+      </div>
+      ${primaryHTML}
+      ${secHTML ? `<div class="mc-secondary">${secHTML}</div>` : ''}
+    `;
+    container.appendChild(card);
   }
 }
