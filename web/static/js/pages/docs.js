@@ -267,7 +267,7 @@ make setup`, 'bash')}
           `)}
           ${stepCard(2, 'Start the node', codeBlock(`make run`, 'bash'))}
           ${stepCard(3, 'Open the dashboard', `
-            <p>Open <a href="http://localhost:7002" target="_blank">http://localhost:7002</a> — the setup wizard will guide you through picking topics and launching the crawler.</p>
+            <p>Open <a href="http://localhost:7002" target="_blank">http://localhost:7002</a> — the setup wizard will guide you through picking topics and launching the crawler. The default bind is <code>0.0.0.0</code>, so other devices on your LAN can also reach the UI at <code>http://&lt;your-ip&gt;:7002</code>.</p>
           `)}
           ${stepCard(4, 'Connect a second node (another terminal — auto-discovers via DHT)', codeBlock(`./bin/doogle --port 7003 --api-port 7004 \\
   --data-dir ./data/node2`, 'bash'))}
@@ -292,7 +292,7 @@ const archCardDetails = [
   { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 10 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
   { title: 'Indexer', html: `<p>NLP enrichment pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
   { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Query parsing supports phrases, fuzzy matching, and site: filters. Results ranked by <code>BM25 * StaticScore * freshnessDecay</code>. Shard-aware distributed fan-out to peers.</p>` },
-  { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 5 switchable themes.</p>` },
+  { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 6 switchable themes.</p>` },
   // P2P layer
   { title: 'Kademlia DHT', html: `<p>Distributed peer routing via <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a>. Enables internet-wide peer discovery and routing. By default, connects to IPFS public bootstrap peers and uses <code>RoutingDiscovery</code> to advertise under <code>doogle/network/v2</code> — peers find each other automatically within 30–60 seconds. Also supports mDNS for LAN discovery and manual <code>--bootstrap</code>. Part of <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
   { title: 'GossipSub', html: `<p>Pub/sub message propagation via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a>. Used for URL frontier broadcast (discovered URLs), shard catalog exchange (domain assignments), and peer coordination. Epidemic-style propagation ensures network-wide consistency.</p>` },
@@ -344,6 +344,24 @@ const protocolDetails = [
     |--- ReplicateRequest -----&gt;|
     |    {missing documents}    |</pre><p>Runs every 2 minutes (+random jitter). For each locally-owned domain, the node computes a Merkle root from sorted document IDs and sends it to replica peers. If roots match, the domain is in sync. If they diverge, the peer returns which IDs it's missing and the initiator sends those docs via the replicate protocol.</p>` },
   { title: 'doogle/shard-catalog — Shard Catalog (GossipSub)', html: `<p><strong>Type:</strong> GossipSub pub/sub topic</p><p>Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network's hash ring in sync. Published every 60 seconds. All peers maintain a local copy of the network-wide shard map.</p>` },
+  { title: '/doogle/fleet/heartbeat/1.0.0 — Fleet Heartbeat', html: `<p><strong>Type:</strong> Request-reply over libp2p stream</p><p><strong>Flow:</strong></p><pre style="font-size:0.85em;color:var(--text-secondary)">Worker                       Coordinator
+    |--- HeartbeatRequest ------&gt;|
+    |    {peer_id, name, stats,  |
+    |     timestamp, signature}  |
+    |                            | (verify HMAC + allowlist)
+    |&lt;-- HeartbeatResponse ------|
+    |    {status: "ok"}          |</pre><p>Workers send heartbeats every 15 seconds (configurable). The coordinator verifies HMAC-SHA256 signatures and peer identity. Nodes go stale after 60s, offline after 180s of missed heartbeats.</p>` },
+  { title: '/doogle/fleet/proxy/1.0.0 — Fleet Proxy', html: `<p><strong>Type:</strong> Request-reply over libp2p stream (two-phase)</p><p><strong>Flow:</strong></p><pre style="font-size:0.85em;color:var(--text-secondary)">Coordinator                  Worker
+    |--- ProxyRequest ----------&gt;|
+    |    {method, path, query,   |
+    |     headers, body,         |
+    |     timestamp, signature}  |
+    |    &lt;CloseWrite&gt;            |
+    |                            | (verify sender + HMAC)
+    |                            | (forward to local API)
+    |&lt;-- ProxyResponseHeader ----|
+    |    {status_code, headers}  |
+    |&lt;-- raw body bytes ---------|</pre><p>The coordinator proxies HTTP requests to workers over encrypted libp2p streams. Workers bind their API to <code>127.0.0.1</code> — the ONLY remote access path is this tunnel. Request limit: 5 MB, response limit: 100 MB, timeout: 60s.</p>` },
 ];
 
 function renderArchitecture(el) {
@@ -517,6 +535,8 @@ function renderArchitecture(el) {
         ${protocolCard('/doogle/replicate/1.0.0', 'Replication', 'Request-reply', 'Documents are replicated to N nodes (default 3) using consistent hashing. Immediate push on crawl.', 'var(--red)', 5)}
         ${protocolCard('/doogle/antientropy/1.0.0', 'Anti-Entropy', 'Request-reply', 'Periodic Merkle root comparison for each domain. Detects and repairs missing documents between replica peers.', 'var(--amber)', 6)}
         ${protocolCard('doogle/shard-catalog', 'Shard Catalog', 'GossipSub pub/sub', 'Nodes broadcast their shard catalog (owned domains, doc count, generation) to keep the network\'s hash ring in sync.', 'var(--purple)', 7)}
+        ${protocolCard('/doogle/fleet/heartbeat/1.0.0', 'Fleet Heartbeat', 'Request-reply', 'Workers send stats to coordinator every 15s. HMAC-signed with shared fleet secret. Coordinator tracks online/stale/offline status.', 'var(--green)', 8)}
+        ${protocolCard('/doogle/fleet/proxy/1.0.0', 'Fleet Proxy', 'Request-reply', 'Coordinator proxies HTTP requests to workers over encrypted libp2p streams. Two-phase: JSON header + raw body. Workers bind API to localhost only.', 'var(--accent)', 9)}
       </div>
     </div>
 
@@ -656,7 +676,7 @@ function renderAPI(el) {
         ${icon('code', 24, 'var(--accent)')}
         <h2>API Reference</h2>
       </div>
-      <p class="docs-section-desc">All endpoints return JSON. The base URL is your node's HTTP address.</p>
+      <p class="docs-section-desc">All endpoints return JSON. The base URL is your node's HTTP address (default <code>http://localhost:7002</code>, LAN-accessible at <code>http://&lt;your-ip&gt;:7002</code> since the default bind is <code>0.0.0.0</code>).</p>
 
       <div class="docs-endpoint-list">
         ${endpoint('GET', '/api/search', 'Search the distributed index', `
@@ -771,6 +791,81 @@ function renderAPI(el) {
             </div>
           </div>
         `)}
+        ${endpoint('POST', '/api/report', 'Report a URL as spam, malware, or phishing', `
+          ${codeBlock(`curl -X POST http://localhost:7002/api/report \\
+  -H 'Content-Type: application/json' \\
+  -d '{"url":"https://spam.example.com","reason":"spam"}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "reported", "url": "https://spam.example.com"}`, 'json')}
+        `)}
+        ${endpoint('POST', '/api/config/name', 'Set the human-readable node name', `
+          ${codeBlock(`curl -X POST http://localhost:7002/api/config/name \\
+  -H 'Content-Type: application/json' \\
+  -d '{"name":"My Search Node"}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "ok", "name": "My Search Node"}`, 'json')}
+        `)}
+        ${endpoint('GET', '/api/admin/trust', 'Trust system overview: reports, quarantined peers, flagged domains', `
+          ${codeBlock(`curl http://localhost:7002/api/admin/trust`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{
+  "reports": [...],
+  "quarantined_peers": [...],
+  "flagged_domains": [...]
+}`, 'json')}
+        `)}
+        ${endpoint('DELETE', '/api/admin/data', 'Delete all local data (index, crawl history)', `
+          ${codeBlock(`curl -X DELETE http://localhost:7002/api/admin/data`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "deleted"}`, 'json')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Caution: this permanently removes all indexed documents and crawl data. The node identity key is preserved.</p>
+        `)}
+      </div>
+    </div>
+
+    <div class="docs-section">
+      <div class="docs-section-header">
+        \${icon('network', 24, 'var(--purple)')}
+        <h2>Fleet Management API</h2>
+      </div>
+      <p class="docs-section-desc">Fleet endpoints are only available on coordinator nodes (<code>--fleet-role coordinator</code>). All require a Bearer token derived from the fleet secret.</p>
+
+      <div class="docs-endpoint-list">
+        \${endpoint('GET', '/api/fleet/nodes', 'Fleet overview: all registered workers (requires Bearer token)', \`
+          <div class="docs-params">
+            <h4>Authentication</h4>
+            <p>Header: <code>Authorization: Bearer &lt;fleet-api-token&gt;</code> — or query param: <code>?_token=&lt;token&gt;</code></p>
+          </div>
+          <h4>Example</h4>
+          \${codeBlock(\`curl -H 'Authorization: Bearer <token>' http://localhost:7002/api/fleet/nodes\`, 'bash')}
+          <h4>Response</h4>
+          \${codeBlock(\`{
+  "coordinator_id": "12D3KooW...",
+  "total_nodes": 2,
+  "online_nodes": 1,
+  "total_docs": 3200,
+  "nodes": [
+    {
+      "peer_id": "12D3KooW...",
+      "name": "worker-1",
+      "status": "online",
+      "stats": { "indexed_docs": 1600, "crawled_urls": 5000, "urls_in_queue": 120, "connected_peers": 3, "uptime": "2h30m" },
+      "last_seen": "2026-03-02T12:00:00Z",
+      "first_seen": "2026-03-01T08:00:00Z"
+    }
+  ]
+}\`, 'json')}
+        \`)}
+        \${endpoint('GET', '/api/fleet/nodes/{peerID}', 'Single worker node details (requires Bearer token)', \`
+          \${codeBlock(\`curl -H 'Authorization: Bearer <token>' http://localhost:7002/api/fleet/nodes/12D3KooW...\`, 'bash')}
+        \`)}
+        \${endpoint('GET', '/api/fleet/nodes/{peerID}/proxy/*', 'Proxy any request to a worker via encrypted libp2p tunnel (requires Bearer token)', \`
+          <p>The path after <code>/proxy</code> is forwarded to the worker's local API. For example, <code>/api/fleet/nodes/PEER/proxy/api/status</code> returns the worker's <code>/api/status</code>.</p>
+          <h4>Example</h4>
+          \${codeBlock(\`curl -H 'Authorization: Bearer <token>' \\
+  http://localhost:7002/api/fleet/nodes/12D3KooW.../proxy/api/status\`, 'bash')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Workers bind their API to 127.0.0.1 — the only remote access path is this proxy tunnel. Requests are HMAC-signed and verified.</p>
+        \`)}
       </div>
     </div>
 
@@ -1109,6 +1204,11 @@ const configDetails = [
   { title: '--incremental-interval', html: '<p>How often the incremental re-scorer runs to update stale StaticScores. Handles freshness decay, PageRank changes, and quality drift. Default: 10m.</p><p>YAML: <code>index.incremental_interval: 10m</code></p>' },
   { title: '--replication-factor', html: '<p>Number of nodes each document is replicated to for fault tolerance. Higher values = more redundancy but more storage/bandwidth. Default: 3.</p><p>YAML: <code>index.replication_factor: 3</code></p>' },
   { title: '--anti-entropy-interval', html: '<p>How often the anti-entropy reconciliation loop runs. Each tick, the node compares Merkle roots with replica peers and repairs any missing documents. Default: 2m. Random jitter (0-30s) is added per tick to avoid thundering herd.</p><p>YAML: <code>index.anti_entropy_interval: 2m</code></p>' },
+  { title: '--log-level', html: '<p>Controls log verbosity. Accepts: <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>. Default: <code>info</code>. Logs use <code>log/slog</code> with tint for colored console output (format: <code>15:04:05 INF msg key=val</code>).</p><p>YAML: <code>log_level: "info"</code></p>' },
+  { title: '--bind', html: '<p>API server bind address. Default: <code>0.0.0.0</code> (LAN-accessible). Set to <code>127.0.0.1</code> to restrict to localhost only.</p><p>YAML: <code>api.bind: "0.0.0.0"</code></p>' },
+  { title: '--fleet-role', html: '<p>Fleet management role. Options: <code>standalone</code> (default, no fleet), <code>coordinator</code> (manages workers), <code>worker</code> (reports to coordinator).</p><p>YAML: <code>fleet.role: "standalone"</code></p>' },
+  { title: '--fleet-coordinator', html: '<p>Coordinator multiaddr for worker mode. Format: <code>/ip4/&lt;IP&gt;/tcp/&lt;PORT&gt;/p2p/&lt;PEER_ID&gt;</code></p><p>Required when <code>--fleet-role worker</code>. Workers use this to send heartbeats and accept proxy requests.</p><p>YAML: <code>fleet.coordinator_peer: "/ip4/.../tcp/.../p2p/..."</code></p>' },
+  { title: '--fleet-secret', html: '<p>256-bit shared secret (64 hex characters). Used for HMAC-SHA256 signing of all fleet messages. Auto-generated on coordinator if not provided. <strong>Required</strong> for workers.</p><p>YAML: <code>fleet.fleet_secret: "aabbcc..."</code></p>' },
 ];
 
 function renderConfig(el) {
@@ -1163,6 +1263,11 @@ function renderConfig(el) {
         ${configCard('--incremental-interval', '10m', 'How often the incremental re-scorer runs to update stale StaticScores.', 'trendingUp', 11)}
         ${configCard('--replication-factor', '3', 'Number of nodes each document is replicated to for fault tolerance.', 'shield', 12)}
         ${configCard('--anti-entropy-interval', '2m', 'How often the anti-entropy Merkle reconciliation loop runs.', 'refresh', 13)}
+        ${configCard('--log-level', 'info', 'Log level: debug, info, warn, error. Uses slog with tint colored output.', 'fileText', 15)}
+        ${configCard('--bind', '0.0.0.0', 'API server bind address. LAN-accessible by default.', 'globe', 16)}
+        ${configCard('--fleet-role', 'standalone', 'Fleet role: standalone, coordinator, or worker.', 'network', 17)}
+        ${configCard('--fleet-coordinator', '(none)', 'Coordinator multiaddr (worker mode only).', 'network', 18)}
+        ${configCard('--fleet-secret', '(auto)', 'Shared fleet secret (hex). Auto-generated on coordinator.', 'shield', 19)}
       </div>
     </div>
 
@@ -1173,6 +1278,7 @@ function renderConfig(el) {
       </div>
       <p class="docs-section-desc">Full configuration example with all available options.</p>
       ${codeBlock(`node_name: ""              # human-readable name (shown in UI)
+log_level: "info"              # debug, info, warn, error
 
 p2p:
   port: 7001
@@ -1214,6 +1320,14 @@ storage:
 search:
   peer_timeout: 5s        # max time to wait for peer responses
   max_peers: 10            # max peers to fan out queries to
+
+fleet:
+  role: "standalone"           # standalone, coordinator, or worker
+  coordinator_peer: ""         # multiaddr (worker mode only)
+  fleet_secret: ""             # hex, 64 chars (auto-generated on coordinator)
+  heartbeat_interval: 15s
+  node_timeout: 60s
+  allowlist: []                # coordinator only, empty = accept all
 
 seed_urls:
   - "https://en.wikipedia.org"

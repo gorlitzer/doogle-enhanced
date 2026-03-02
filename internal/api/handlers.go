@@ -18,8 +18,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/doogle/doogle-v2/internal/fleet"
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/internal/p2p"
 	"github.com/doogle/doogle-v2/internal/search"
 )
 
@@ -37,6 +39,12 @@ type Deps struct {
 	TrustSummary func() *models.TrustSummary
 	SetNodeName  func(name string)
 	DataDir      string
+
+	// Fleet management (coordinator only)
+	FleetSummary  func() *fleet.FleetSummary
+	FleetGetNode  func(peerID string) *fleet.FleetNode
+	FleetProxy    func(ctx context.Context, peerID, method, path, query string, headers map[string]string, body []byte) (*p2p.ProxyResponseHeader, []byte, error)
+	FleetAPIToken string
 }
 
 // SearchHandler handles GET /api/search?q=...&page=...&size=...

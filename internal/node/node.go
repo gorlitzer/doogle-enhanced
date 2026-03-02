@@ -14,6 +14,7 @@ import (
 
 	"github.com/doogle/doogle-v2/internal/api"
 	"github.com/doogle/doogle-v2/internal/crawler"
+	"github.com/doogle/doogle-v2/internal/fleet"
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/indexer"
 	"github.com/doogle/doogle-v2/internal/models"
@@ -53,6 +54,12 @@ type Node struct {
 	// Trust & safety
 	trustStore   *store.TrustStore
 	trustManager *TrustManager
+
+	// Fleet management
+	fleetStore    *store.FleetStore
+	coordinator   *fleet.Coordinator
+	worker        *fleet.Worker
+	fleetAPIToken string
 
 	// Peer name resolution
 	peerNames   map[string]string // peer ID → node name
@@ -245,8 +252,13 @@ func (n *Node) init() error {
 	p2p.RegisterReplicateProtocol(h, n.handleReplicateRequest)
 	p2p.RegisterAntiEntropyProtocol(h, n.handleAntiEntropyRequest)
 
-	// 14. HTTP API
-	n.apiServer = api.NewServer(n.cfg.API.Bind, n.cfg.API.Port, &api.Deps{
+	// 14. Fleet management (must be before API server so bind can be overridden)
+	if err := n.initFleet(); err != nil {
+		return fmt.Errorf("fleet: %w", err)
+	}
+
+	// 15. HTTP API
+	deps := &api.Deps{
 		Search:       n.search,
 		StatusFn:     n.Status,
 		CrawlSeed:    n.crawler.AddSeed,
@@ -262,8 +274,18 @@ func (n *Node) init() error {
 			n.search.LocalName = name
 			_ = SaveNodeName(dataDir, name)
 		},
-		DataDir:      dataDir,
-	})
+		DataDir: dataDir,
+	}
+
+	// Wire fleet deps if coordinator.
+	if n.coordinator != nil {
+		deps.FleetSummary = n.coordinator.Summary
+		deps.FleetGetNode = n.coordinator.GetNode
+		deps.FleetProxy = n.fleetProxyHTTP
+		deps.FleetAPIToken = n.fleetAPIToken
+	}
+
+	n.apiServer = api.NewServer(n.cfg.API.Bind, n.cfg.API.Port, deps)
 
 	return nil
 }
@@ -288,6 +310,27 @@ func (n *Node) Run() error {
 	go n.shardCatalogPublisher()
 	go n.antiEntropyLoop()
 	go n.spamReportLoop()
+
+	// Start fleet subsystems.
+	if n.coordinator != nil {
+		n.coordinator.Start(n.ctx)
+	}
+	if n.worker != nil {
+		n.worker.StartHeartbeat(n.ctx, func(ctx context.Context, req *fleet.HeartbeatRequest) error {
+			coordPeerStr := n.cfg.Fleet.CoordinatorPeer
+			_ = coordPeerStr
+			// The coordinator peer ID is already in the peerstore from initFleetWorker.
+			// We need to extract it from the worker.
+			resp, err := p2p.SendFleetHeartbeat(ctx, n.host, n.worker.CoordinatorID(), req, 10*time.Second)
+			if err != nil {
+				return err
+			}
+			if resp.Status != "ok" {
+				return fmt.Errorf("heartbeat rejected: %s", resp.Reason)
+			}
+			return nil
+		})
+	}
 
 	// Start DHT routing discovery (advertise + find peers)
 	n.discovery.StartAdvertising(n.ctx)

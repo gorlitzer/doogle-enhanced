@@ -74,7 +74,7 @@ make setup                      # checks/installs Go, Docker, all prereqs
 make run                        # build + launch node
 ```
 
-Open [http://localhost:7002](http://localhost:7002) — the setup wizard guides you through seeding and configuration.
+Open [http://localhost:7002](http://localhost:7002) — the setup wizard guides you through seeding and configuration. The default bind is `0.0.0.0`, so other devices on your LAN can also reach the UI at `http://<your-ip>:7002`.
 
 **No `make`?** Run directly with Go:
 ```bash
@@ -153,7 +153,7 @@ make build
 - mDNS for zero-config LAN discovery
 - GossipSub for URL frontier broadcast
 - NAT traversal via UPnP/NAT-PMP and hole punching
-- Custom protocols: `/doogle/search/1.0.0`, `/doogle/crawl/1.0.0`, `/doogle/index/1.0.0`
+- Custom protocols: `/doogle/search/1.0.0`, `/doogle/crawl/1.0.0`, `/doogle/index/1.0.0`, `/doogle/fleet/heartbeat/1.0.0`, `/doogle/fleet/proxy/1.0.0`
 
 **Indexer Pipeline**
 - Quality scoring, spam detection, duplicate filtering
@@ -174,13 +174,21 @@ make build
 - Crawler management with live feed, analytics, seed URLs
 - Indexer stats, document browser
 - Keyboard shortcuts: `/` and `Ctrl+K` to focus search from anywhere
-- 5 themes: Dracula, CRT Terminal, Modern, Light, Pride — each with animated logos and backgrounds
+- 6 themes: Dracula, CRT Terminal, Modern, Light, Pride, Storm — each with animated logos and backgrounds
 - Comprehensive docs, troubleshooting, and FAQ built in
 
 **Storage**
 - BadgerDB for metadata, URL queue, and backlink graph (crash-safe WAL)
 - Bleve for full-text index (self-repairs on restart)
 - Everything in a single `--data-dir`, survives machine sleep and power loss
+
+**Fleet Management**
+- Coordinator/worker architecture for managing multiple nodes from a single dashboard
+- Secure proxy tunnel: coordinator tunnels into worker admin APIs over encrypted libp2p streams
+- Workers never expose HTTP ports to the network — only reachable via the coordinator
+- 5-layer security: HMAC-SHA256 fleet secret, derived API bearer token, libp2p Noise encryption, peer ID verification, localhost binding
+- Heartbeat monitoring with automatic staleness detection (online → stale → offline)
+- Fleet dashboard in admin UI with token-gated access
 
 **Coming Soon**
 - `.onion` crawling via Tor SOCKS5 proxy
@@ -190,6 +198,46 @@ make build
 - Semantic search (sentence embeddings, hybrid BM25 + vector scoring)
 - Knowledge graph with entity cards
 - Browser extension, mobile client
+
+---
+
+## Fleet Management
+
+Fleet mode lets you deploy multiple Doogle nodes across machines and manage them all from one coordinator. This is entirely optional — by default every node runs in standalone mode with zero overhead.
+
+**Why?** If you're running 5+ nodes across different servers, you don't want to SSH into each one to check status. The coordinator gives you a single dashboard that shows all workers, their stats, and lets you access each worker's full admin UI through a secure tunnel.
+
+**How it works:** The coordinator acts as a secure reverse proxy into each worker's local API. Workers bind their HTTP port to `127.0.0.1` (not reachable from the network). The only way to reach a worker remotely is through the coordinator's encrypted libp2p tunnel. All communication is signed with a shared fleet secret using HMAC-SHA256.
+
+### Quick Start
+
+```bash
+# 1. Start coordinator (prints fleet secret and API token to logs)
+make fleet-coordinator
+
+# 2. On another machine, start a worker (use the secret from step 1)
+make fleet-worker COORD=/ip4/<COORD_IP>/tcp/7001/p2p/<PEER_ID> SECRET=<hex>
+
+# 3. Open coordinator UI → Admin → Fleet → enter API token
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--fleet-role` | `standalone` (default), `coordinator`, or `worker` |
+| `--fleet-coordinator` | Coordinator multiaddr (required for workers) |
+| `--fleet-secret` | Shared secret hex (auto-generated on coordinator if omitted) |
+
+### Security
+
+| Layer | Protection |
+|-------|-----------|
+| Fleet Secret | 256-bit HMAC-SHA256 signs all fleet messages |
+| API Token | Derived bearer token required on all `/api/fleet/*` endpoints |
+| Transport | End-to-end encrypted libp2p streams (Noise/TLS) |
+| Identity | Coordinator and workers verify each other's peer IDs |
+| Binding | Workers auto-bind API to `127.0.0.1` in fleet mode |
 
 ---
 
@@ -267,6 +315,7 @@ Flags:
   --name STRING        Human-readable node name (e.g. "Tokyo-Relay-01")
   --port N             libp2p listen port (default: 7001)
   --api-port N         HTTP API port (default: 7002)
+  --bind ADDR          API server bind address (default: 0.0.0.0)
   --data-dir PATH      Data directory (default: ./data/doogle)
   --bootstrap ADDR     Bootstrap peer multiaddr (repeatable)
   --seed URL           Seed URL(s) to crawl (comma-separated)
@@ -274,6 +323,10 @@ Flags:
   --mdns               Enable mDNS LAN discovery (default: true)
   --dht-discovery      Enable DHT peer discovery via IPFS bootstrap (default: true)
   --headless           Enable headless browser rendering (default: false)
+  --log-level LEVEL    Log level: debug, info, warn, error (default: info)
+  --fleet-role ROLE    Fleet mode: standalone, coordinator, worker (default: standalone)
+  --fleet-coordinator  Coordinator multiaddr (required for workers)
+  --fleet-secret HEX   Shared fleet secret (auto-generated on coordinator)
 ```
 
 ### Search Mode (CLI)
@@ -309,10 +362,14 @@ make setup                      # install Go, Docker checks, all prerequisites
 make run                        # build + launch node (API on :7002)
 make run ARGS='--port 7003'     # pass extra flags
 make test                       # run all tests
-make dev                        # Docker backend + hot-reload UI on :3000
-make docker                     # build + start 3-node cluster
+make dev                        # Docker 3-node cluster on :7002/:7004/:7006
+make stop                       # stop Docker containers
 make build                      # compile binary without running
 make clean                      # remove build artifacts
+make nuke                       # full reset: clean + remove in-repo Go runtime
+make fleet-coordinator          # start a fleet coordinator node
+make fleet-worker COORD=... SECRET=...  # start a fleet worker
+make fleet-stop                 # stop all fleet nodes
 ```
 
 ### Examples
@@ -364,6 +421,9 @@ make clean                      # remove build artifacts
 | `GET` | `/api/admin/documents?offset=&limit=` | Recently indexed documents |
 | `GET` | `/api/admin/documents/{id}` | Document detail by ID |
 | `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
+| `GET` | `/api/fleet/nodes` | Fleet summary and worker list (bearer token required) |
+| `GET` | `/api/fleet/nodes/{peerID}` | Single worker detail |
+| `ANY` | `/api/fleet/nodes/{peerID}/proxy/*` | Proxy request to worker's local API |
 
 ---
 
@@ -379,8 +439,9 @@ doogle-v2/
 │   ├── indexer/                   Quality scoring, dedup, PageRank, pipeline
 │   ├── index/                     Bleve store, query builder, multi-lang, shard manager
 │   ├── search/                    Local + distributed search, ranking, LRU cache
+│   ├── fleet/                     Coordinator, worker, HMAC auth, fleet models
 │   ├── api/                       HTTP server, handlers, middleware
-│   ├── store/                     BadgerDB wrapper, URL queue, link store
+│   ├── store/                     BadgerDB wrapper, URL queue, link store, fleet store
 │   └── models/                    Document, CrawlTask, SearchResult, CrawlEvent
 ├── pkg/
 │   ├── consistent/                Consistent hash ring
@@ -416,6 +477,7 @@ Full YAML configuration with defaults:
 
 ```yaml
 node_name: ""                  # Human-readable name (or use --name flag)
+log_level: "info"              # debug, info, warn, error
 
 p2p:
   port: 7001
@@ -453,6 +515,11 @@ search:
 
 storage:
   data_dir: "./data/doogle"
+
+fleet:
+  role: "standalone"             # standalone, coordinator, worker
+  heartbeat_interval: 15s
+  node_timeout: 60s
 ```
 
 ---
@@ -478,7 +545,7 @@ The admin dashboard at `http://localhost:7002` also has built-in docs covering c
 - [x] Indexer (10+ quality signals, E-E-A-T, spam, PageRank, readability, freshness)
 - [x] BM25 search (phrases, fuzzy, site: filter, distributed fan-out)
 - [x] 6 P2P protocols, shard routing, replication N=3, Merkle anti-entropy
-- [x] Admin dashboard (5 themes, wizard, live feed, network graph)
+- [x] Admin dashboard (6 themes, wizard, live feed, network graph)
 - [x] Docker + Compose support
 
 ### Phase 2 — Quality & Scale
@@ -490,6 +557,7 @@ The admin dashboard at `http://localhost:7002` also has built-in docs covering c
 - [x] Domain flagging (multi-peer report consensus, gossip-level filtering)
 - [x] Backup & restore (`doogle dump`/`doogle restore`, Makefile targets)
 - [x] Production build target (`make build` with stripped binary, `make run`)
+- [x] Fleet management (coordinator/worker, secure proxy tunnel, HMAC auth, fleet dashboard)
 - [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
 - [ ] Hash ring rebalancing on peer join/leave
 - [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)

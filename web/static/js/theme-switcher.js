@@ -44,10 +44,7 @@ export function applyTheme(id) {
   // Update picker active state if it exists
   updatePickerState(id);
 
-  // Update favicon to match theme accent
-  updateFavicon(theme['--accent'], theme['--bg-primary'] || '#0a0a0f');
-
-  // Dispatch event for canvas redraws
+  // Dispatch event for canvas redraws (tab-identity.js handles favicon)
   window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: id } }));
 }
 
@@ -145,35 +142,6 @@ function updatePickerState(activeId) {
 }
 
 let crtOverlay = null;
-
-function updateFavicon(accent, bg) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-    <circle cx="16" cy="16" r="15" fill="${bg}" stroke="${accent}" stroke-width="0.8" opacity="0.9"/>
-    <path d="M9.5 10.5 L8 4.5 L12 9Z" fill="none" stroke="${accent}" stroke-width="1" stroke-linejoin="round" opacity="0.6"/>
-    <path d="M22.5 10.5 L24 4.5 L20 9Z" fill="none" stroke="${accent}" stroke-width="1" stroke-linejoin="round" opacity="0.6"/>
-    <circle cx="11" cy="14.5" r="4.2" fill="none" stroke="${accent}" stroke-width="1" opacity="0.5"/>
-    <circle cx="11" cy="14.5" r="2.5" fill="${accent}" opacity="0.2"/>
-    <circle cx="11" cy="14.5" r="1.5" fill="${accent}" opacity="0.7"/>
-    <circle cx="11" cy="14.5" r="0.6" fill="${bg}"/>
-    <circle cx="10.3" cy="13.8" r="0.5" fill="white" opacity="0.45"/>
-    <circle cx="21" cy="14.5" r="4.2" fill="none" stroke="${accent}" stroke-width="1" opacity="0.5"/>
-    <circle cx="21" cy="14.5" r="2.5" fill="${accent}" opacity="0.2"/>
-    <circle cx="21" cy="14.5" r="1.5" fill="${accent}" opacity="0.7"/>
-    <circle cx="21" cy="14.5" r="0.6" fill="${bg}"/>
-    <circle cx="20.3" cy="13.8" r="0.5" fill="white" opacity="0.45"/>
-    <path d="M14.8 18.5 L16 22 L17.2 18.5Z" fill="${accent}" opacity="0.45"/>
-    <path d="M12 24.5 L16 26.5 L20 24.5" fill="none" stroke="${accent}" stroke-width="0.7" opacity="0.25"/>
-  </svg>`;
-  const dataUri = 'data:image/svg+xml,' + encodeURIComponent(svg);
-  let link = document.querySelector('link[rel="icon"]');
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    link.type = 'image/svg+xml';
-    document.head.appendChild(link);
-  }
-  link.href = dataUri;
-}
 
 function manageCRTOverlay(enable) {
   if (enable && !crtOverlay) {

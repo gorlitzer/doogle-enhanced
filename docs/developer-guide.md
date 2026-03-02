@@ -23,8 +23,8 @@ This guide is for contributors working on the Doogle v2 codebase. It covers the 
 
 ```bash
 # Clone and build
-git clone https://github.com/doogle/doogle-v2.git
-cd doogle-v2
+git clone https://github.com/gorlitzer/doogle-enhanced.git
+cd doogle-enhanced
 go mod tidy
 make build
 
@@ -50,6 +50,7 @@ doogle-v2/
 │   ├── node/                   # Orchestrator — wires all subsystems together
 │   │   ├── node.go             # Node struct, init(), Run(), Shutdown(), Status()
 │   │   ├── config.go           # Config types, YAML loading, CLI flag parsing
+│   │   ├── fleet.go            # Fleet init (coordinator/worker setup)
 │   │   └── identity.go         # Ed25519 key generation and persistence
 │   ├── p2p/                    # libp2p networking layer
 │   │   ├── host.go             # Host creation (TCP, QUIC, Noise, NAT)
@@ -58,7 +59,9 @@ doogle-v2/
 │   │   ├── protocols.go        # Protocol ID constants
 │   │   ├── search_protocol.go  # /doogle/search/1.0.0 stream handler + client
 │   │   ├── crawl_protocol.go   # /doogle/crawl/1.0.0 stream handler
-│   │   └── index_protocol.go   # /doogle/index/1.0.0 stream handler
+│   │   ├── index_protocol.go   # /doogle/index/1.0.0 stream handler
+│   │   ├── fleet_heartbeat_protocol.go  # /doogle/fleet/heartbeat/1.0.0
+│   │   └── fleet_proxy_protocol.go      # /doogle/fleet/proxy/1.0.0
 │   ├── crawler/                # Web crawling engine
 │   │   ├── crawler.go          # Worker pool, fetch logic, HTTP client
 │   │   ├── scheduler.go        # URL frontier (in-memory + persistent queue)
@@ -69,26 +72,42 @@ doogle-v2/
 │   │   ├── indexer.go          # Main pipeline: dedup → score → store
 │   │   ├── analyzer.go         # Text tokenization, keyword extraction
 │   │   ├── scorer.go           # Quality and spam scoring
-│   │   └── duplicate.go        # Content fingerprinting (shingling)
+│   │   ├── duplicate.go        # Content fingerprinting (shingling)
+│   │   ├── pagerank.go         # PageRank computation on backlink graph
+│   │   ├── batch_indexer.go    # Batched Bleve writes with flush interval
+│   │   └── trust_manager.go    # Peer trust scoring and quarantine logic
 │   ├── index/                  # Full-text search index
 │   │   ├── store.go            # Store interface (Search, Index, DocCount, Close)
 │   │   ├── bleve_store.go      # Bleve implementation with custom analyzer + 15 language stemmers
 │   │   ├── document.go         # IndexDocument model (implements bleve.Classifier)
 │   │   ├── query_builder.go    # ParsedQuery → Bleve query tree (AND/OR/NOT, lang analyzer)
 │   │   └── shard.go            # Consistent hash ring for domain → node mapping
+
 │   ├── search/                 # Search engines
 │   │   ├── engine.go           # Local search against Bleve
 │   │   ├── distributed.go      # Fan-out to peers + merge results + cache
 │   │   ├── cache.go            # LRU + TTL search result cache
 │   │   ├── ranker.go           # Multi-signal re-ranking (BM25, quality, PageRank, freshness)
 │   │   └── query.go            # Query parsing (boolean operators, phrases, site/lang filters)
+│   ├── fleet/                  # Fleet coordinator/worker management
+│   │   ├── coordinator.go      # Coordinator: heartbeat handler, proxy, staleness loop
+│   │   ├── worker.go           # Worker: heartbeat sender, proxy handler
+│   │   ├── secret.go           # HMAC-SHA256 signing, fleet secret management
+│   │   └── models.go           # FleetNode, FleetSummary, HeartbeatRequest, etc.
 │   ├── api/                    # HTTP layer
 │   │   ├── server.go           # Chi router, embedded static files, server lifecycle
 │   │   ├── handlers.go         # /api/search, /api/status, /api/crawl
-│   │   └── middleware.go       # Request logging
+│   │   ├── fleet_handlers.go   # /api/fleet/* endpoints (coordinator only)
+│   │   └── middleware.go       # Request logging, bearer auth
 │   ├── store/                  # Persistent storage
 │   │   ├── badger.go           # BadgerDB wrapper (Get, Set, Has, Delete)
-│   │   └── url_store.go        # URL queue + seen set (wraps BadgerDB)
+│   │   ├── url_store.go        # URL queue + seen set (wraps BadgerDB)
+│   │   ├── link_store.go       # Backlink graph edges for PageRank
+│   │   ├── fleet_store.go      # Fleet node persistence (BadgerDB)
+│   │   ├── dedup_store.go      # Persistent URL deduplication (SHA-256 keyed)
+│   │   ├── content_store.go    # Content hash tracking for incremental reindex
+│   │   ├── generation_store.go # Monotonic generation counter for score freshness
+│   │   └── trust_store.go      # Peer trust scores and report persistence
 │   └── models/                 # Shared data types
 │       ├── document.go         # Document, Link
 │       ├── crawl_task.go       # CrawlTask, URLAnnouncement
@@ -126,7 +145,7 @@ Thin wrappers around libp2p. Each file is focused on one concern.
 
 **Key pattern:** Protocol handlers are registered via `Register*Protocol(host, handlerFunc)`. The handler receives a typed Go struct (not raw bytes) — JSON marshaling is handled internally.
 
-**Discovery:** `discovery.go` manages three discovery mechanisms: (1) Kademlia DHT for peer routing, (2) IPFS public DHT routing discovery for automatic zero-config peer finding via `RoutingDiscovery` + `BackoffDiscovery`, and (3) mDNS for LAN discovery. The `DiscoveryConfig` struct controls all discovery settings. `StartAdvertising()` and `StartFindingPeers()` are called from `node.Run()` to begin the DHT discovery loop.
+**Discovery:** `discovery.go` manages three discovery mechanisms: (1) Kademlia DHT for peer routing, (2) IPFS public DHT routing discovery for automatic zero-config peer finding via raw `RoutingDiscovery` with a 30s polling interval, and (3) mDNS for LAN discovery. The `DiscoveryConfig` struct controls all discovery settings. `StartAdvertising()` and `StartFindingPeers()` are called from `node.Run()` to begin the DHT discovery loop.
 
 ### `internal/crawler` — Web Crawling
 
@@ -150,11 +169,22 @@ The `Store` interface abstracts the index backend. `BleveStore` is the implement
 
 Three layers: `Engine` (local-only), `DistributedSearch` (local + peers + cache), and `SearchCache` (LRU+TTL). The distributed search checks the cache first, then uses the local engine and fans out to peers. Query parsing handles boolean operators (`-exclude`, uppercase `OR`), phrases, `site:`, `lang:` filters, and synonym expansion.
 
+### `internal/fleet` — Fleet Management
+
+Coordinator/worker architecture for multi-node deployments. Entirely opt-in (default role is `standalone`, no code runs).
+
+**Key types:**
+- `Coordinator` — receives heartbeats, tracks worker status, proxies HTTP requests through libp2p
+- `Worker` — sends heartbeats, handles proxy requests by forwarding to local API
+- `secret.go` — HMAC-SHA256 signing/verification, fleet secret generation, API token derivation
+
+**Key pattern:** The fleet store uses an interface so coordinators can be tested with in-memory mocks. All messages are HMAC-signed and timestamp-checked for replay protection.
+
 ### `internal/api` — HTTP Layer
 
 Stateless handlers that delegate to `search.DistributedSearch` and `node.Status()`.
 
-**Key pattern:** `api.Deps` struct is injected at creation — handlers don't import node or crawler directly.
+**Key pattern:** `api.Deps` struct is injected at creation — handlers don't import node or crawler directly. Fleet handlers are conditionally mounted only when `deps.FleetAPIToken != ""` (coordinator mode).
 
 ---
 
@@ -425,7 +455,7 @@ curl "http://localhost:7004/api/search?q=example"
 - Follow standard Go conventions (`gofmt`, `go vet`)
 - Use `internal/` for private packages, `pkg/` for reusable utilities
 - Errors: wrap with `fmt.Errorf("context: %w", err)`
-- Logging: use `log.Printf` (no external logger for now)
+- Logging: use `log/slog` (with tint for colored console output). Levels: `slog.Debug`, `slog.Info`, `slog.Warn`, `slog.Error`. Include structured key-value pairs: `slog.Info("crawled", "url", url, "depth", depth)`
 - Context: pass `context.Context` for cancellation
 
 ### Naming

@@ -77,6 +77,21 @@ search:
   # How long cached results stay valid
   cache_ttl: 5m
 
+# Fleet management
+fleet:
+  # Role: "standalone" (default), "coordinator", or "worker"
+  role: "standalone"
+  # Coordinator multiaddr (worker mode only)
+  coordinator_peer: ""
+  # Shared fleet secret (hex, 64 chars). Auto-generated if empty.
+  fleet_secret: ""
+  # How often workers send heartbeats
+  heartbeat_interval: 15s
+  # How long before a worker is marked stale
+  node_timeout: 60s
+  # Coordinator allowlist (empty = accept all with valid secret)
+  allowlist: []
+
 # Logging
 log:
   level: "info"
