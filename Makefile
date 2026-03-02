@@ -12,7 +12,7 @@ help:
 	@echo ""
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
 	@echo "    make build              Compile binary to bin/"
-	@echo "    make run                Build + launch node (fleet-ready on 0.0.0.0:7002)"
+	@echo "    make run                Build + launch node detached (fleet-ready on 0.0.0.0:7002)"
 	@echo "    make run ARGS='...'     Pass extra flags (run ./bin/doogle --help for all flags)"
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Stop docker containers"
@@ -76,7 +76,8 @@ build:
 
 run: build
 	@-pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null; sleep 0.2
-	./$(BIN_DIR)/$(BINARY) $(ARGS)
+	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
+	@echo "Doogle running (PID $$(cat .doogle.pid)) — logs: doogle.log — stop: make stop"
 
 test:
 	$(GO) test ./...
@@ -85,13 +86,14 @@ dev:
 	docker compose up --build
 
 stop:
+	@if [ -f .doogle.pid ]; then kill $$(cat .doogle.pid) 2>/dev/null; rm -f .doogle.pid; fi
 	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
 	@docker compose down 2>/dev/null || true
 	@echo "Stopped."
 
 clean:
 	@-docker compose down -v 2>/dev/null
-	rm -rf $(BIN_DIR) data/
+	rm -rf $(BIN_DIR) data/ doogle.log .doogle.pid
 
 nuke: clean
 	rm -rf .go/
