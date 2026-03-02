@@ -19,6 +19,7 @@ import (
 
 	"github.com/doogle/doogle-v2/internal/models"
 	"github.com/doogle/doogle-v2/internal/node"
+	"github.com/lmittmann/tint"
 )
 
 func main() {
@@ -53,7 +54,10 @@ func main() {
 	default:
 		level = slog.LevelInfo
 	}
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	handler := tint.NewHandler(os.Stderr, &tint.Options{
+		Level:      level,
+		TimeFormat: time.TimeOnly,
+	})
 	slog.SetDefault(slog.New(handler))
 
 	slog.Info("Doogle v2 — P2P Decentralized Search Engine")
