@@ -1,19 +1,101 @@
-// Doogle v2 — Crawler Management (enhanced with analytics + charts)
+// Doogle v2 — Crawler: Dual-View Spotlight Diagram + Management Tabs
 import { api } from '../api.js';
-import { renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
+import { icon, renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
+import { SpotlightDiagram, formatNum } from '../spotlight.js';
 
+// ============================================================
+// GAUGE VIEW — Spotlight grid columns with rich gauges
+// Col 0: Queue Input   Col 1: Processing   Col 2: Auxiliary + Output
+// ============================================================
+const GAUGE_COMPONENTS = [
+  // Column 0 — Queue Input
+  { id: 'queue',     label: 'URL Queue',        col: 0, row: 0, boxH: 200 },
+  { id: 'ratelimit', label: 'Rate Limiter',      col: 0, row: 1, boxH: 140 },
+  // Column 1 — Processing
+  { id: 'workers',   label: 'Worker Pool',       col: 1, row: 0, boxH: 200 },
+  { id: 'fetch',     label: 'HTTP Fetch',        col: 1, row: 1, boxH: 160 },
+  { id: 'extract',   label: 'Content Extractor', col: 1, row: 2, boxH: 120 },
+  // Column 2 — Auxiliary + Output
+  { id: 'robots',    label: 'robots.txt Cache',  col: 2, row: 0, boxH: 140 },
+  { id: 'redirect',  label: 'Redirect Handler',  col: 2, row: 1, boxH: 120 },
+  { id: 'output',    label: 'To Indexer',        col: 2, row: 2, boxH: 200 },
+];
+
+const GAUGE_CONNECTIONS = [
+  { from: 'queue',     to: 'ratelimit' },
+  { from: 'ratelimit', to: 'workers' },
+  { from: 'workers',   to: 'robots' },
+  { from: 'workers',   to: 'fetch' },
+  { from: 'fetch',     to: 'redirect' },
+  { from: 'fetch',     to: 'extract' },
+  { from: 'extract',   to: 'output' },
+];
+
+// ============================================================
+// FLOW VIEW — Simpler architecture diagram with text metrics
+// ============================================================
+const FLOW_COMPONENTS = [
+  { id: 'queue',     label: 'URL Queue',        col: 1, row: 0 },
+  { id: 'ratelimit', label: 'Rate Limiter',      col: 1, row: 1 },
+  { id: 'workers',   label: 'Worker Pool',       col: 1, row: 2 },
+  { id: 'robots',    label: 'robots.txt Cache',  col: 2, row: 1 },
+  { id: 'fetch',     label: 'HTTP Fetch',        col: 1, row: 3 },
+  { id: 'redirect',  label: 'Redirect Handler',  col: 2, row: 3 },
+  { id: 'extract',   label: 'Content Extractor', col: 1, row: 4 },
+  { id: 'output',    label: 'To Indexer',        col: 0, row: 4 },
+];
+
+const FLOW_CONNECTIONS = [
+  { from: 'queue',     to: 'ratelimit' },
+  { from: 'ratelimit', to: 'workers' },
+  { from: 'workers',   to: 'robots' },
+  { from: 'workers',   to: 'fetch' },
+  { from: 'fetch',     to: 'redirect' },
+  { from: 'fetch',     to: 'extract' },
+  { from: 'extract',   to: 'output' },
+];
+
+const NAV_ROUTES = {
+  output: '#/admin/indexer',
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let diagram = null;
 let activeTab = 'status';
-let crawlHistory = []; // track crawl counts for chart
+let crawlHistory = [];
 let feedLastSeq = 0;
 let feedInterval = null;
+let currentView = localStorage.getItem('doogle-crawler-view') || 'flow';
+let lastData = { status: null, crawler: null };
 
+// ============================================================
+// PAGE RENDER
+// ============================================================
 export function renderCrawler(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h2>Crawler</h2>
-      <p>Web crawler status, queue, analytics, and seed URL management</p>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2>Crawler</h2>
+        <p>Internal architecture — how URLs flow through the crawl pipeline</p>
+      </div>
+      <div class="view-toggle" id="view-toggle">
+        <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">
+          ${icon('gitBranch', 16)} Flow
+        </button>
+        <button class="view-toggle-btn ${currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Spotlight gauges">
+          ${icon('barChart2', 16)} Gauges
+        </button>
+      </div>
     </div>
-    <div class="tabs" id="crawler-tabs">
+    <div class="spotlight-canvas-wrap">
+      <canvas id="crawler-spotlight"></canvas>
+    </div>
+    <div id="crawler-summary" class="spotlight-summary">
+      <div class="loading">Loading crawler data...</div>
+    </div>
+    <div class="tabs" id="crawler-tabs" style="margin-top:20px">
       <button class="tab active" data-tab="status">Status</button>
       <button class="tab" data-tab="feed">Live Feed</button>
       <button class="tab" data-tab="analytics">Analytics</button>
@@ -23,6 +105,19 @@ export function renderCrawler(container) {
     <div id="crawler-content"></div>
   `;
 
+  // View toggle
+  document.getElementById('view-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('.view-toggle-btn');
+    if (!btn) return;
+    const view = btn.dataset.view;
+    if (view === currentView) return;
+    currentView = view;
+    localStorage.setItem('doogle-crawler-view', view);
+    document.querySelectorAll('#view-toggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    rebuildDiagram();
+  });
+
+  // Tabs
   document.querySelectorAll('#crawler-tabs .tab').forEach(tab => {
     tab.addEventListener('click', () => {
       activeTab = tab.dataset.tab;
@@ -32,25 +127,243 @@ export function renderCrawler(container) {
     });
   });
 
+  buildDiagram();
   renderTab();
+  loadDiagramData();
+
   window._pageInterval = setInterval(() => {
+    loadDiagramData();
     if (activeTab === 'status' || activeTab === 'analytics') renderTab();
   }, 5000);
 
-  // Cleanup feed interval when page changes
-  const origInterval = window._pageInterval;
-  const origClear = () => {
-    clearInterval(origInterval);
+  window._pageCleanup = () => {
+    if (diagram) { diagram.destroy(); diagram = null; }
     if (feedInterval) { clearInterval(feedInterval); feedInterval = null; }
   };
-  window.addEventListener('hashchange', origClear, { once: true });
 }
 
+function buildDiagram() {
+  const canvasEl = document.getElementById('crawler-spotlight');
+  if (!canvasEl) return;
+
+  const isGauge = currentView === 'grid';
+  diagram = new SpotlightDiagram(canvasEl, {
+    components: isGauge ? GAUGE_COMPONENTS : FLOW_COMPONENTS,
+    connections: isGauge ? GAUGE_CONNECTIONS : FLOW_CONNECTIONS,
+    navRoutes: NAV_ROUTES,
+    layout: isGauge ? 'grid' : 'flow',
+    cols: 3,
+    rows: isGauge ? 3 : 5,
+    boxW: isGauge ? 190 : 180,
+    boxH: isGauge ? 130 : 90,
+    minHeight: isGauge ? 500 : 560,
+    maxHeight: isGauge ? 600 : 680,
+    onTooltipExtra: (box, data) => {
+      const cr = data.crawler || {};
+      const map = {
+        queue:     () => [`Seen URLs: ${formatNum(cr.seen_urls || 0)}`],
+        ratelimit: () => [`${cr.rate_limit || '—'} req/min/domain`],
+        workers:   () => [`User-Agent: ${(cr.user_agent || '').slice(0, 30)}`],
+        robots:    () => ['Respects robots.txt', 'TTL: 24h cache'],
+        fetch:     () => [`Body limit: 10 MB`, `Timeout: 30s`],
+        redirect:  () => ['Max 10 hops', 'Loop detection'],
+        extract:   () => ['Title, desc, headings', 'Links, OG tags, images'],
+        output:    () => [],
+      };
+      return (map[box.id] || (() => []))();
+    },
+  });
+  diagram.start();
+  if (lastData.status || lastData.crawler) {
+    applyDiagramData(lastData.status, lastData.crawler);
+  }
+}
+
+function rebuildDiagram() {
+  if (diagram) { diagram.destroy(); diagram = null; }
+  buildDiagram();
+}
+
+// ============================================================
+// DIAGRAM DATA
+// ============================================================
+async function loadDiagramData() {
+  try {
+    const [status, crawler] = await Promise.all([
+      api.status().catch(() => null),
+      api.crawlerStatus().catch(() => null),
+    ]);
+    lastData = { status, crawler };
+    applyDiagramData(status, crawler);
+  } catch { /* ignore */ }
+}
+
+function applyDiagramData(status, crawler) {
+  if (!diagram) return;
+  const s = status || {};
+  const cr = crawler || {};
+  diagram.setData({ status, crawler });
+
+  const isGauge = currentView === 'grid';
+  const queueCount = s.urls_in_queue || 0;
+  const activeW = cr.active_workers || 0;
+  const totalW = cr.workers || cr.total_workers || 4;
+  const totalFailed = cr.total_failed || 0;
+  const totalCrawled = cr.total_crawled || 0;
+  const successPct = (totalCrawled + totalFailed) > 0 ? totalCrawled / (totalCrawled + totalFailed) : 1;
+
+  if (isGauge) {
+    diagram.setBoxData('queue', {
+      health: queueCount > 0 ? 'green' : 'amber',
+      gauges: [
+        { type: 'counter', value: queueCount, label: 'queued URLs', color: getCSS('--accent') },
+        { type: 'bar', value: queueCount, max: Math.max(50000, queueCount), label: 'capacity', color: getCSS('--accent') },
+      ],
+      metrics: [`Seen: ${formatNum(cr.seen_urls || 0)}`],
+    });
+    diagram.setBoxData('ratelimit', {
+      health: 'green',
+      gauges: [
+        { type: 'counter', value: cr.rate_limit || 0, label: 'req/min/domain', color: getCSS('--amber') },
+      ],
+      metrics: ['Per-domain throttle'],
+    });
+    diagram.setBoxData('workers', {
+      health: activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red'),
+      gauges: [
+        { type: 'ring', value: activeW, max: totalW, label: `${activeW}/${totalW} active`, color: getCSS('--green') },
+        { type: 'counter', value: totalCrawled, label: 'total crawled', color: getCSS('--accent') },
+      ],
+      metrics: [],
+    });
+    diagram.setBoxData('robots', {
+      health: 'green',
+      gauges: [
+        { type: 'ring', value: 1, max: 1, label: 'compliant', color: getCSS('--green') },
+      ],
+      metrics: ['24h TTL cache'],
+    });
+    diagram.setBoxData('fetch', {
+      health: totalFailed > totalCrawled * 0.5 ? 'red' : 'green',
+      gauges: [
+        { type: 'ring', value: successPct, max: 1, label: 'success rate', color: successPct > 0.8 ? getCSS('--green') : getCSS('--amber') },
+        { type: 'counter', value: totalFailed, label: 'failed', color: getCSS('--red') },
+      ],
+      metrics: [],
+    });
+    diagram.setBoxData('redirect', {
+      health: 'green',
+      gauges: [],
+      metrics: ['Max 10 hops', 'Loop detection'],
+    });
+    diagram.setBoxData('extract', {
+      health: 'green',
+      gauges: [],
+      metrics: ['Title, desc, links', 'OG tags, images'],
+    });
+    diagram.setBoxData('output', {
+      health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
+      gauges: [
+        { type: 'counter', value: totalCrawled, label: 'to indexer', color: getCSS('--green') },
+      ],
+      metrics: [],
+    });
+  } else {
+    diagram.setBoxData('queue', {
+      health: queueCount > 0 ? 'green' : 'amber',
+      gauges: [],
+      metrics: [`Queued: ${formatNum(queueCount)}`, `Seen: ${formatNum(cr.seen_urls || 0)}`],
+    });
+    diagram.setBoxData('ratelimit', {
+      health: 'green',
+      gauges: [],
+      metrics: [`${cr.rate_limit || '—'} req/min/domain`],
+    });
+    diagram.setBoxData('workers', {
+      health: activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red'),
+      gauges: [],
+      metrics: [`Workers: ${activeW}/${totalW}`, `Crawled: ${formatNum(totalCrawled)}`],
+    });
+    diagram.setBoxData('robots', {
+      health: 'green',
+      gauges: [],
+      metrics: ['robots.txt compliant', '24h TTL cache'],
+    });
+    diagram.setBoxData('fetch', {
+      health: totalFailed > totalCrawled * 0.5 ? 'red' : 'green',
+      gauges: [],
+      metrics: [`Success: ${(successPct * 100).toFixed(0)}%`, `Failed: ${formatNum(totalFailed)}`],
+    });
+    diagram.setBoxData('redirect', {
+      health: 'green',
+      gauges: [],
+      metrics: ['Max 10 hops', 'Loop detection'],
+    });
+    diagram.setBoxData('extract', {
+      health: 'green',
+      gauges: [],
+      metrics: ['Title, desc, links', 'OG tags, images'],
+    });
+    diagram.setBoxData('output', {
+      health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
+      gauges: [],
+      metrics: [`Output: ${formatNum(totalCrawled)}`],
+    });
+  }
+
+  diagram.setSpawnRate(Math.max(1, activeW));
+  renderCrawlerSummary(s, cr);
+}
+
+function renderCrawlerSummary(s, cr) {
+  const el = document.getElementById('crawler-summary');
+  if (!el) return;
+  const activeW = cr.active_workers || 0;
+  const totalW = cr.workers || cr.total_workers || 0;
+  const upMins = parseUptimeMinutes(s.uptime);
+  const crawlRate = upMins > 0 ? ((s.crawled_urls || 0) / upMins).toFixed(1) : '0';
+
+  el.innerHTML = `
+    <div class="spotlight-metric">
+      ${icon('link', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${formatNum(s.urls_in_queue || 0)}</span>
+      <span class="spotlight-metric-label">Queue</span>
+    </div>
+    <div class="spotlight-metric">
+      ${icon('globe', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${formatNum(cr.total_crawled || s.crawled_urls || 0)}</span>
+      <span class="spotlight-metric-label">Crawled</span>
+    </div>
+    <div class="spotlight-metric">
+      ${icon('cpu', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${activeW}/${totalW}</span>
+      <span class="spotlight-metric-label">Workers</span>
+    </div>
+    <div class="spotlight-metric">
+      ${icon('zap', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${crawlRate}</span>
+      <span class="spotlight-metric-label">URLs/min</span>
+    </div>
+    <div class="spotlight-metric">
+      ${icon('eye', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${formatNum(cr.seen_urls || 0)}</span>
+      <span class="spotlight-metric-label">Seen</span>
+    </div>
+    <div class="spotlight-metric">
+      ${icon('alertTriangle', 16, 'var(--red)')}
+      <span class="spotlight-metric-value">${formatNum(cr.total_failed || 0)}</span>
+      <span class="spotlight-metric-label">Failed</span>
+    </div>
+  `;
+}
+
+// ============================================================
+// TABS (preserved from original)
+// ============================================================
 async function renderTab() {
   const content = document.getElementById('crawler-content');
   if (!content) return;
 
-  // Stop feed polling when switching away
   if (activeTab !== 'feed' && feedInterval) {
     clearInterval(feedInterval);
     feedInterval = null;
@@ -66,7 +379,6 @@ async function renderTab() {
 async function renderStatus(el) {
   try {
     const [status, crawler] = await Promise.all([api.status(), api.crawlerStatus().catch(() => null)]);
-
     const workers = crawler?.workers || 'N/A';
     const rateLimit = crawler?.rate_limit || 'N/A';
     const maxDepth = crawler?.max_depth || 'N/A';
@@ -78,59 +390,31 @@ async function renderStatus(el) {
     const upMins = parseUptimeMinutes(status.uptime);
     const crawlRate = upMins > 0 ? (status.crawled_urls / upMins).toFixed(1) : '0';
     const successRate = (totalCrawled + totalFailed) > 0
-      ? ((totalCrawled / (totalCrawled + totalFailed)) * 100).toFixed(1)
-      : '—';
+      ? ((totalCrawled / (totalCrawled + totalFailed)) * 100).toFixed(1) : '—';
 
-    // Track history for analytics chart
     crawlHistory.push({ time: new Date(), crawled: status.crawled_urls, queued: status.urls_in_queue });
     if (crawlHistory.length > 60) crawlHistory.shift();
 
     el.innerHTML = `
       <div class="card-grid">
-        <div class="card">
-          <div class="card-label">Crawled URLs</div>
-          <div class="card-value">${status.crawled_urls.toLocaleString()}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Queue Depth</div>
-          <div class="card-value">${status.urls_in_queue.toLocaleString()}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Crawl Rate</div>
-          <div class="card-value">${crawlRate}</div>
-          <div class="card-sub">URLs/minute</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Active Workers</div>
-          <div class="card-value">${activeWorkers} <span style="font-size:0.5em;color:var(--text-muted)">/ ${workers}</span></div>
-        </div>
-        <div class="card">
-          <div class="card-label">Success Rate</div>
-          <div class="card-value">${successRate}${successRate !== '—' ? '%' : ''}</div>
-          <div class="card-sub">${totalCrawled.toLocaleString()} ok / ${totalFailed.toLocaleString()} failed</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Seen URLs</div>
-          <div class="card-value">${seenURLs.toLocaleString()}</div>
-          <div class="card-sub">unique URLs discovered</div>
-        </div>
+        <div class="card"><div class="card-label">Crawled URLs</div><div class="card-value">${status.crawled_urls.toLocaleString()}</div></div>
+        <div class="card"><div class="card-label">Queue Depth</div><div class="card-value">${status.urls_in_queue.toLocaleString()}</div></div>
+        <div class="card"><div class="card-label">Crawl Rate</div><div class="card-value">${crawlRate}</div><div class="card-sub">URLs/minute</div></div>
+        <div class="card"><div class="card-label">Active Workers</div><div class="card-value">${activeWorkers} <span style="font-size:0.5em;color:var(--text-muted)">/ ${workers}</span></div></div>
+        <div class="card"><div class="card-label">Success Rate</div><div class="card-value">${successRate}${successRate !== '—' ? '%' : ''}</div><div class="card-sub">${totalCrawled.toLocaleString()} ok / ${totalFailed.toLocaleString()} failed</div></div>
+        <div class="card"><div class="card-label">Seen URLs</div><div class="card-value">${seenURLs.toLocaleString()}</div><div class="card-sub">unique URLs discovered</div></div>
       </div>
-
       <div class="section">
         <h3>Configuration</h3>
-        <div class="table-wrap">
-          <table>
-            <tbody>
-              <tr><td>User Agent</td><td class="mono">${escapeHtml(String(userAgent))}</td></tr>
-              <tr><td>Workers</td><td>${workers}</td></tr>
-              <tr><td>Rate Limit</td><td>${rateLimit} req/min/domain</td></tr>
-              <tr><td>Max Depth</td><td>${maxDepth}</td></tr>
-              <tr><td>Robots.txt</td><td><span class="badge badge-green">respected</span></td></tr>
-              <tr><td>Body Limit</td><td>10 MB</td></tr>
-              <tr><td>Redirect Limit</td><td>10 hops</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <div class="table-wrap"><table><tbody>
+          <tr><td>User Agent</td><td class="mono">${escapeHtml(String(userAgent))}</td></tr>
+          <tr><td>Workers</td><td>${workers}</td></tr>
+          <tr><td>Rate Limit</td><td>${rateLimit} req/min/domain</td></tr>
+          <tr><td>Max Depth</td><td>${maxDepth}</td></tr>
+          <tr><td>Robots.txt</td><td><span class="badge badge-green">respected</span></td></tr>
+          <tr><td>Body Limit</td><td>10 MB</td></tr>
+          <tr><td>Redirect Limit</td><td>10 hops</td></tr>
+        </tbody></table></div>
       </div>
     `;
   } catch (err) {
@@ -139,28 +423,17 @@ async function renderStatus(el) {
 }
 
 function renderFeed(el) {
-  // Only create skeleton once
   if (!el.querySelector('.crawl-feed-container')) {
     feedLastSeq = 0;
     el.innerHTML = `
       <div class="section">
         <h3>Live Crawl Feed</h3>
-        <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">
-          Real-time stream of URLs being crawled. Hover a row to pause its fade.
-        </p>
-        <div class="crawl-feed-header">
-          <span></span>
-          <span>URL</span>
-          <span>Domain</span>
-          <span>Title</span>
-          <span>Size</span>
-          <span>Time</span>
-        </div>
+        <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">Real-time stream of URLs being crawled.</p>
+        <div class="crawl-feed-header"><span></span><span>URL</span><span>Domain</span><span>Title</span><span>Size</span><span>Time</span></div>
         <div class="crawl-feed-container" id="crawl-feed"></div>
       </div>
     `;
   }
-
   pollFeed();
   if (feedInterval) clearInterval(feedInterval);
   feedInterval = setInterval(pollFeed, 5000);
@@ -171,82 +444,39 @@ async function pollFeed() {
     const data = await api.crawlerFeed(feedLastSeq);
     const events = data.events || [];
     if (events.length === 0) return;
-
     const container = document.getElementById('crawl-feed');
     if (!container) return;
 
-    // Events come newest-first; insert in reverse so newest ends up on top
     for (let i = events.length - 1; i >= 0; i--) {
       const ev = events[i];
       if (ev.seq > feedLastSeq) feedLastSeq = ev.seq;
-
       const row = document.createElement('div');
       row.className = 'crawl-event' + (ev.status === 'failed' ? ' ev-fail' : '');
       const dotCls = ev.status === 'ok' ? 'dot-ok' : 'dot-fail';
-      const title = ev.title ? escapeHtml(ev.title).slice(0, 40) : '';
-      const size = ev.content_size ? formatBytes(ev.content_size) : '';
-      const url = escapeHtml(ev.url).slice(0, 80);
-      const domain = escapeHtml(ev.domain || '');
-      const ago = relativeTime(ev.timestamp);
-
       row.innerHTML = `
         <span class="crawl-dot ${dotCls}"></span>
-        <span class="crawl-url mono" title="${escapeHtml(ev.url)}">${url}</span>
-        <span class="crawl-domain">${domain}</span>
-        <span class="crawl-title">${title}</span>
-        <span class="crawl-size">${size}</span>
-        <span class="crawl-time">${ago}</span>
+        <span class="crawl-url mono" title="${escapeHtml(ev.url)}">${escapeHtml(ev.url).slice(0, 80)}</span>
+        <span class="crawl-domain">${escapeHtml(ev.domain || '')}</span>
+        <span class="crawl-title">${ev.title ? escapeHtml(ev.title).slice(0, 40) : ''}</span>
+        <span class="crawl-size">${ev.content_size ? formatBytes(ev.content_size) : ''}</span>
+        <span class="crawl-time">${relativeTime(ev.timestamp)}</span>
       `;
-
-      if (ev.status === 'failed' && ev.error) {
-        row.title = ev.error;
-      }
-
+      if (ev.status === 'failed' && ev.error) row.title = ev.error;
       container.prepend(row);
-
-      // Start fade timer
       scheduleFade(row);
     }
-
-    // Cap visible items
-    while (container.children.length > 25) {
-      container.removeChild(container.lastChild);
-    }
-  } catch { /* ignore polling errors */ }
+    while (container.children.length > 25) container.removeChild(container.lastChild);
+  } catch { /* ignore */ }
 }
 
 function scheduleFade(row) {
   const timer = setTimeout(() => {
     if (!row.parentNode) return;
     row.classList.add('fading');
-    row.addEventListener('animationend', () => {
-      if (row.parentNode) row.parentNode.removeChild(row);
-    }, { once: true });
+    row.addEventListener('animationend', () => { if (row.parentNode) row.parentNode.removeChild(row); }, { once: true });
   }, 10000);
-
-  // Pause on hover
-  row.addEventListener('mouseenter', () => {
-    clearTimeout(timer);
-    row.classList.remove('fading');
-  });
-  row.addEventListener('mouseleave', () => {
-    scheduleFade(row);
-  });
-}
-
-function formatBytes(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-function relativeTime(ts) {
-  if (!ts) return '';
-  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-  if (diff < 5) return 'just now';
-  if (diff < 60) return diff + 's ago';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  return Math.floor(diff / 3600) + 'h ago';
+  row.addEventListener('mouseenter', () => { clearTimeout(timer); row.classList.remove('fading'); });
+  row.addEventListener('mouseleave', () => { scheduleFade(row); });
 }
 
 async function renderAnalytics(el) {
@@ -257,79 +487,35 @@ async function renderAnalytics(el) {
 
     el.innerHTML = `
       <div class="card-grid">
-        <div class="card">
-          <div class="card-label">Total Crawled</div>
-          <div class="card-value">${status.crawled_urls.toLocaleString()}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Current Queue</div>
-          <div class="card-value">${status.urls_in_queue.toLocaleString()}</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Avg Rate</div>
-          <div class="card-value">${crawlRate} URL/min</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Indexed</div>
-          <div class="card-value">${status.indexed_docs.toLocaleString()}</div>
-          <div class="card-sub">Index rate: ${upMins > 0 ? (status.indexed_docs / upMins).toFixed(1) : '0'}/min</div>
-        </div>
+        <div class="card"><div class="card-label">Total Crawled</div><div class="card-value">${status.crawled_urls.toLocaleString()}</div></div>
+        <div class="card"><div class="card-label">Current Queue</div><div class="card-value">${status.urls_in_queue.toLocaleString()}</div></div>
+        <div class="card"><div class="card-label">Avg Rate</div><div class="card-value">${crawlRate} URL/min</div></div>
+        <div class="card"><div class="card-label">Indexed</div><div class="card-value">${status.indexed_docs.toLocaleString()}</div><div class="card-sub">Index rate: ${upMins > 0 ? (status.indexed_docs / upMins).toFixed(1) : '0'}/min</div></div>
       </div>
-
-      <div class="section">
-        <h3>Crawl Activity (live)</h3>
-        <div class="chart-container">
-          <canvas id="crawl-activity-chart"></canvas>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3>Crawled vs Indexed</h3>
-        <div class="chart-container">
-          <canvas id="crawl-vs-indexed-chart"></canvas>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3>Queue Depth Over Time</h3>
-        <div class="chart-container">
-          <canvas id="queue-depth-chart"></canvas>
-        </div>
-      </div>
+      <div class="section"><h3>Crawl Activity (live)</h3><div class="chart-container"><canvas id="crawl-activity-chart"></canvas></div></div>
+      <div class="section"><h3>Crawled vs Indexed</h3><div class="chart-container"><canvas id="crawl-vs-indexed-chart"></canvas></div></div>
+      <div class="section"><h3>Queue Depth Over Time</h3><div class="chart-container"><canvas id="queue-depth-chart"></canvas></div></div>
     `;
 
-    // Crawl activity line chart
     if (crawlHistory.length > 1) {
       const deltas = [];
       for (let i = 1; i < crawlHistory.length; i++) {
-        deltas.push({
-          label: formatTime(crawlHistory[i].time),
-          value: crawlHistory[i].crawled - crawlHistory[i - 1].crawled,
-        });
+        deltas.push({ label: formatTime(crawlHistory[i].time), value: crawlHistory[i].crawled - crawlHistory[i - 1].crawled });
       }
-      renderLineChart('crawl-activity-chart', [
-        { label: 'URLs crawled/interval', color: getCSS('--accent'), data: deltas },
-      ], { height: 200 });
+      renderLineChart('crawl-activity-chart', [{ label: 'URLs crawled/interval', color: getCSS('--accent'), data: deltas }], { height: 200 });
     } else {
       renderLineChart('crawl-activity-chart', [], { height: 200 });
     }
 
-    // Crawled vs Indexed bar chart
     renderBarChart('crawl-vs-indexed-chart', [
       { label: 'Crawled', value: status.crawled_urls, color: getCSS('--accent') },
       { label: 'Indexed', value: status.indexed_docs, color: getCSS('--green') },
       { label: 'Queue', value: status.urls_in_queue, color: getCSS('--amber') },
     ], { height: 200 });
 
-    // Queue depth line chart
     if (crawlHistory.length > 1) {
-      const queueData = crawlHistory.map(h => ({
-        label: formatTime(h.time),
-        value: h.queued,
-      }));
-      renderLineChart('queue-depth-chart', [
-        { label: 'Queue depth', color: getCSS('--amber'), data: queueData },
-      ], { height: 200 });
+      const queueData = crawlHistory.map(h => ({ label: formatTime(h.time), value: h.queued }));
+      renderLineChart('queue-depth-chart', [{ label: 'Queue depth', color: getCSS('--amber'), data: queueData }], { height: 200 });
     } else {
       renderLineChart('queue-depth-chart', [], { height: 200 });
     }
@@ -342,34 +528,24 @@ function renderSeeds(el) {
   el.innerHTML = `
     <div class="section">
       <h3>Add Seed URL</h3>
-      <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">
-        Seed URLs are the starting points for the crawler. The node will crawl these and discover new pages from the links found.
-      </p>
+      <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">Seed URLs are the starting points for the crawler.</p>
       <div class="form-row">
         <input type="text" id="seed-input" placeholder="https://example.com">
         <button class="btn btn-primary" id="seed-add-btn">Add Seed</button>
       </div>
       <div id="seed-result" style="margin-top:8px"></div>
     </div>
-
     <div class="section">
       <h3>Bulk Add Seeds</h3>
-      <textarea id="bulk-seeds" rows="8" style="width:100%;padding:12px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:monospace;font-size:0.85em;resize:vertical" placeholder="One URL per line:
-https://en.wikipedia.org
-https://news.ycombinator.com
-https://go.dev
-https://developer.mozilla.org"></textarea>
+      <textarea id="bulk-seeds" rows="8" style="width:100%;padding:12px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:monospace;font-size:0.85em;resize:vertical" placeholder="One URL per line"></textarea>
       <button class="btn btn-primary" id="bulk-add-btn" style="margin-top:8px">Add All</button>
       <div id="bulk-result" style="margin-top:8px"></div>
     </div>
-
     <div class="section">
       <h3>Suggested Seeds</h3>
-      <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">Click to queue these popular starting points.</p>
+      <p style="color:var(--text-muted);font-size:0.9em;margin-bottom:12px">Click to queue popular starting points.</p>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${suggestedSeeds.map(s =>
-          `<button class="badge badge-accent suggested-seed" data-url="${s}" style="cursor:pointer;border:none;font-family:inherit;font-size:0.85em;padding:5px 10px">${s.replace('https://', '')}</button>`
-        ).join('')}
+        ${suggestedSeeds.map(s => `<button class="badge badge-accent suggested-seed" data-url="${s}" style="cursor:pointer;border:none;font-family:inherit;font-size:0.85em;padding:5px 10px">${s.replace('https://', '')}</button>`).join('')}
       </div>
       <div id="suggested-result" style="margin-top:8px"></div>
     </div>
@@ -380,29 +556,18 @@ https://developer.mozilla.org"></textarea>
     const result = document.getElementById('seed-result');
     const url = input.value.trim();
     if (!url) return;
-    try {
-      await api.addSeed(url);
-      result.innerHTML = `<span class="badge badge-green">Queued: ${escapeHtml(url)}</span>`;
-      input.value = '';
-    } catch (err) {
-      result.innerHTML = `<span class="badge badge-red">Error: ${err.message}</span>`;
-    }
+    try { await api.addSeed(url); result.innerHTML = `<span class="badge badge-green">Queued: ${escapeHtml(url)}</span>`; input.value = ''; }
+    catch (err) { result.innerHTML = `<span class="badge badge-red">Error: ${err.message}</span>`; }
   });
-
-  document.getElementById('seed-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('seed-add-btn').click();
-  });
+  document.getElementById('seed-input').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('seed-add-btn').click(); });
 
   document.getElementById('bulk-add-btn').addEventListener('click', async () => {
     const textarea = document.getElementById('bulk-seeds');
     const result = document.getElementById('bulk-result');
     const urls = textarea.value.split('\n').map(u => u.trim()).filter(u => u && u.startsWith('http'));
     if (urls.length === 0) { result.innerHTML = '<span class="badge badge-amber">No valid URLs found</span>'; return; }
-
     let ok = 0, fail = 0;
-    for (const url of urls) {
-      try { await api.addSeed(url); ok++; } catch { fail++; }
-    }
+    for (const url of urls) { try { await api.addSeed(url); ok++; } catch { fail++; } }
     result.innerHTML = `<span class="badge badge-green">${ok} queued</span>${fail > 0 ? ` <span class="badge badge-red">${fail} failed</span>` : ''}`;
     textarea.value = '';
   });
@@ -411,49 +576,23 @@ https://developer.mozilla.org"></textarea>
     btn.addEventListener('click', async () => {
       const url = btn.dataset.url;
       const result = document.getElementById('suggested-result');
-      try {
-        await api.addSeed(url);
-        btn.style.opacity = '0.4';
-        btn.disabled = true;
-        result.innerHTML = `<span class="badge badge-green">Queued: ${url}</span>`;
-      } catch (err) {
-        result.innerHTML = `<span class="badge badge-red">Error: ${err.message}</span>`;
-      }
+      try { await api.addSeed(url); btn.style.opacity = '0.4'; btn.disabled = true; result.innerHTML = `<span class="badge badge-green">Queued: ${url}</span>`; }
+      catch (err) { result.innerHTML = `<span class="badge badge-red">Error: ${err.message}</span>`; }
     });
   });
 }
 
 const suggestedSeeds = [
-  'https://en.wikipedia.org',
-  'https://news.ycombinator.com',
-  'https://go.dev',
-  'https://developer.mozilla.org',
-  'https://docs.python.org/3/',
-  'https://www.rust-lang.org',
-  'https://blog.cloudflare.com',
-  'https://arxiv.org',
-  'https://lobste.rs',
-  'https://lwn.net',
-  'https://stackoverflow.com',
-  'https://www.reuters.com',
-  'https://arstechnica.com',
-  'https://www.bbc.com/news',
-  'https://www.nature.com',
-  'https://github.com/trending',
-  'https://web.dev',
-  'https://kubernetes.io/docs/',
-  'https://redis.io/docs/',
-  'https://www.postgresql.org/docs/',
-  'https://reactjs.org',
-  'https://vuejs.org',
-  'https://angular.dev',
-  'https://www.typescriptlang.org',
-  'https://deno.land',
-  'https://bun.sh',
-  'https://htmx.org',
-  'https://tailwindcss.com',
-  'https://css-tricks.com',
-  'https://www.smashingmagazine.com',
+  'https://en.wikipedia.org', 'https://news.ycombinator.com', 'https://go.dev',
+  'https://developer.mozilla.org', 'https://docs.python.org/3/', 'https://www.rust-lang.org',
+  'https://blog.cloudflare.com', 'https://arxiv.org', 'https://lobste.rs', 'https://lwn.net',
+  'https://stackoverflow.com', 'https://www.reuters.com', 'https://arstechnica.com',
+  'https://www.bbc.com/news', 'https://www.nature.com', 'https://github.com/trending',
+  'https://web.dev', 'https://kubernetes.io/docs/', 'https://redis.io/docs/',
+  'https://www.postgresql.org/docs/', 'https://reactjs.org', 'https://vuejs.org',
+  'https://angular.dev', 'https://www.typescriptlang.org', 'https://deno.land',
+  'https://bun.sh', 'https://htmx.org', 'https://tailwindcss.com',
+  'https://css-tricks.com', 'https://www.smashingmagazine.com',
 ];
 
 function renderFeatures(el) {
@@ -477,14 +616,12 @@ function renderFeatures(el) {
 }
 
 function feature(name, desc, enabled) {
-  return `
-    <div class="card card-sm">
-      <div class="card-label">${enabled ? '<span class="badge badge-green">active</span>' : '<span class="badge badge-default">planned</span>'} ${escapeHtml(name)}</div>
-      <div class="card-sub" style="margin-top:4px">${escapeHtml(desc)}</div>
-    </div>
-  `;
+  return `<div class="card card-sm"><div class="card-label">${enabled ? '<span class="badge badge-green">active</span>' : '<span class="badge badge-default">planned</span>'} ${escapeHtml(name)}</div><div class="card-sub" style="margin-top:4px">${escapeHtml(desc)}</div></div>`;
 }
 
+// ============================================================
+// HELPERS
+// ============================================================
 function parseUptimeMinutes(uptime) {
   if (!uptime) return 1;
   let total = 0;
@@ -497,7 +634,17 @@ function parseUptimeMinutes(uptime) {
   return Math.max(1, total);
 }
 
-function formatTime(d) {
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatTime(d) { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
-
+function relativeTime(ts) {
+  if (!ts) return '';
+  const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (diff < 5) return 'just now';
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  return Math.floor(diff / 3600) + 'h ago';
+}
