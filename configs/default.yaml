@@ -77,10 +77,10 @@ search:
   # How long cached results stay valid
   cache_ttl: 5m
 
-# Fleet management
+# Fleet management (every node is fleet-ready by default)
 fleet:
-  # Role: "standalone" (default), "coordinator", or "worker"
-  role: "standalone"
+  # Role: "coordinator" (default — fleet-ready), "worker", or "standalone" (disables fleet)
+  role: "coordinator"
   # Coordinator multiaddr (worker mode only)
   coordinator_peer: ""
   # Shared fleet secret (hex, 64 chars). Auto-generated if empty.

@@ -828,7 +828,7 @@ function renderAPI(el) {
         \${icon('network', 24, 'var(--purple)')}
         <h2>Fleet Management API</h2>
       </div>
-      <p class="docs-section-desc">Fleet endpoints are only available on coordinator nodes (<code>--fleet-role coordinator</code>). All require a Bearer token derived from the fleet secret.</p>
+      <p class="docs-section-desc">Fleet endpoints are available on every node by default (all nodes run as coordinators). All require a Bearer token derived from the fleet secret. Find your token in the logs or Admin &gt; Fleet.</p>
 
       <div class="docs-endpoint-list">
         \${endpoint('GET', '/api/fleet/nodes', 'Fleet overview: all registered workers (requires Bearer token)', \`
@@ -1206,7 +1206,7 @@ const configDetails = [
   { title: '--anti-entropy-interval', html: '<p>How often the anti-entropy reconciliation loop runs. Each tick, the node compares Merkle roots with replica peers and repairs any missing documents. Default: 2m. Random jitter (0-30s) is added per tick to avoid thundering herd.</p><p>YAML: <code>index.anti_entropy_interval: 2m</code></p>' },
   { title: '--log-level', html: '<p>Controls log verbosity. Accepts: <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>. Default: <code>info</code>. Logs use <code>log/slog</code> with tint for colored console output (format: <code>15:04:05 INF msg key=val</code>).</p><p>YAML: <code>log_level: "info"</code></p>' },
   { title: '--bind', html: '<p>API server bind address. Default: <code>0.0.0.0</code> (LAN-accessible). Set to <code>127.0.0.1</code> to restrict to localhost only.</p><p>YAML: <code>api.bind: "0.0.0.0"</code></p>' },
-  { title: '--fleet-role', html: '<p>Fleet management role. Options: <code>standalone</code> (default, no fleet), <code>coordinator</code> (manages workers), <code>worker</code> (reports to coordinator).</p><p>YAML: <code>fleet.role: "standalone"</code></p>' },
+  { title: '--fleet-role', html: '<p>Fleet management role. Options: <code>coordinator</code> (default &mdash; fleet-ready), <code>worker</code> (reports to coordinator), <code>standalone</code> (disables fleet).</p><p>YAML: <code>fleet.role: "coordinator"</code></p>' },
   { title: '--fleet-coordinator', html: '<p>Coordinator multiaddr for worker mode. Format: <code>/ip4/&lt;IP&gt;/tcp/&lt;PORT&gt;/p2p/&lt;PEER_ID&gt;</code></p><p>Required when <code>--fleet-role worker</code>. Workers use this to send heartbeats and accept proxy requests.</p><p>YAML: <code>fleet.coordinator_peer: "/ip4/.../tcp/.../p2p/..."</code></p>' },
   { title: '--fleet-secret', html: '<p>256-bit shared secret (64 hex characters). Used for HMAC-SHA256 signing of all fleet messages. Auto-generated on coordinator if not provided. <strong>Required</strong> for workers.</p><p>YAML: <code>fleet.fleet_secret: "aabbcc..."</code></p>' },
 ];
@@ -1265,7 +1265,7 @@ function renderConfig(el) {
         ${configCard('--anti-entropy-interval', '2m', 'How often the anti-entropy Merkle reconciliation loop runs.', 'refresh', 13)}
         ${configCard('--log-level', 'info', 'Log level: debug, info, warn, error. Uses slog with tint colored output.', 'fileText', 15)}
         ${configCard('--bind', '0.0.0.0', 'API server bind address. LAN-accessible by default.', 'globe', 16)}
-        ${configCard('--fleet-role', 'standalone', 'Fleet role: standalone, coordinator, or worker.', 'network', 17)}
+        ${configCard('--fleet-role', 'coordinator', 'Fleet role: coordinator (default), worker, or standalone.', 'network', 17)}
         ${configCard('--fleet-coordinator', '(none)', 'Coordinator multiaddr (worker mode only).', 'network', 18)}
         ${configCard('--fleet-secret', '(auto)', 'Shared fleet secret (hex). Auto-generated on coordinator.', 'shield', 19)}
       </div>
@@ -1322,7 +1322,7 @@ search:
   max_peers: 10            # max peers to fan out queries to
 
 fleet:
-  role: "standalone"           # standalone, coordinator, or worker
+  role: "coordinator"          # coordinator (default), worker, or standalone
   coordinator_peer: ""         # multiaddr (worker mode only)
   fleet_secret: ""             # hex, 64 chars (auto-generated on coordinator)
   heartbeat_interval: 15s

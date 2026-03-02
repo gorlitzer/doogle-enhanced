@@ -203,31 +203,31 @@ make build
 
 ## Fleet Management
 
-Fleet mode lets you deploy multiple Doogle nodes across machines and manage them all from one coordinator. This is entirely optional — by default every node runs in standalone mode with zero overhead.
+Every Doogle node is **fleet-ready by default** — it runs as a coordinator out of the box with zero extra config. If you never add workers, it behaves exactly like a normal standalone node with no overhead. When you're ready to scale, just point workers at it.
 
-**Why?** If you're running 5+ nodes across different servers, you don't want to SSH into each one to check status. The coordinator gives you a single dashboard that shows all workers, their stats, and lets you access each worker's full admin UI through a secure tunnel.
+**Why?** If you're running multiple nodes across different servers, you don't want to SSH into each one to check status. Your node's built-in fleet dashboard shows all workers, their stats, and lets you access each worker's full admin UI through a secure tunnel.
 
-**How it works:** The coordinator acts as a secure reverse proxy into each worker's local API. Workers bind their HTTP port to `127.0.0.1` (not reachable from the network). The only way to reach a worker remotely is through the coordinator's encrypted libp2p tunnel. All communication is signed with a shared fleet secret using HMAC-SHA256.
+**How it works:** Your node acts as a secure reverse proxy into each worker's local API. Workers bind their HTTP port to `127.0.0.1` (not reachable from the network). The only way to reach a worker remotely is through the coordinator's encrypted libp2p tunnel. All communication is signed with a shared fleet secret using HMAC-SHA256.
 
-### Quick Start
+### Adding Workers
 
 ```bash
-# 1. Start coordinator (prints fleet secret and API token to logs)
-make fleet-coordinator
+# 1. Start your node (fleet secret and API token are in the logs + Admin > Fleet)
+make run
 
 # 2. On another machine, start a worker (use the secret from step 1)
-make fleet-worker COORD=/ip4/<COORD_IP>/tcp/7001/p2p/<PEER_ID> SECRET=<hex>
+make fleet-worker COORD=/ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> SECRET=<hex>
 
-# 3. Open coordinator UI → Admin → Fleet → enter API token
+# 3. Open your node's UI → Admin → Fleet → enter API token to see workers
 ```
 
 ### CLI Flags
 
 | Flag | Description |
 |------|-------------|
-| `--fleet-role` | `standalone` (default), `coordinator`, or `worker` |
+| `--fleet-role` | `coordinator` (default), `worker`, or `standalone` (disables fleet) |
 | `--fleet-coordinator` | Coordinator multiaddr (required for workers) |
-| `--fleet-secret` | Shared secret hex (auto-generated on coordinator if omitted) |
+| `--fleet-secret` | Shared secret hex (auto-generated if omitted) |
 
 ### Security
 
@@ -324,7 +324,7 @@ Flags:
   --dht-discovery      Enable DHT peer discovery via IPFS bootstrap (default: true)
   --headless           Enable headless browser rendering (default: false)
   --log-level LEVEL    Log level: debug, info, warn, error (default: info)
-  --fleet-role ROLE    Fleet mode: standalone, coordinator, worker (default: standalone)
+  --fleet-role ROLE    Fleet mode: coordinator (default), worker, standalone
   --fleet-coordinator  Coordinator multiaddr (required for workers)
   --fleet-secret HEX   Shared fleet secret (auto-generated on coordinator)
 ```
@@ -367,9 +367,8 @@ make stop                       # stop Docker containers
 make build                      # compile binary without running
 make clean                      # remove build artifacts
 make nuke                       # full reset: clean + remove in-repo Go runtime
-make fleet-coordinator          # start a fleet coordinator node
 make fleet-worker COORD=... SECRET=...  # start a fleet worker
-make fleet-stop                 # stop all fleet nodes
+make fleet-stop                 # stop all fleet workers
 ```
 
 ### Examples
@@ -517,7 +516,7 @@ storage:
   data_dir: "./data/doogle"
 
 fleet:
-  role: "standalone"             # standalone, coordinator, worker
+  role: "coordinator"            # coordinator (default), worker, standalone
   heartbeat_interval: 15s
   node_timeout: 60s
 ```
