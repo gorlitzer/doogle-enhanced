@@ -505,14 +505,11 @@ The API token is available from:
 Workers need your node's multiaddr and fleet secret (from your logs, `data/fleet.secret`, or Admin > Actions > Fleet):
 
 ```bash
-make fleet-worker \
-  COORD=/ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> \
-  SECRET=<hex>
-# or
-./bin/doogle --fleet-role worker \
+make run ARGS='--fleet-role worker \
   --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> \
   --fleet-secret <hex> \
-  --name worker1 --port 7003 --api-port 7004
+  --name worker1 --port 7003 --api-port 7004 \
+  --data-dir ./data/worker1'
 ```
 
 Workers automatically:

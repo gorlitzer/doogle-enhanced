@@ -216,7 +216,7 @@ Every Doogle node is **fleet-ready by default** — it runs as a coordinator out
 make run
 
 # 2. On another machine, start a worker (use the secret from step 1)
-make fleet-worker COORD=/ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> SECRET=<hex>
+make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> --fleet-secret <hex> --port 7003 --api-port 7004 --data-dir ./data/worker1'
 
 # 3. Open your node's UI → Admin → Actions → Fleet section for credentials
 #    Or Admin → Fleet for the live worker dashboard
@@ -365,13 +365,11 @@ make setup                      # install Go, Docker checks, all prerequisites
 make run                        # build + launch node (API on :7002)
 make run ARGS='--port 7003'     # pass extra flags
 make test                       # run all tests
-make dev                        # Docker 3-node cluster on :7002/:7004/:7006
-make stop                       # stop Docker containers
+make dev                        # Docker detached on :7002
+make stop                       # stop running node + Docker
 make build                      # compile binary without running
 make clean                      # remove build artifacts
 make nuke                       # full reset: clean + remove in-repo Go runtime
-make fleet-worker COORD=... SECRET=...  # start a fleet worker
-make fleet-stop                 # stop all fleet workers
 ```
 
 ### Examples

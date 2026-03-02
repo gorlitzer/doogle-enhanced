@@ -235,7 +235,7 @@ async function loadCurrentName() {
       // Build worker command with the node's first TCP multiaddr.
       const addr = (s.addrs || []).find(a => a.includes('/tcp/')) || '';
       const cmd = addr
-        ? `make fleet-worker COORD="${addr}" SECRET="<hex from ${s.fleet_secret_file || 'data/fleet.secret'}>"`
+        ? `make run ARGS='--fleet-role worker --fleet-coordinator ${addr} --fleet-secret <hex from ${s.fleet_secret_file || 'data/fleet.secret'}> --port 7003 --api-port 7004 --data-dir ./data/worker1'`
         : 'Multiaddr not available — check node logs';
       document.getElementById('fleet-worker-cmd').value = cmd;
     }
