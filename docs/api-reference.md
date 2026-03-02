@@ -258,7 +258,11 @@ Or as a query parameter (for iframe embedding):
 curl "http://localhost:7002/api/fleet/nodes?_token=<token>"
 ```
 
-The token is printed to the coordinator's logs at startup.
+**How to get the token:**
+- **Web UI:** Admin → Actions → Fleet section (localhost only)
+- **API:** `GET /api/status` returns `fleet_api_token` (only for localhost requests — remote requests get an empty string for security)
+- **Terminal:** Printed to the coordinator's logs at startup
+- **File:** Derived from the fleet secret stored in `data/fleet.secret`
 
 ---
 

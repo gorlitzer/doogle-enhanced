@@ -1504,13 +1504,8 @@ const CATEGORY_GROUPS = [
 // Flatten for backward compat
 const CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.categories);
 
-const BASE_STEPS = ['Welcome', 'Identity', 'Focus', 'Settings', 'Launch'];
-
 function getStepLabels() {
-  if (fleetRole === 'worker') {
-    return ['Welcome', 'Identity', 'Fleet', 'Focus', 'Settings', 'Launch'];
-  }
-  return BASE_STEPS;
+  return ['Welcome', 'Identity', 'Role', 'Focus', 'Settings', 'Launch'];
 }
 
 const DEPTH_DESCRIPTIONS = [
@@ -1690,7 +1685,7 @@ function renderStep() {
   switch (label) {
     case 'Welcome':  renderWelcome(body); break;
     case 'Identity': renderIdentity(body); break;
-    case 'Fleet':    renderFleetStep(body); break;
+    case 'Role':     renderRoleStep(body); break;
     case 'Focus':    renderFocus(body); break;
     case 'Settings': renderSettings(body); break;
     case 'Launch':   renderLaunch(body); break;
@@ -1828,65 +1823,145 @@ async function renderIdentity(el) {
   }
 }
 
-// ─── Fleet Step (conditional) ─────────────────────────
-function renderFleetStep(el) {
-  if (fleetRole === 'coordinator') {
-    renderFleetCoordinator(el);
-  } else if (fleetRole === 'worker') {
-    renderFleetWorker(el);
-  }
-}
+// ─── Step 2: Node Role ───────────────────────────────
+function renderRoleStep(el) {
+  const roles = [
+    {
+      id: 'coordinator',
+      name: 'Coordinator',
+      tag: 'Recommended',
+      icon: 'network',
+      desc: 'Your node works independently and can manage worker nodes. Use this if you don\'t know which to pick.',
+      detail: 'Workers can join your fleet for distributed crawling. Zero overhead if you never add workers — it behaves like a normal node.',
+      active: fleetRole === 'coordinator' || fleetRole === '',
+    },
+    {
+      id: 'worker',
+      name: 'Worker',
+      tag: '',
+      icon: 'link',
+      desc: 'Joins an existing coordinator\'s fleet. You\'ll need the coordinator\'s address and fleet secret.',
+      detail: 'The coordinator manages this node remotely through an encrypted tunnel. Your API is bound to localhost only.',
+      active: fleetRole === 'worker',
+    },
+    {
+      id: 'standalone',
+      name: 'Standalone',
+      tag: '',
+      icon: 'cpu',
+      desc: 'No fleet features. Just a simple independent search node.',
+      detail: 'Fleet protocols are disabled entirely. You can always re-enable by restarting without --fleet-role standalone.',
+      active: fleetRole === 'standalone',
+    },
+  ];
 
-function renderFleetCoordinator(el) {
-  const tokenDisplay = fleetAPIToken || 'Not available';
-  const secretPath = fleetSecretFile || 'data/fleet.secret';
+  const activeRole = roles.find(r => r.active) || roles[0];
 
   el.innerHTML = `
     <div class="wizard-identity">
-      <h2>${icon('network', 28)} Fleet Coordinator</h2>
-      <p class="wizard-subtitle">Your node is running as a fleet coordinator. Workers can join your fleet and be managed from this dashboard. Share the fleet secret with worker operators — they'll need it to connect.</p>
+      <h2>${icon('network', 28)} Node Role</h2>
+      <p class="wizard-subtitle">Your node's role determines how it participates in the network. The role is set at startup and can be changed by restarting with a different flag.</p>
 
-      <div class="wizard-id-card">
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">Role</span>
-          <span class="wizard-id-value">
-            <span style="display:inline-flex;align-items:center;gap:6px">
-              <span class="wizard-peer-dot online"></span> Coordinator
-            </span>
-          </span>
-        </div>
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">API Token</span>
-          <span class="wizard-id-value mono" style="font-size:0.82em;word-break:break-all">
-            ${tokenDisplay.length > 24 ? tokenDisplay.slice(0, 24) + '...' : tokenDisplay}
-            <button class="wizard-copy-btn" id="wizard-copy-token" title="Copy full token">
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
-            </button>
-          </span>
-        </div>
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">Fleet Secret</span>
-          <span class="wizard-id-value mono" style="font-size:0.82em">
-            Saved to <code>${secretPath}</code>
-            <button class="wizard-copy-btn" id="wizard-copy-secret-path" title="Copy path">
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
-            </button>
-          </span>
-        </div>
+      <div class="wizard-role-cards">
+        ${roles.map(r => `
+          <div class="wizard-role-card ${r.active ? 'active' : ''}" data-role="${r.id}">
+            <div class="wizard-role-card-header">
+              <div style="display:flex;align-items:center;gap:8px">
+                ${icon(r.icon, 20, r.active ? 'var(--accent)' : 'var(--text-secondary)')}
+                <strong>${r.name}</strong>
+                ${r.tag ? `<span class="badge badge-green" style="font-size:0.7em;padding:2px 8px">${r.tag}</span>` : ''}
+              </div>
+              ${r.active ? `<span class="wizard-peer-dot online" title="Current role"></span>` : ''}
+            </div>
+            <p style="color:var(--text-secondary);font-size:0.88em;margin:6px 0 0">${r.desc}</p>
+            ${r.active ? `<p style="color:var(--text-tertiary);font-size:0.82em;margin:8px 0 0;font-style:italic">${r.detail}</p>` : ''}
+          </div>
+        `).join('')}
       </div>
 
-      <div class="wizard-info-note" style="margin-top:16px">
-        ${icon('shield', 16)} <strong>To connect a worker:</strong> share the fleet secret (from the file above or your terminal logs) and your node's multiaddr. Workers run:<br>
-        <code style="display:block;margin-top:8px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;font-size:0.85em;word-break:break-all">make fleet-worker COORD=&lt;your-multiaddr&gt; SECRET=&lt;fleet-secret-hex&gt;</code>
-      </div>
-
-      <div class="wizard-info-note" style="margin-top:12px">
-        ${icon('radio', 16)} After workers connect, manage them from <strong>Admin &rarr; Fleet</strong> in the sidebar. Use the API token above to authenticate.
-      </div>
+      ${activeRole.id === 'coordinator' ? renderRoleCoordinatorInfo() : ''}
+      ${activeRole.id === 'worker' ? renderRoleWorkerInfo() : ''}
+      ${activeRole.id !== roles.find(r => r.active)?.id || (!roles.some(r => r.active)) ? '' : `
+        <div class="wizard-info-note" style="margin-top:16px">
+          ${icon('alertTriangle', 16)} <strong>Want a different role?</strong> Restart your node with a different flag:<br>
+          <code style="display:block;margin-top:8px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;font-size:0.85em">make run ARGS='--fleet-role ${activeRole.id === 'coordinator' ? 'standalone' : 'coordinator'}'</code>
+        </div>
+      `}
     </div>
   `;
 
-  // Copy token handler
+  bindRoleCopyHandlers();
+}
+
+function renderRoleCoordinatorInfo() {
+  const tokenDisplay = fleetAPIToken || 'Available from localhost or terminal logs';
+  const secretPath = fleetSecretFile || 'data/fleet.secret';
+  const hasToken = !!fleetAPIToken;
+
+  return `
+    <div class="wizard-id-card" style="margin-top:16px">
+      <div class="wizard-id-row">
+        <span class="wizard-id-label">Fleet Secret</span>
+        <span class="wizard-id-value mono" style="font-size:0.82em">
+          Saved to <code>${secretPath}</code>
+        </span>
+      </div>
+      ${hasToken ? `
+      <div class="wizard-id-row">
+        <span class="wizard-id-label">API Token</span>
+        <span class="wizard-id-value mono" style="font-size:0.82em;word-break:break-all">
+          ${tokenDisplay.slice(0, 24)}...
+          <button class="wizard-copy-btn" id="wizard-copy-token" title="Copy full token">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
+          </button>
+        </span>
+      </div>
+      ` : ''}
+    </div>
+    <div class="wizard-info-note" style="margin-top:12px">
+      ${icon('shield', 16)} To add workers, share the fleet secret and your node's multiaddr. See <a href="#/admin/actions">Admin &rarr; Actions</a> for the full connection command.
+    </div>
+  `;
+}
+
+function renderRoleWorkerInfo() {
+  const truncCoord = fleetCoordID.length > 16 ? fleetCoordID.slice(0, 16) + '...' : fleetCoordID;
+
+  return `
+    <div class="wizard-id-card" style="margin-top:16px">
+      <div class="wizard-id-row">
+        <span class="wizard-id-label">Coordinator</span>
+        <span class="wizard-id-value mono" style="font-size:0.82em">
+          ${truncCoord}
+          <button class="wizard-copy-btn" id="wizard-copy-coord" title="Copy coordinator ID">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
+          </button>
+        </span>
+      </div>
+      <div class="wizard-id-row">
+        <span class="wizard-id-label">API Binding</span>
+        <span class="wizard-id-value">
+          <span style="display:inline-flex;align-items:center;gap:6px">
+            ${icon('lock', 14)} localhost only
+          </span>
+        </span>
+      </div>
+      <div class="wizard-id-row">
+        <span class="wizard-id-label">Heartbeat</span>
+        <span class="wizard-id-value">
+          <span style="display:inline-flex;align-items:center;gap:6px">
+            <span class="wizard-peer-dot online"></span> Active (every 15s)
+          </span>
+        </span>
+      </div>
+    </div>
+    <div class="wizard-info-note" style="margin-top:12px">
+      ${icon('shield', 16)} Your API is bound to <strong>127.0.0.1</strong> — not reachable from the network. The coordinator accesses this node through an encrypted libp2p tunnel.
+    </div>
+  `;
+}
+
+function bindRoleCopyHandlers() {
   document.getElementById('wizard-copy-token')?.addEventListener('click', () => {
     navigator.clipboard.writeText(fleetAPIToken).then(() => {
       const btn = document.getElementById('wizard-copy-token');
@@ -1899,75 +1974,6 @@ function renderFleetCoordinator(el) {
     });
   });
 
-  // Copy secret path handler
-  document.getElementById('wizard-copy-secret-path')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(secretPath).then(() => {
-      const btn = document.getElementById('wizard-copy-secret-path');
-      if (btn) {
-        btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>';
-        setTimeout(() => {
-          btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>';
-        }, 1500);
-      }
-    });
-  });
-}
-
-function renderFleetWorker(el) {
-  const truncCoord = fleetCoordID.length > 16 ? fleetCoordID.slice(0, 16) + '...' : fleetCoordID;
-
-  el.innerHTML = `
-    <div class="wizard-identity">
-      <h2>${icon('link', 28)} Fleet Worker</h2>
-      <p class="wizard-subtitle">Your node is running as a fleet worker. It sends heartbeats to the coordinator every 15 seconds and accepts proxied requests only from the coordinator's verified peer ID.</p>
-
-      <div class="wizard-id-card">
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">Role</span>
-          <span class="wizard-id-value">
-            <span style="display:inline-flex;align-items:center;gap:6px">
-              <span class="wizard-peer-dot online"></span> Worker
-            </span>
-          </span>
-        </div>
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">Coordinator</span>
-          <span class="wizard-id-value mono" style="font-size:0.82em">
-            ${truncCoord}
-            <button class="wizard-copy-btn" id="wizard-copy-coord" title="Copy coordinator ID">
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
-            </button>
-          </span>
-        </div>
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">API Binding</span>
-          <span class="wizard-id-value">
-            <span style="display:inline-flex;align-items:center;gap:6px">
-              ${icon('lock', 14)} localhost only
-            </span>
-          </span>
-        </div>
-        <div class="wizard-id-row">
-          <span class="wizard-id-label">Heartbeat</span>
-          <span class="wizard-id-value">
-            <span style="display:inline-flex;align-items:center;gap:6px">
-              <span class="wizard-peer-dot online"></span> Active (every 15s)
-            </span>
-          </span>
-        </div>
-      </div>
-
-      <div class="wizard-info-note" style="margin-top:16px">
-        ${icon('shield', 16)} Your HTTP API is bound to <strong>127.0.0.1</strong> — it's not reachable from the network. The coordinator accesses this node through an encrypted libp2p tunnel. No ports need to be open.
-      </div>
-
-      <div class="wizard-info-note" style="margin-top:12px">
-        ${icon('radio', 16)} The coordinator can view this node's status and admin panels from its <strong>Fleet dashboard</strong>. You can still use the local admin UI at <code>http://localhost:${location.port || '7004'}</code>.
-      </div>
-    </div>
-  `;
-
-  // Copy coordinator ID handler
   document.getElementById('wizard-copy-coord')?.addEventListener('click', () => {
     navigator.clipboard.writeText(fleetCoordID).then(() => {
       const btn = document.getElementById('wizard-copy-coord');

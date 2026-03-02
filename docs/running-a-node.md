@@ -491,13 +491,18 @@ Approximate storage per 1,000 indexed pages:
 
 Every Doogle node is fleet-ready by default — it runs as a coordinator out of the box. If you never add workers, it behaves like a normal node with zero overhead.
 
-Your node prints two fleet values to its logs at startup:
-1. **Fleet secret** — a 256-bit hex string (also saved to `data/fleet.secret`)
-2. **API token** — for authenticating with the fleet dashboard (also visible in Admin > Fleet)
+Your node generates two fleet values at startup:
+1. **Fleet secret** — a 256-bit hex string (saved to `data/fleet.secret`, printed to logs)
+2. **API token** — derived from the secret, used for authenticating with the fleet dashboard
+
+The API token is available from:
+- **Admin > Actions > Fleet** section in the web UI (localhost access only)
+- Terminal logs at startup
+- Programmatically via `GET /api/status` (only returns the token for localhost requests — never exposed over the network)
 
 ### Adding a Worker
 
-Workers need your node's multiaddr and fleet secret (from your logs or Admin > Fleet):
+Workers need your node's multiaddr and fleet secret (from your logs, `data/fleet.secret`, or Admin > Actions > Fleet):
 
 ```bash
 make fleet-worker \
@@ -517,7 +522,9 @@ Workers automatically:
 
 ### Fleet Dashboard
 
-Open your node's web UI → Admin → Fleet. Enter the API token (printed at startup, also shown on the Fleet page) to access the dashboard. From there you can see all workers, their stats, and open each worker's full admin UI through the coordinator's secure tunnel.
+Open your node's web UI → **Admin → Fleet** for the live worker dashboard. The fleet page auto-authenticates when accessed from localhost. For credentials and the worker connection command, go to **Admin → Actions → Fleet** section.
+
+From the dashboard you can see all workers, their stats, and open each worker's full admin UI through the coordinator's secure tunnel.
 
 ### Fleet CLI Flags
 

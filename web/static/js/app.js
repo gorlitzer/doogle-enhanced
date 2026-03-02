@@ -107,6 +107,10 @@ function startStatusPolling() {
       }
       if (firstPoll) {
         firstPoll = false;
+        // Fresh node (no data at all) — clear stale wizard dismissal from previous runs.
+        if (s.indexed_docs === 0 && s.crawled_urls === 0) {
+          localStorage.removeItem('doogle_wizard_dismissed');
+        }
         if (s.indexed_docs === 0 && !localStorage.getItem('doogle_wizard_dismissed')) {
           window.location.hash = '#/wizard';
         }
