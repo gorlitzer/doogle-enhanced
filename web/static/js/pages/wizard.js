@@ -1884,7 +1884,6 @@ function renderRoleStep(el) {
                 <strong>${r.name}</strong>
                 ${r.tag ? `<span class="badge badge-green" style="font-size:0.7em;padding:2px 8px">${r.tag}</span>` : ''}
               </div>
-              ${r.current ? `<span class="badge badge-default" style="font-size:0.7em;padding:2px 8px">Current</span>` : ''}
             </div>
             <p style="color:var(--text-secondary);font-size:0.88em;margin:6px 0 0">${r.desc}</p>
           </div>
@@ -1924,19 +1923,19 @@ function renderRoleCurrentDetail(roleId) {
           </span>
         </div>
         ${hasToken ? `
-        <div class="wizard-id-row">
+        <div class="wizard-id-row" style="flex-direction:column;align-items:stretch;gap:8px">
           <span class="wizard-id-label">API Token</span>
-          <span class="wizard-id-value mono" style="font-size:0.82em;word-break:break-all">
-            ${tokenDisplay.slice(0, 24)}...
-            <button class="wizard-copy-btn" id="wizard-copy-token" title="Copy full token">
+          <div style="display:flex;gap:8px;align-items:center">
+            <code style="flex:1;padding:8px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font-size:0.82em;word-break:break-all;line-height:1.4;overflow:hidden;text-overflow:ellipsis">${tokenDisplay}</code>
+            <button class="wizard-copy-btn" id="wizard-copy-token" title="Copy full token" style="flex-shrink:0">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
             </button>
-          </span>
+          </div>
         </div>
         ` : ''}
       </div>
       <div class="wizard-info-note" style="margin-top:12px">
-        ${icon('shield', 16)} To add workers later, share the fleet secret and your node's multiaddr. See <a href="#/admin/actions">Admin &rarr; Actions</a> for the full connection command.
+        ${icon('shield', 16)} To add workers, share the fleet secret and your node's multiaddr from <a href="#/admin/actions" style="color:var(--accent);text-decoration:underline">Admin &rarr; Actions</a>.
       </div>
     `;
   }
