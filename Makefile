@@ -77,7 +77,13 @@ build:
 run: build
 	@-pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null; sleep 0.2
 	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
-	@echo "Doogle running (PID $$(cat .doogle.pid)) — logs: doogle.log — stop: make stop"
+	@echo ""
+	@echo "  Doogle is running! (PID $$(cat .doogle.pid))"
+	@echo ""
+	@echo "    Open:   http://localhost:7002"
+	@echo "    Logs:   tail -f doogle.log"
+	@echo "    Stop:   make stop"
+	@echo ""
 
 test:
 	$(GO) test ./...
@@ -91,7 +97,7 @@ stop:
 	@docker compose down 2>/dev/null || true
 	@echo "Stopped."
 
-clean:
+clean: stop
 	@-docker compose down -v 2>/dev/null
 	rm -rf $(BIN_DIR) data/ doogle.log .doogle.pid
 
