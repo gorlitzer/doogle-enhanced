@@ -1615,14 +1615,24 @@ function renderProgress() {
     let cls = 'wizard-step-dot';
     if (i < currentStep) cls += ' completed';
     else if (i === currentStep) cls += ' active';
+    const clickable = i <= currentStep && i !== currentStep;
+    if (clickable) cls += ' clickable';
     const checkmark = i < currentStep ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="white" stroke-width="2.5"><polyline points="3 8.5 6.5 12 13 4"/></svg>' : (i + 1);
     return `
       ${i > 0 ? '<div class="wizard-step-line' + (i <= currentStep ? ' filled' : '') + '"></div>' : ''}
-      <div class="${cls}">
+      <div class="${cls}" ${clickable ? `data-step="${i}" title="${label}"` : ''}>
         <span>${checkmark}</span>
       </div>
     `;
   }).join('');
+
+  // Bind click on completed step dots.
+  el.querySelectorAll('.wizard-step-dot.clickable').forEach(dot => {
+    dot.addEventListener('click', () => {
+      currentStep = parseInt(dot.dataset.step, 10);
+      update();
+    });
+  });
 }
 
 function renderNav() {
@@ -1824,166 +1834,206 @@ async function renderIdentity(el) {
 }
 
 // ─── Step 2: Node Role ───────────────────────────────
+let selectedRole = '';  // tracks which card the user clicked
+
 function renderRoleStep(el) {
+  // Default selection to current role.
+  if (!selectedRole) selectedRole = fleetRole || 'coordinator';
+
   const roles = [
     {
       id: 'coordinator',
       name: 'Coordinator',
-      tag: 'Recommended',
+      tag: 'Recommended — use this if unsure',
       icon: 'network',
-      desc: 'Your node works independently and can manage worker nodes. Use this if you don\'t know which to pick.',
-      detail: 'Workers can join your fleet for distributed crawling. Zero overhead if you never add workers — it behaves like a normal node.',
-      active: fleetRole === 'coordinator' || fleetRole === '',
+      desc: 'Runs normally and can manage additional worker nodes. If you never add workers, there\'s zero overhead — it\'s just a regular node.',
+      current: fleetRole === 'coordinator' || fleetRole === '',
     },
     {
       id: 'worker',
       name: 'Worker',
       tag: '',
       icon: 'link',
-      desc: 'Joins an existing coordinator\'s fleet. You\'ll need the coordinator\'s address and fleet secret.',
-      detail: 'The coordinator manages this node remotely through an encrypted tunnel. Your API is bound to localhost only.',
-      active: fleetRole === 'worker',
+      desc: 'Joins an existing coordinator to help with distributed crawling. You\'ll need the coordinator\'s address and fleet secret.',
+      current: fleetRole === 'worker',
     },
     {
       id: 'standalone',
       name: 'Standalone',
       tag: '',
       icon: 'cpu',
-      desc: 'No fleet features. Just a simple independent search node.',
-      detail: 'Fleet protocols are disabled entirely. You can always re-enable by restarting without --fleet-role standalone.',
-      active: fleetRole === 'standalone',
+      desc: 'Fleet features disabled entirely. A simple independent search node with no multi-node management.',
+      current: fleetRole === 'standalone',
     },
   ];
 
-  const activeRole = roles.find(r => r.active) || roles[0];
+  const selected = roles.find(r => r.id === selectedRole) || roles[0];
+  const isCurrent = selected.current;
 
   el.innerHTML = `
     <div class="wizard-identity">
-      <h2>${icon('network', 28)} Node Role</h2>
-      <p class="wizard-subtitle">Your node's role determines how it participates in the network. The role is set at startup and can be changed by restarting with a different flag.</p>
+      <h2>${icon('network', 28)} Fleet Role</h2>
+      <p class="wizard-subtitle">Fleet lets you manage multiple Doogle nodes from a single dashboard — useful for distributing crawl work across machines. Pick a role below.</p>
 
-      <div class="wizard-role-cards">
+      <div class="wizard-role-cards" id="wizard-role-cards">
         ${roles.map(r => `
-          <div class="wizard-role-card ${r.active ? 'active' : ''}" data-role="${r.id}">
+          <div class="wizard-role-card ${r.id === selectedRole ? 'active' : ''}" data-role="${r.id}">
             <div class="wizard-role-card-header">
               <div style="display:flex;align-items:center;gap:8px">
-                ${icon(r.icon, 20, r.active ? 'var(--accent)' : 'var(--text-secondary)')}
+                ${icon(r.icon, 20, r.id === selectedRole ? 'var(--accent)' : 'var(--text-secondary)')}
                 <strong>${r.name}</strong>
                 ${r.tag ? `<span class="badge badge-green" style="font-size:0.7em;padding:2px 8px">${r.tag}</span>` : ''}
               </div>
-              ${r.active ? `<span class="wizard-peer-dot online" title="Current role"></span>` : ''}
+              ${r.current ? `<span class="badge badge-default" style="font-size:0.7em;padding:2px 8px">Current</span>` : ''}
             </div>
             <p style="color:var(--text-secondary);font-size:0.88em;margin:6px 0 0">${r.desc}</p>
-            ${r.active ? `<p style="color:var(--text-tertiary);font-size:0.82em;margin:8px 0 0;font-style:italic">${r.detail}</p>` : ''}
           </div>
         `).join('')}
       </div>
 
-      ${activeRole.id === 'coordinator' ? renderRoleCoordinatorInfo() : ''}
-      ${activeRole.id === 'worker' ? renderRoleWorkerInfo() : ''}
-      ${activeRole.id !== roles.find(r => r.active)?.id || (!roles.some(r => r.active)) ? '' : `
-        <div class="wizard-info-note" style="margin-top:16px">
-          ${icon('alertTriangle', 16)} <strong>Want a different role?</strong> Restart your node with a different flag:<br>
-          <code style="display:block;margin-top:8px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;font-size:0.85em">make run ARGS='--fleet-role ${activeRole.id === 'coordinator' ? 'standalone' : 'coordinator'}'</code>
-        </div>
-      `}
+      <div id="wizard-role-detail">
+        ${isCurrent ? renderRoleCurrentDetail(selected.id) : renderRoleSwitchCommand(selected.id)}
+      </div>
     </div>
   `;
+
+  // Bind card clicks.
+  el.querySelectorAll('.wizard-role-card').forEach(card => {
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => {
+      selectedRole = card.dataset.role;
+      renderRoleStep(el);
+    });
+  });
 
   bindRoleCopyHandlers();
 }
 
-function renderRoleCoordinatorInfo() {
-  const tokenDisplay = fleetAPIToken || 'Available from localhost or terminal logs';
-  const secretPath = fleetSecretFile || 'data/fleet.secret';
-  const hasToken = !!fleetAPIToken;
+function renderRoleCurrentDetail(roleId) {
+  if (roleId === 'coordinator') {
+    const tokenDisplay = fleetAPIToken || 'Available from localhost or terminal logs';
+    const secretPath = fleetSecretFile || 'data/fleet.secret';
+    const hasToken = !!fleetAPIToken;
 
+    return `
+      <div class="wizard-id-card" style="margin-top:16px">
+        <div class="wizard-id-row">
+          <span class="wizard-id-label">Fleet Secret</span>
+          <span class="wizard-id-value mono" style="font-size:0.82em">
+            Saved to <code>${secretPath}</code>
+          </span>
+        </div>
+        ${hasToken ? `
+        <div class="wizard-id-row">
+          <span class="wizard-id-label">API Token</span>
+          <span class="wizard-id-value mono" style="font-size:0.82em;word-break:break-all">
+            ${tokenDisplay.slice(0, 24)}...
+            <button class="wizard-copy-btn" id="wizard-copy-token" title="Copy full token">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
+            </button>
+          </span>
+        </div>
+        ` : ''}
+      </div>
+      <div class="wizard-info-note" style="margin-top:12px">
+        ${icon('shield', 16)} To add workers later, share the fleet secret and your node's multiaddr. See <a href="#/admin/actions">Admin &rarr; Actions</a> for the full connection command.
+      </div>
+    `;
+  }
+
+  if (roleId === 'worker') {
+    const truncCoord = fleetCoordID.length > 16 ? fleetCoordID.slice(0, 16) + '...' : fleetCoordID;
+    return `
+      <div class="wizard-id-card" style="margin-top:16px">
+        <div class="wizard-id-row">
+          <span class="wizard-id-label">Coordinator</span>
+          <span class="wizard-id-value mono" style="font-size:0.82em">
+            ${truncCoord}
+            <button class="wizard-copy-btn" id="wizard-copy-coord" title="Copy coordinator ID">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
+            </button>
+          </span>
+        </div>
+        <div class="wizard-id-row">
+          <span class="wizard-id-label">API Binding</span>
+          <span class="wizard-id-value">
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              ${icon('lock', 14)} localhost only
+            </span>
+          </span>
+        </div>
+        <div class="wizard-id-row">
+          <span class="wizard-id-label">Heartbeat</span>
+          <span class="wizard-id-value">
+            <span style="display:inline-flex;align-items:center;gap:6px">
+              <span class="wizard-peer-dot online"></span> Active (every 15s)
+            </span>
+          </span>
+        </div>
+      </div>
+      <div class="wizard-info-note" style="margin-top:12px">
+        ${icon('shield', 16)} Your API is bound to <strong>127.0.0.1</strong> — not reachable from the network. The coordinator accesses this node through an encrypted tunnel.
+      </div>
+    `;
+  }
+
+  // standalone
   return `
-    <div class="wizard-id-card" style="margin-top:16px">
-      <div class="wizard-id-row">
-        <span class="wizard-id-label">Fleet Secret</span>
-        <span class="wizard-id-value mono" style="font-size:0.82em">
-          Saved to <code>${secretPath}</code>
-        </span>
-      </div>
-      ${hasToken ? `
-      <div class="wizard-id-row">
-        <span class="wizard-id-label">API Token</span>
-        <span class="wizard-id-value mono" style="font-size:0.82em;word-break:break-all">
-          ${tokenDisplay.slice(0, 24)}...
-          <button class="wizard-copy-btn" id="wizard-copy-token" title="Copy full token">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
-          </button>
-        </span>
-      </div>
-      ` : ''}
-    </div>
-    <div class="wizard-info-note" style="margin-top:12px">
-      ${icon('shield', 16)} To add workers, share the fleet secret and your node's multiaddr. See <a href="#/admin/actions">Admin &rarr; Actions</a> for the full connection command.
+    <div class="wizard-info-note" style="margin-top:16px">
+      ${icon('cpu', 16)} Fleet is disabled. Your node works independently with no multi-node management.
     </div>
   `;
 }
 
-function renderRoleWorkerInfo() {
-  const truncCoord = fleetCoordID.length > 16 ? fleetCoordID.slice(0, 16) + '...' : fleetCoordID;
+function renderRoleSwitchCommand(roleId) {
+  const commands = {
+    coordinator: 'make run',
+    worker: "make run ARGS='--fleet-role worker --fleet-coordinator <COORD_MULTIADDR> --fleet-secret <HEX>'",
+    standalone: "make run ARGS='--fleet-role standalone'",
+  };
+
+  const hints = {
+    coordinator: 'This is the default — just restart with <code>make run</code>.',
+    worker: 'Replace <code>&lt;COORD_MULTIADDR&gt;</code> with the coordinator\'s multiaddr and <code>&lt;HEX&gt;</code> with the fleet secret.',
+    standalone: 'Disables all fleet protocols. No overhead, no worker management.',
+  };
 
   return `
-    <div class="wizard-id-card" style="margin-top:16px">
-      <div class="wizard-id-row">
-        <span class="wizard-id-label">Coordinator</span>
-        <span class="wizard-id-value mono" style="font-size:0.82em">
-          ${truncCoord}
-          <button class="wizard-copy-btn" id="wizard-copy-coord" title="Copy coordinator ID">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
-          </button>
-        </span>
-      </div>
-      <div class="wizard-id-row">
-        <span class="wizard-id-label">API Binding</span>
-        <span class="wizard-id-value">
-          <span style="display:inline-flex;align-items:center;gap:6px">
-            ${icon('lock', 14)} localhost only
-          </span>
-        </span>
-      </div>
-      <div class="wizard-id-row">
-        <span class="wizard-id-label">Heartbeat</span>
-        <span class="wizard-id-value">
-          <span style="display:inline-flex;align-items:center;gap:6px">
-            <span class="wizard-peer-dot online"></span> Active (every 15s)
-          </span>
-        </span>
-      </div>
+    <div class="wizard-info-note" style="margin-top:16px">
+      ${icon('alertTriangle', 16)} <strong>To switch to ${roleId}:</strong> stop the node and restart with:
     </div>
-    <div class="wizard-info-note" style="margin-top:12px">
-      ${icon('shield', 16)} Your API is bound to <strong>127.0.0.1</strong> — not reachable from the network. The coordinator accesses this node through an encrypted libp2p tunnel.
+    <div style="margin-top:8px;position:relative">
+      <code id="wizard-role-cmd" style="display:block;padding:12px 16px;padding-right:48px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font-size:0.84em;word-break:break-all;line-height:1.5">${commands[roleId]}</code>
+      <button class="wizard-copy-btn" id="wizard-copy-role-cmd" title="Copy command" style="position:absolute;top:10px;right:10px">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
+      </button>
     </div>
+    <p style="color:var(--text-tertiary);font-size:0.82em;margin-top:8px">${hints[roleId]}</p>
   `;
 }
 
 function bindRoleCopyHandlers() {
   document.getElementById('wizard-copy-token')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(fleetAPIToken).then(() => {
-      const btn = document.getElementById('wizard-copy-token');
-      if (btn) {
-        btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>';
-        setTimeout(() => {
-          btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>';
-        }, 1500);
-      }
-    });
+    wizardCopyBtn('wizard-copy-token', fleetAPIToken);
   });
-
   document.getElementById('wizard-copy-coord')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(fleetCoordID).then(() => {
-      const btn = document.getElementById('wizard-copy-coord');
-      if (btn) {
-        btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>';
-        setTimeout(() => {
-          btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>';
-        }, 1500);
-      }
-    });
+    wizardCopyBtn('wizard-copy-coord', fleetCoordID);
+  });
+  document.getElementById('wizard-copy-role-cmd')?.addEventListener('click', () => {
+    const cmd = document.getElementById('wizard-role-cmd');
+    if (cmd) wizardCopyBtn('wizard-copy-role-cmd', cmd.textContent);
+  });
+}
+
+function wizardCopyBtn(btnId, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="3 8.5 6.5 12 13 4"/></svg>';
+      setTimeout(() => {
+        btn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>';
+      }, 1500);
+    }
   });
 }
 
