@@ -89,7 +89,7 @@ func DefaultConfig() *Config {
 		},
 		API: APIConfig{
 			Port: 7002,
-			Bind: "127.0.0.1",
+			Bind: "0.0.0.0",
 		},
 		Crawler: CrawlerConfig{
 			Workers:           4,
