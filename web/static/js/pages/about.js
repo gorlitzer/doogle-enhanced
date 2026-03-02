@@ -158,6 +158,12 @@ const capabilities = [
       <p>This reduces per-query fan-out from O(N) to O(sqrt(N)). Reference: <a href="https://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">Consistent Hashing (Wikipedia)</a></p>` },
   { icon: 'database', title: 'Document Replication (N=3)', desc: 'Every document is replicated to 3 nodes. Merkle root anti-entropy ensures consistency. Network survives node failures.',
     modal: `<p>Every document is replicated to N nodes (default 3) using consistent hashing. When a peer joins or leaves, the replication protocol automatically rebalances.</p><p>Consistency is maintained via Merkle root anti-entropy: every 2 minutes, nodes compare Merkle roots per domain and sync missing documents. Protocols: <code>/doogle/replicate/1.0.0</code> (push) and <code>/doogle/antientropy/1.0.0</code> (reconciliation).</p>` },
+  { icon: 'network', title: 'Fleet Management', desc: 'Coordinator/worker architecture with secure proxy tunnel, HMAC-SHA256 auth, heartbeat monitoring, and fleet dashboard.',
+    modal: `<p>Fleet management enables multi-node orchestration:</p><ul><li><strong>Coordinator/Worker Architecture</strong> — one coordinator manages multiple workers via libp2p stream protocols</li><li><strong>Secure Proxy Tunnel</strong> — workers bind API to localhost; remote access only through encrypted libp2p proxy (<code>/doogle/fleet/proxy/1.0.0</code>)</li><li><strong>HMAC-SHA256 Auth</strong> — all fleet messages signed with a shared 256-bit secret</li><li><strong>Heartbeat Monitoring</strong> — workers send heartbeats every 15s; stale after 60s, offline after 180s</li><li><strong>Fleet Dashboard</strong> — Admin → Fleet shows real-time worker status, stats, and proxy access</li></ul>` },
+  { icon: 'shield', title: 'Trust & Safety', desc: 'Peer reputation, spam reporting, auto-quarantine, domain flagging, and gossip-level filtering for network integrity.',
+    modal: `<p>Trust & safety features protect the network from abuse:</p><ul><li><strong>Peer Reputation</strong> — trust scores track peer behavior over time</li><li><strong>Spam Reporting</strong> — users can report spam URLs, triggering review and potential auto-quarantine</li><li><strong>Auto-Quarantine</strong> — domains exceeding spam thresholds are automatically quarantined from search results</li><li><strong>Domain Flagging</strong> — admins can flag domains for manual review or permanent blocking</li><li><strong>Gossip-Level Filtering</strong> — spam signals propagate to peers via GossipSub for network-wide protection</li></ul>` },
+  { icon: 'zap', title: 'Search Intelligence', desc: 'Intent classification, spelling correction, synonym expansion, domain diversity, and passage snippets with highlights.',
+    modal: `<p>Search intelligence features improve query understanding and result quality:</p><ul><li><strong>Intent Classification</strong> — queries classified as navigational, informational, transactional, or local, with intent-specific ranking weight adjustments</li><li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein distance against the index dictionary</li><li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs (e.g., "js" ↔ "javascript") added as low-boost query clauses</li><li><strong>Domain Diversity</strong> — max 2 results per domain in top 10, preventing single-site monopolization</li><li><strong>Passage Snippets</strong> — sentence-level extraction with term highlight positions for rich result rendering</li></ul>` },
   { icon: 'globe', title: 'Onboarding Wizard', desc: 'Guided 5-step setup that auto-triggers on new nodes. Pick from 16 topic categories, see your node identity, and launch crawling.',
     modal: `<p>When a fresh node starts with 0 indexed documents, the <a href="#/wizard">setup wizard</a> auto-triggers. It walks users through 5 steps:</p><ol><li><strong>Welcome</strong> — intro and context</li><li><strong>Node Identity</strong> — Peer ID, addresses, connected peers</li><li><strong>Choose Focus</strong> — 16 topic categories across 4 groups (Knowledge, Lifestyle, Creative, Technology) plus custom URLs. Each group has a select-all toggle.</li><li><strong>Settings Preview</strong> — crawl depth and workers overview with growth estimate</li><li><strong>Launch</strong> — submit seeds via batch API, live polling of crawl/index counters</li></ol><p>Seeds are submitted via <code>POST /api/crawl/batch</code> (up to 200 URLs). The wizard can be re-accessed anytime from the admin sidebar.</p>` },
   { icon: 'eye', title: 'Theme Animations', desc: '6 themes with unique background animations and animated logo text. Matrix rain, bats, storm rain, particle mesh, aurora, and dust motes.',
@@ -560,24 +566,20 @@ function renderRoadmap(el) {
     },
     {
       name: 'Phase 2 — Quality & Scale',
-      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
-      progress: 100,
+      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 56,
       items: [
-        'Spam reporting, peer trust scoring, auto-quarantine, domain flagging',
-        '16-topic onboarding wizard (Knowledge, Lifestyle, Creative, Technology)',
-        'CLI search tool, backup & restore, production builds',
-        'Search result caching, multi-language search, CLI tools',
+        '<strong>Done:</strong> boolean operators, multi-language search, search result caching, CLI search tool, spam reporting, domain flagging, backup & restore, production builds, fleet management',
+        '<strong>Remaining:</strong> horizontal sharding, hash ring rebalancing, persistent dedup improvements, structured data extraction, PDF/doc indexing, content verification, image search',
       ],
     },
     {
       name: 'Phase 2.5 — Trust & Safety',
       status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 25,
+      progress: 12,
       items: [
-        'Sybil resistance and consensus-based domain blocklists',
-        'Reputation-weighted search ranking',
-        'Trust dashboard UI, admin allowlist/denylist',
-        'Horizontal sharding, PDF/doc indexing, image search',
+        '<strong>Done:</strong> admin trust UI',
+        '<strong>Remaining:</strong> sybil resistance, consensus-based blocklists, trust decay model, reputation-weighted search ranking, malicious crawl defense, report audit trail, admin allowlist/denylist',
       ],
     },
     {
@@ -593,13 +595,11 @@ function renderRoadmap(el) {
     },
     {
       name: 'Phase 4 — Intelligence',
-      status: 'planned', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 0,
+      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 59,
       items: [
-        'Semantic search (sentence embeddings, hybrid BM25 + vector)',
-        'Knowledge graph with entity cards',
-        'ML-based ranking, query intent classification',
-        'Automatic summarization, topic clustering',
+        '<strong>Done:</strong> intent classification, spelling correction, synonym expansion, domain diversity, passage snippets, domain authority, URL quality signals, readability extraction (Arc90), graduated freshness scoring, 12-signal ranking model',
+        '<strong>Remaining:</strong> semantic search (sentence embeddings, hybrid BM25 + vector), knowledge graph with entity cards, ML-based ranking, automatic summarization, topic clustering, trend detection, multilingual semantic search',
       ],
     },
     {
@@ -742,10 +742,29 @@ docker compose up -d</code></pre>
             <span class="about-terminal-dot" style="background:var(--green)"></span>
             <span class="about-terminal-title">Second Node</span>
           </div>
-          <pre class="about-terminal-body"><code>./bin/doogle --port 7003 --api-port 7004 \\
-  --bootstrap /ip4/127.0.0.1/tcp/7001/p2p/&lt;PEER_ID&gt; \\
-  --data-dir ./data/node2</code></pre>
+          <pre class="about-terminal-body"><code># No --bootstrap needed — auto-discovers via DHT
+./bin/doogle --port 7003 --api-port 7004 \\
+  --data-dir ./data/node2
+
+# Check Admin → Network to see connected peers</code></pre>
         </div>
+        <div class="about-terminal">
+          <div class="about-terminal-header">
+            <span class="about-terminal-dot" style="background:var(--red)"></span>
+            <span class="about-terminal-dot" style="background:var(--amber)"></span>
+            <span class="about-terminal-dot" style="background:var(--green)"></span>
+            <span class="about-terminal-title">Fleet Mode</span>
+          </div>
+          <pre class="about-terminal-body"><code># On worker node — joins the fleet
+./bin/doogle --fleet-role worker \\
+  --fleet-coordinator /ip4/&lt;COORD_IP&gt;/tcp/7001/p2p/&lt;PEER_ID&gt; \\
+  --fleet-secret &lt;SHARED_SECRET&gt; \\
+  --data-dir ./data/worker1</code></pre>
+        </div>
+      </div>
+      <div class="about-getstarted-info" style="margin-top:20px;display:flex;flex-direction:column;gap:12px">
+        <p style="color:var(--text-secondary);line-height:1.6"><strong>Peer discovery:</strong> Nodes connect to the IPFS public DHT and advertise under <code>doogle/network/v2</code> — peers find each other automatically within 30–60 seconds. mDNS handles LAN discovery. Manual <code>--bootstrap</code> is available but rarely needed. Check <strong>Admin → Network</strong> to see connected peers.</p>
+        <p style="color:var(--text-secondary);line-height:1.6"><strong>Fleet mode:</strong> Run one coordinator and multiple workers for managed deployments. Workers report via heartbeat, and the coordinator proxies requests through secure libp2p tunnels (HMAC-SHA256 signed). All workers share the same <code>--fleet-secret</code>. Monitor everything in <strong>Admin → Fleet</strong>.</p>
       </div>
     </section>
 
