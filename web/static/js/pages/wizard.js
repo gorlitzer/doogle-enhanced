@@ -1986,29 +1986,40 @@ function renderRoleCurrentDetail(roleId) {
 }
 
 function renderRoleSwitchCommand(roleId) {
-  const commands = {
-    coordinator: 'make run',
-    worker: "make run ARGS='--fleet-role worker --fleet-coordinator <COORD_MULTIADDR> --fleet-secret <HEX>'",
-    standalone: "make run ARGS='--fleet-role standalone'",
-  };
+  if (roleId === 'coordinator') {
+    return `
+      <div class="wizard-info-note" style="margin-top:16px">
+        ${icon('network', 16)} <strong>Coordinator</strong> is the default role — no extra configuration needed. Your node is fleet-ready out of the box.
+      </div>
+      <p style="color:var(--text-tertiary);font-size:0.82em;margin-top:8px">To add workers, share your multiaddr and fleet secret from <strong>Admin &rarr; Actions</strong>.</p>
+    `;
+  }
 
-  const hints = {
-    coordinator: 'This is the default — just restart with <code>make run</code>.',
-    worker: 'Replace <code>&lt;COORD_MULTIADDR&gt;</code> with the coordinator\'s multiaddr and <code>&lt;HEX&gt;</code> with the fleet secret.',
-    standalone: 'Disables all fleet protocols. No overhead, no worker management.',
-  };
+  if (roleId === 'worker') {
+    return `
+      <div class="wizard-info-note" style="margin-top:16px">
+        ${icon('link', 16)} <strong>Worker mode</strong> connects this node to a coordinator for distributed crawling.
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.85em;margin-top:10px;line-height:1.6">You'll need two things from the coordinator node (found in its <strong>Admin &rarr; Actions</strong> page):</p>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="color:var(--text-secondary);font-size:0.84em;min-width:100px;font-weight:500">Multiaddr</span>
+          <code style="padding:6px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:4px;font-size:0.84em;flex:1;color:var(--text-tertiary)">/ip4/&lt;IP&gt;/tcp/&lt;PORT&gt;/p2p/&lt;PEER_ID&gt;</code>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="color:var(--text-secondary);font-size:0.84em;min-width:100px;font-weight:500">Fleet secret</span>
+          <code style="padding:6px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:4px;font-size:0.84em;flex:1;color:var(--text-tertiary)">&lt;64 hex characters&gt;</code>
+        </div>
+      </div>
+      <p style="color:var(--text-tertiary);font-size:0.82em;margin-top:10px">Enter these when starting the worker node. The coordinator's Actions page has a ready-to-copy command.</p>
+    `;
+  }
 
+  // standalone
   return `
     <div class="wizard-info-note" style="margin-top:16px">
-      ${icon('alertTriangle', 16)} <strong>To switch to ${roleId}:</strong> stop the node and restart with:
+      ${icon('cpu', 16)} <strong>Standalone mode</strong> disables all fleet protocols. No overhead, no worker management — just an independent search node.
     </div>
-    <div style="margin-top:8px;position:relative">
-      <code id="wizard-role-cmd" style="display:block;padding:12px 16px;padding-right:48px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font-size:0.84em;word-break:break-all;line-height:1.5">${commands[roleId]}</code>
-      <button class="wizard-copy-btn" id="wizard-copy-role-cmd" title="Copy command" style="position:absolute;top:10px;right:10px">
-        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M5 11H3.5A1.5 1.5 0 0 1 2 9.5V3.5A1.5 1.5 0 0 1 3.5 2h6A1.5 1.5 0 0 1 11 3.5V5"/></svg>
-      </button>
-    </div>
-    <p style="color:var(--text-tertiary);font-size:0.82em;margin-top:8px">${hints[roleId]}</p>
   `;
 }
 

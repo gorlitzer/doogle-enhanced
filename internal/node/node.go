@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -401,6 +402,7 @@ func (n *Node) Status() *models.NodeStatus {
 		status.FleetRole = "coordinator"
 		status.FleetAPIToken = n.fleetAPIToken
 		status.FleetSecretFile = filepath.Join(n.cfg.Storage.DataDir, "fleet.secret")
+		status.FleetSecretHex = hex.EncodeToString(n.coordinator.Secret())
 	} else if n.worker != nil {
 		status.FleetRole = "worker"
 		status.FleetCoordinatorID = n.worker.CoordinatorID().String()

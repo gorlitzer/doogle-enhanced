@@ -96,6 +96,7 @@ type NodeStatus struct {
 	FleetAPIToken      string `json:"fleet_api_token,omitempty"`      // coordinator only
 	FleetCoordinatorID string `json:"fleet_coordinator_id,omitempty"` // worker only
 	FleetSecretFile    string `json:"fleet_secret_file,omitempty"`    // coordinator only
+	FleetSecretHex     string `json:"fleet_secret_hex,omitempty"`     // coordinator only (localhost)
 }
 
 // CrawlerInfo holds crawler-specific stats for the admin dashboard.
