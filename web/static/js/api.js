@@ -43,8 +43,10 @@ export const api = {
   peers() {
     return fetchJSON('/api/admin/peers');
   },
-  documents(offset = 0, limit = 20) {
-    return fetchJSON(`/api/admin/documents?offset=${offset}&limit=${limit}`);
+  documents(offset = 0, limit = 20, peer = '') {
+    let url = `/api/admin/documents?offset=${offset}&limit=${limit}`;
+    if (peer) url += `&peer=${encodeURIComponent(peer)}`;
+    return fetchJSON(url);
   },
   document(id) {
     return fetchJSON(`/api/admin/documents/${encodeURIComponent(id)}`);
@@ -67,5 +69,11 @@ export const api = {
   },
   trust() {
     return fetchJSON('/api/admin/trust');
+  },
+  storage() {
+    return fetchJSON('/api/admin/storage');
+  },
+  leaderboard() {
+    return fetchJSON('/api/admin/leaderboard');
   },
 };

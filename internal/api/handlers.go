@@ -37,8 +37,10 @@ type Deps struct {
 	IndexStore   index.Store
 	ReportURL    func(url, reason, detail string) error
 	TrustSummary func() *models.TrustSummary
-	SetNodeName  func(name string)
-	DataDir      string
+	SetNodeName    func(name string)
+	DataDir        string
+	StorageFn      func() (*models.StorageInfo, error)
+	LeaderboardFn  func() (*models.LeaderboardResponse, error)
 
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
@@ -63,6 +65,16 @@ func SearchHandler(deps *Deps) http.HandlerFunc {
 		size, _ := strconv.Atoi(r.URL.Query().Get("size"))
 		if size < 1 {
 			size = 10
+		}
+
+		// Append peer filter operators to the query string
+		if peerFilter := r.URL.Query().Get("peer"); peerFilter != "" {
+			query += " peer:" + peerFilter
+		}
+		for _, ep := range r.URL.Query()["exclude_peer"] {
+			if ep != "" {
+				query += " -peer:" + ep
+			}
 		}
 
 		req := &models.SearchRequest{
@@ -184,7 +196,15 @@ func DocumentsHandler(deps *Deps) http.HandlerFunc {
 			offset = 0
 		}
 
-		docs, total, err := deps.IndexStore.ListRecent(offset, limit)
+		peerFilter := r.URL.Query().Get("peer")
+		var docs []index.IndexDocument
+		var total int
+		var err error
+		if peerFilter != "" {
+			docs, total, err = deps.IndexStore.ListRecentByPeer(peerFilter, offset, limit)
+		} else {
+			docs, total, err = deps.IndexStore.ListRecent(offset, limit)
+		}
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -581,6 +601,38 @@ func DeleteDataHandler(deps *Deps) http.HandlerFunc {
 			"status":  "deleted",
 			"message": "All data has been deleted. Restart the node.",
 		})
+	}
+}
+
+// StorageHandler handles GET /api/admin/storage
+func StorageHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.StorageFn == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		info, err := deps.StorageFn()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, info)
+	}
+}
+
+// LeaderboardHandler handles GET /api/admin/leaderboard
+func LeaderboardHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.LeaderboardFn == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		lb, err := deps.LeaderboardFn()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, lb)
 	}
 }
 

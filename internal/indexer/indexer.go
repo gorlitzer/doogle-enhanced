@@ -223,6 +223,8 @@ func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
 		IsHTTPS:         doc.IsHTTPS,
 		IsTimeSensitive: doc.IsTimeSensitive,
 		IsEvergreen:     doc.IsEvergreen,
+
+		OriginPeerID: doc.OriginPeerID,
 	}
 
 	// Populate URL text: extract readable words from URL path

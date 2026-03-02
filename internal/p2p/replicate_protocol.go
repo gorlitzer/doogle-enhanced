@@ -46,12 +46,15 @@ type AntiEntropyResponse struct {
 }
 
 // ReplicateHandler processes incoming replication requests.
-type ReplicateHandler func(req *ReplicateRequest) (*ReplicateResponse, error)
+// senderPeerID is the remote peer that opened the stream.
+type ReplicateHandler func(senderPeerID string, req *ReplicateRequest) (*ReplicateResponse, error)
 
 // RegisterReplicateProtocol sets up the /doogle/replicate/1.0.0 stream handler.
 func RegisterReplicateProtocol(h host.Host, handler ReplicateHandler) {
 	h.SetStreamHandler(ReplicateProtocol, func(s network.Stream) {
 		defer s.Close()
+
+		senderPeerID := s.Conn().RemotePeer().String()
 
 		reader := bufio.NewReader(io.LimitReader(s, 50<<20)) // 50 MB max
 		data, err := reader.ReadBytes('\n')
@@ -66,7 +69,7 @@ func RegisterReplicateProtocol(h host.Host, handler ReplicateHandler) {
 			return
 		}
 
-		resp, err := handler(&req)
+		resp, err := handler(senderPeerID, &req)
 		if err != nil {
 			log.Printf("replicate protocol: handler error: %v", err)
 			resp = &ReplicateResponse{Status: "error"}

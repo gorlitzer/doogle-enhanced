@@ -23,6 +23,8 @@ type ParsedQuery struct {
 	UseFuzzy     bool                // true for short queries (≤3 terms)
 	CleanedQuery string              // fallback plain string
 	Synonyms     []string            // synonym expansions for query terms
+	PeerFilter   string              // from peer:PEERID — restrict to origin peer
+	ExcludePeers []string            // from -peer:PEERID — exclude origin peers
 }
 
 // SearchRequest represents a search query.
@@ -55,8 +57,10 @@ type SearchResult struct {
 	Domain       string  `json:"domain"`
 	Language     string  `json:"language,omitempty"`
 	Score        float64 `json:"score"`
-	PeerID       string  `json:"peer_id,omitempty"`
-	PeerName     string  `json:"peer_name,omitempty"`
+	PeerID         string  `json:"peer_id,omitempty"`
+	PeerName       string  `json:"peer_name,omitempty"`
+	OriginPeerID   string  `json:"origin_peer_id,omitempty"`
+	OriginPeerName string  `json:"origin_peer_name,omitempty"`
 
 	// Scoring signals (used by ranker, exposed for transparency)
 	PageRankScore     float64   `json:"pagerank_score,omitempty"`
@@ -90,6 +94,8 @@ type NodeStatus struct {
 	URLsInQueue    int       `json:"urls_in_queue"`
 	Uptime         string    `json:"uptime"`
 	StartedAt      time.Time `json:"started_at"`
+	LocalDocs      int       `json:"local_docs"`
+	PeerDocs       int       `json:"peer_docs"`
 
 	// Fleet (omitted when standalone)
 	FleetRole          string `json:"fleet_role,omitempty"`           // "coordinator" or "worker"
@@ -134,6 +140,34 @@ type CrawlEvent struct {
 	ContentSize int       `json:"content_size,omitempty"`
 	Depth       int       `json:"depth"`
 	Timestamp   time.Time `json:"timestamp"`
+}
+
+// StorageInfo holds disk usage stats for the admin dashboard.
+type StorageInfo struct {
+	TotalBytes  int64  `json:"total_bytes"`
+	BleveBytes  int64  `json:"bleve_bytes"`
+	BadgerBytes int64  `json:"badger_bytes"`
+	OtherBytes  int64  `json:"other_bytes"`
+	FreeBytes   int64  `json:"free_bytes"` // -1 if unavailable
+	DataDir     string `json:"data_dir"`
+}
+
+// ExplorerStats holds contribution stats for a single peer on the leaderboard.
+type ExplorerStats struct {
+	PeerID     string    `json:"peer_id"`
+	NodeName   string    `json:"node_name,omitempty"`
+	DocCount   int       `json:"doc_count"`
+	TrustScore float64   `json:"trust_score"`
+	IsLocal    bool      `json:"is_local"`
+	FirstSeen  time.Time `json:"first_seen,omitempty"`
+	LastSeen   time.Time `json:"last_seen,omitempty"`
+}
+
+// LeaderboardResponse is the API response for the WebExplorers leaderboard.
+type LeaderboardResponse struct {
+	Explorers   []ExplorerStats `json:"explorers"`
+	TotalDocs   int             `json:"total_docs"`
+	LocalPeerID string          `json:"local_peer_id"`
 }
 
 // PeerInfo holds detailed info about a connected peer.

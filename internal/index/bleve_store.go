@@ -138,6 +138,7 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	docMapping.AddFieldMappingsAt("domain", keywordField)
 	docMapping.AddFieldMappingsAt("content_hash", keywordField)
 	docMapping.AddFieldMappingsAt("language", keywordField)
+	docMapping.AddFieldMappingsAt("origin_peer_id", keywordField)
 
 	// --- Numeric fields ---
 	docMapping.AddFieldMappingsAt("content_size", numericField)
@@ -420,6 +421,98 @@ func (bs *BleveStore) ListDomains() ([]string, error) {
 	return domains, nil
 }
 
+// ListRecentByPeer returns documents from a specific origin peer, sorted by indexed_at desc.
+func (bs *BleveStore) ListRecentByPeer(peerID string, offset, limit int) ([]IndexDocument, int, error) {
+	q := bleve.NewTermQuery(peerID)
+	q.SetField("origin_peer_id")
+
+	req := bleve.NewSearchRequestOptions(q, limit, offset, false)
+	req.Fields = []string{"*"}
+	req.SortBy([]string{"-indexed_at"})
+
+	result, err := bs.index.Search(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("bleve list by peer: %w", err)
+	}
+
+	docs := make([]IndexDocument, 0, len(result.Hits))
+	for _, hit := range result.Hits {
+		doc := fieldsToDoc(hit.ID, hit.Fields)
+		docs = append(docs, *doc)
+	}
+
+	return docs, int(result.Total), nil
+}
+
+// CountByPeer returns the number of local and remote documents.
+// Documents with an empty origin_peer_id or matching selfPeerID are counted as local.
+func (bs *BleveStore) CountByPeer(selfPeerID string) (local int, remote int, err error) {
+	q := bleve.NewMatchAllQuery()
+	req := bleve.NewSearchRequestOptions(q, 0, 0, false)
+
+	facet := bleve.NewFacetRequest("origin_peer_id", 10000)
+	req.AddFacet("origins", facet)
+
+	result, err := bs.index.Search(req)
+	if err != nil {
+		return 0, 0, fmt.Errorf("bleve count by peer: %w", err)
+	}
+
+	total := int(result.Total)
+	originFacet, ok := result.Facets["origins"]
+	if !ok {
+		// No facet data — treat everything as local
+		return total, 0, nil
+	}
+
+	// Count docs that match selfPeerID
+	for _, term := range originFacet.Terms.Terms() {
+		if term.Term == selfPeerID {
+			local += term.Count
+		} else {
+			remote += term.Count
+		}
+	}
+
+	// "Other" (missing field / empty string) = pre-migration docs = local
+	local += originFacet.Other + originFacet.Missing
+
+	return local, remote, nil
+}
+
+// DocCountsByPeer returns a map of peer ID → document count for every origin peer.
+// Documents with an empty or missing origin_peer_id are grouped under the "" key.
+func (bs *BleveStore) DocCountsByPeer() (map[string]int, error) {
+	q := bleve.NewMatchAllQuery()
+	req := bleve.NewSearchRequestOptions(q, 0, 0, false)
+
+	facet := bleve.NewFacetRequest("origin_peer_id", 10000)
+	req.AddFacet("origins", facet)
+
+	result, err := bs.index.Search(req)
+	if err != nil {
+		return nil, fmt.Errorf("bleve doc counts by peer: %w", err)
+	}
+
+	counts := make(map[string]int)
+	originFacet, ok := result.Facets["origins"]
+	if !ok {
+		// No facet data — all docs are unattributed
+		counts[""] = int(result.Total)
+		return counts, nil
+	}
+
+	for _, term := range originFacet.Terms.Terms() {
+		counts[term.Term] = term.Count
+	}
+	// Missing/empty origin
+	if originFacet.Other+originFacet.Missing > 0 {
+		counts[""] += originFacet.Other + originFacet.Missing
+	}
+
+	return counts, nil
+}
+
 // BleveIndex returns the underlying bleve.Index for direct access (e.g., spell checking).
 func (bs *BleveStore) BleveIndex() bleve.Index {
 	return bs.index
@@ -447,6 +540,7 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.AnchorText = fieldString(fields, "anchor_text")
 	doc.URLText = fieldString(fields, "url_text")
 	doc.HeadingsText = fieldString(fields, "headings_text")
+	doc.OriginPeerID = fieldString(fields, "origin_peer_id")
 
 	// Integer fields (Bleve returns numerics as float64)
 	doc.ContentSize = fieldInt(fields, "content_size")

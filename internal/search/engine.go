@@ -10,8 +10,9 @@ import (
 
 // Engine performs local searches against the Bleve index.
 type Engine struct {
-	store        index.Store
-	spellChecker *SpellChecker
+	store              index.Store
+	spellChecker       *SpellChecker
+	QuarantinedPeersFn func() []string
 }
 
 // NewEngine creates a local search engine.
@@ -33,6 +34,11 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 
 	// Expand synonyms
 	pq.Synonyms = ExpandQuery(pq)
+
+	// Auto-exclude quarantined peers from results
+	if e.QuarantinedPeersFn != nil {
+		pq.ExcludePeers = append(pq.ExcludePeers, e.QuarantinedPeersFn()...)
+	}
 
 	// Classify intent
 	intent := ClassifyIntent(pq)
@@ -80,6 +86,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			Domain:               hit.Doc.Domain,
 			Language:             hit.Doc.Language,
 			Score:                hit.Score,
+			OriginPeerID:         hit.Doc.OriginPeerID,
 			PageRankScore:        hit.Doc.PageRankScore,
 			EEATScore:            hit.Doc.EEATScore,
 			QualityScore:         hit.Doc.QualityScore,

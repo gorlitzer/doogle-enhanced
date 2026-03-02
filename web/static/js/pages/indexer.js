@@ -5,6 +5,8 @@ import { showModal, scoreBar, renderBarChart, cardSkeleton, escapeHtml, getCSS }
 let activeTab = 'overview';
 let docOffset = 0;
 const DOC_PAGE_SIZE = 20;
+let currentPeerID = '';
+let docPeerFilter = ''; // '' = all, 'local' = my docs, 'peers' = from peers
 
 export function renderIndexer(container) {
   container.innerHTML = `
@@ -135,6 +137,12 @@ async function renderOverview(el) {
 }
 
 async function renderDocuments(el) {
+  // Fetch current peer ID for local detection
+  try {
+    const status = await api.status();
+    currentPeerID = status.peer_id || '';
+  } catch { /* ignore */ }
+
   el.innerHTML = `
     <div class="section">
       <h3>Search Indexed Documents</h3>
@@ -144,7 +152,14 @@ async function renderDocuments(el) {
       </div>
     </div>
     <div class="section">
-      <h3>Recent Documents</h3>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <h3 style="margin:0">Recent Documents</h3>
+        <select id="doc-origin-filter" style="padding:4px 8px;font-size:0.85em;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-input);color:var(--text-primary)">
+          <option value="">All Documents</option>
+          <option value="local">My Documents</option>
+          <option value="peers">From Peers</option>
+        </select>
+      </div>
       <div id="doc-results">${cardSkeleton(3)}</div>
       <div id="doc-pagination" style="margin-top:12px;display:flex;gap:8px;align-items:center"></div>
     </div>
@@ -153,6 +168,11 @@ async function renderDocuments(el) {
   document.getElementById('doc-search-btn').addEventListener('click', searchDocs);
   document.getElementById('doc-search-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') searchDocs();
+  });
+  document.getElementById('doc-origin-filter').addEventListener('change', e => {
+    docPeerFilter = e.target.value;
+    docOffset = 0;
+    loadDocuments();
   });
 
   loadDocuments();
@@ -164,9 +184,19 @@ async function loadDocuments() {
   if (!results) return;
 
   try {
-    const data = await api.documents(docOffset, DOC_PAGE_SIZE);
-    const docs = data.documents || [];
+    // Determine peer filter for API call
+    let peerParam = '';
+    if (docPeerFilter === 'local' && currentPeerID) peerParam = currentPeerID;
+    // 'peers' filter: we fetch all and filter client-side (no single peer to filter by)
+
+    const data = await api.documents(docOffset, DOC_PAGE_SIZE, peerParam);
+    let docs = data.documents || [];
     const total = data.total || 0;
+
+    // Client-side filter for "From Peers" (exclude local)
+    if (docPeerFilter === 'peers' && currentPeerID) {
+      docs = docs.filter(d => d.origin_peer_id && d.origin_peer_id !== currentPeerID);
+    }
 
     if (docs.length === 0) {
       results.innerHTML = '<div class="empty-state"><p>No documents indexed yet. Add seed URLs via the Crawler page.</p></div>';
@@ -181,6 +211,7 @@ async function loadDocuments() {
             <tr>
               <th>Title</th>
               <th>Domain</th>
+              <th>Origin</th>
               <th>Quality</th>
               <th>Spam</th>
               <th>E-E-A-T</th>
@@ -189,19 +220,25 @@ async function loadDocuments() {
             </tr>
           </thead>
           <tbody>
-            ${docs.map(d => `
+            ${docs.map(d => {
+              const isLocal = !d.origin_peer_id || d.origin_peer_id === currentPeerID;
+              const originBadge = isLocal
+                ? '<span class="badge badge-green">local</span>'
+                : `<span class="badge badge-blue" title="${escapeHtml(d.origin_peer_id || '')}">${escapeHtml((d.origin_peer_id || '').slice(0, 12))}...</span>`;
+              return `
               <tr>
                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                   <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.title || d.url).slice(0, 60)}</a>
                 </td>
                 <td class="mono" style="font-size:0.8em">${escapeHtml(d.domain)}</td>
+                <td>${originBadge}</td>
                 <td><span class="badge badge-${qualColor(d.quality_score)}">${(d.quality_score || 0).toFixed(2)}</span></td>
                 <td><span class="badge badge-${d.spam_score > 0.3 ? 'red' : 'green'}">${(d.spam_score || 0).toFixed(2)}</span></td>
                 <td>${(d.eeat_score || 0).toFixed(2)}</td>
                 <td style="font-size:0.8em;color:var(--text-muted)">${d.indexed_at ? new Date(d.indexed_at).toLocaleString() : '—'}</td>
                 <td><button class="badge badge-accent doc-detail-btn" data-id="${escapeHtml(d.id)}" style="cursor:pointer;border:none;font-family:inherit">details</button></td>
               </tr>
-            `).join('')}
+            `}).join('')}
           </tbody>
         </table>
       </div>

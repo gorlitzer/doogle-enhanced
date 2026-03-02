@@ -6,6 +6,7 @@ let currentPage = 1;
 let currentQuery = '';
 let lastQuery = '';
 let lastResults = [];
+let searchPeerID = ''; // local node peer ID, fetched once
 
 function highlightTerms(escapedText, query) {
   if (!query) return escapedText;
@@ -48,6 +49,10 @@ export function renderSearch(container) {
           <option value="ru">Russian</option>
           <option value="zh">Chinese</option>
           <option value="ja">Japanese</option>
+        </select>
+        <select id="filter-peer">
+          <option value="">All peers</option>
+          <option value="local">My docs only</option>
         </select>
         <select id="filter-size">
           <option value="10">10 results</option>
@@ -117,8 +122,10 @@ async function doSearch(keepPage = false) {
   try {
     let query = q;
     const lang = document.getElementById('filter-lang').value;
+    const peerFilter = document.getElementById('filter-peer').value;
     if (lang) query += ` lang:${lang}`;
     if (domain) query += ` site:${domain}`;
+    if (peerFilter === 'local' && searchPeerID) query += ` peer:${searchPeerID}`;
 
     const data = await api.search(query, currentPage, size);
     if (data.error) {
@@ -186,6 +193,15 @@ function renderResult(r, index) {
     const src = r.peer_name || r.peer_id.slice(0, 12) + '...';
     badges.push(`<span class="badge badge-blue">${escapeHtml(src)}</span>`);
   }
+  if (r.origin_peer_id) {
+    const isLocal = r.origin_peer_id === searchPeerID;
+    if (isLocal) {
+      badges.push('<span class="badge badge-green">local</span>');
+    } else {
+      const originLabel = r.origin_peer_name || r.origin_peer_id.slice(0, 12) + '...';
+      badges.push(`<span class="badge badge-blue" title="${escapeHtml(r.origin_peer_id)}">origin: ${escapeHtml(originLabel)}</span>`);
+    }
+  }
 
   const spamWarning = r.spam_score > 0.3
     ? `<div class="content-warning">Low trust score (spam: ${r.spam_score.toFixed(2)}) — content may be unreliable</div>`
@@ -251,6 +267,10 @@ function showResultDetail(r) {
       ${r.peer_id ? `
         <span class="detail-label">Source Node</span>
         <span class="detail-value">${r.peer_name ? escapeHtml(r.peer_name) + ' ' : ''}<span style="font-family:monospace;font-size:0.8em;color:var(--text-muted)">${escapeHtml(r.peer_id.slice(0, 20))}...</span></span>
+      ` : ''}
+      ${r.origin_peer_id ? `
+        <span class="detail-label">Origin Peer</span>
+        <span class="detail-value">${r.origin_peer_id === searchPeerID ? '<span class="badge badge-green">local</span>' : `${r.origin_peer_name ? escapeHtml(r.origin_peer_name) + ' ' : ''}<span style="font-family:monospace;font-size:0.8em;color:var(--text-muted)">${escapeHtml(r.origin_peer_id.slice(0, 20))}...</span>`}</span>
       ` : ''}
     </div>
 
@@ -341,6 +361,7 @@ function showReportModal(url) {
 async function updateStatusBar() {
   try {
     const s = await api.status();
+    if (!searchPeerID && s.peer_id) searchPeerID = s.peer_id;
     const nodeEl = document.getElementById('status-node');
     const peerEl = document.getElementById('status-peers');
     if (nodeEl) nodeEl.textContent = `Node: ${s.peer_id.slice(0, 12)}... | Indexed: ${s.indexed_docs} docs | Crawled: ${s.crawled_urls} URLs | Queue: ${s.urls_in_queue}`;
