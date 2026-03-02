@@ -13,7 +13,7 @@ help:
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
 	@echo "    make build              Compile binary to bin/"
 	@echo "    make run                Build + launch node (fleet-ready on 0.0.0.0:7002)"
-	@echo "    make run ARGS='...'     Pass extra flags to the binary"
+	@echo "    make run ARGS='...'     Pass extra flags (run ./bin/doogle --help for all flags)"
 	@echo "    make dev                Docker detached on :7002 (stop with: make stop)"
 	@echo "    make stop               Stop docker containers"
 	@echo "    make test               Run all tests"
