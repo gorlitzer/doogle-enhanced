@@ -146,19 +146,25 @@ export function renderActions(container) {
             <div class="action-card-body">
               <div class="action-input-col">
                 <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px">Coordinator Multiaddr</label>
-                <input type="text" id="fleet-worker-addr" class="action-input mono" readonly placeholder="Loading...">
-                <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px;margin-top:8px">Fleet Secret</label>
-                <input type="password" id="fleet-worker-secret" class="action-input mono" readonly placeholder="Loading...">
-                <div class="action-btn-group" style="margin-top:8px">
-                  <button class="btn" id="fleet-secret-reveal-btn" title="Show / Hide">
-                    <span class="btn-label">${icon('eye', 16)} Reveal</span>
-                  </button>
-                  <button class="btn btn-primary" id="fleet-cmd-copy-btn">
-                    <span class="btn-label">${icon('fileText', 16)} Copy All</span>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="text" id="fleet-worker-addr" class="action-input mono" readonly placeholder="Loading..." style="flex:1">
+                  <button class="btn btn-primary" id="fleet-addr-copy-btn" title="Copy multiaddr">
+                    <span class="btn-label">${icon('fileText', 16)} Copy</span>
                   </button>
                 </div>
+                <div id="fleet-addr-result" class="action-result"></div>
+                <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px;margin-top:8px">Fleet Secret</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="password" id="fleet-worker-secret" class="action-input mono" readonly placeholder="Loading..." style="flex:1">
+                  <button class="btn" id="fleet-secret-reveal-btn" title="Show / Hide">
+                    <span class="btn-label">${icon('eye', 16)}</span>
+                  </button>
+                  <button class="btn btn-primary" id="fleet-secret-copy-btn" title="Copy secret">
+                    <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                  </button>
+                </div>
+                <div id="fleet-secret-result" class="action-result"></div>
               </div>
-              <div id="fleet-cmd-result" class="action-result"></div>
             </div>
           </div>
         </div>
@@ -328,20 +334,14 @@ function setupHandlers() {
     });
   }
 
-  const fleetCmdCopyBtn = document.getElementById('fleet-cmd-copy-btn');
-  if (fleetCmdCopyBtn) {
-    fleetCmdCopyBtn.addEventListener('click', () => {
-      const addr = document.getElementById('fleet-worker-addr')?.value || '';
-      const secret = document.getElementById('fleet-worker-secret')?.value || '';
-      const text = `Coordinator: ${addr}\nFleet Secret: ${secret}`;
-      navigator.clipboard.writeText(text).then(() => {
-        const result = document.getElementById('fleet-cmd-result');
-        if (result) {
-          result.innerHTML = '<span class="badge badge-green">Copied to clipboard</span>';
-          setTimeout(() => { result.innerHTML = ''; }, 2000);
-        }
-      });
-    });
+  const fleetAddrCopyBtn = document.getElementById('fleet-addr-copy-btn');
+  if (fleetAddrCopyBtn) {
+    fleetAddrCopyBtn.addEventListener('click', () => copyField('fleet-worker-addr', 'fleet-addr-result'));
+  }
+
+  const fleetSecretCopyBtn = document.getElementById('fleet-secret-copy-btn');
+  if (fleetSecretCopyBtn) {
+    fleetSecretCopyBtn.addEventListener('click', () => copyField('fleet-worker-secret', 'fleet-secret-result'));
   }
 
   // --- Backup ---
