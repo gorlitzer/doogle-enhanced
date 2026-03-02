@@ -3228,6 +3228,30 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   display: flex;
   gap: 8px;
 }
+.action-input-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.action-input-col .action-input {
+  width: 100%;
+  text-align: center;
+}
+.action-input-col .btn {
+  width: 100%;
+  text-align: center;
+}
+.action-btn-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.action-btn-group .btn {
+  flex: 1;
+  text-align: center;
+}
 .action-input {
   flex: 1;
   padding: 8px 12px;

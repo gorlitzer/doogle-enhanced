@@ -28,6 +28,10 @@ type IndexDocument struct {
 	// Anchor text from inbound links
 	AnchorText string `json:"anchor_text"`
 
+	// New searchable fields
+	URLText      string `json:"url_text"`      // readable words from URL path
+	HeadingsText string `json:"headings_text"` // concatenated h1-h3 text
+
 	// Scoring
 	PageRankScore      float64 `json:"pagerank_score"`
 	EEATScore          float64 `json:"eeat_score"`
@@ -40,7 +44,9 @@ type IndexDocument struct {
 	FreshnessScore     float64 `json:"freshness_score"`
 	AuthorCredibility  float64 `json:"author_credibility"`
 	RelevanceScore     float64 `json:"relevance_score"`
-	StaticScore        float64 `json:"static_score"`
+	StaticScore          float64 `json:"static_score"`
+	DomainAuthorityScore float64 `json:"domain_authority_score"`
+	URLQualityScore      float64 `json:"url_quality_score"`
 
 	// Index generation (for incremental reindexing)
 	Generation uint64 `json:"generation"`

@@ -66,6 +66,11 @@ func (s *BadgerStore) Delete(key []byte) error {
 	})
 }
 
+// DB returns the underlying BadgerDB instance.
+func (s *BadgerStore) DB() *badger.DB {
+	return s.db
+}
+
 // Close closes the database.
 func (s *BadgerStore) Close() error {
 	log.Println("closing BadgerDB")

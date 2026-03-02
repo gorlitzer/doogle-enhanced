@@ -270,13 +270,27 @@ Per-domain sliding window:
 
 ### Content Extraction
 
-**Removed elements:** `<script>`, `<style>`, `<nav>`, `<header>`, `<footer>`, `<aside>`, `<noscript>`, `<iframe>`
+**Removed elements:** `<script>`, `<style>`, `<nav>`, `<header>`, `<footer>`, `<aside>`, `<noscript>`, `<iframe>`, `<svg>`
+
+**Readability-style main content extraction (Arc90 algorithm):**
+1. Score each block element (`div`, `article`, `section`, `main`, `td`):
+   - +1 per `<p>` tag, +1 per comma in text, +text_length/100
+   - +25 for class/ID containing: "article", "content", "post", "entry", "main", "text", "body", "story"
+   - -25 for class/ID containing: "sidebar", "nav", "footer", "comment", "ad", "widget", "banner", "menu", "social", "share", "related"
+   - +30 for `<article>` or `<main>` tags
+2. Select highest-scoring block (threshold: score ≥ 50)
+3. Fall back to full `<body>` text if no candidate meets threshold
 
 **Extracted:**
 - Title from `<title>`
 - Description from `<meta name="description">`
-- Body text (whitespace collapsed)
-- All `<a href>` links (resolved to absolute, categorized internal/external)
+- Main content (Readability extraction with whitespace collapsed)
+- Headings (H1-H6 with level tracking)
+- All `<a href>` links (resolved to absolute, categorized internal/external, nofollow detection)
+- Images with alt text and title
+- Open Graph tags (`og:title`, `og:description`)
+- Canonical URL
+- Meta keywords
 
 **URL filtering:** Non-crawlable extensions (`.pdf`, `.jpg`, `.css`, `.js`, etc.) are excluded from the discovered URLs list.
 
@@ -305,7 +319,26 @@ Bleve index write
 
 ### Quality Scoring
 
-Five factors, averaged:
+12 weighted signals combined into a StaticScore at index time:
+
+| Signal | Weight | Description |
+|--------|--------|-------------|
+| E-E-A-T | 15% | Expertise, experience, authority, trustworthiness |
+| PageRank | 15% | Graph-based link authority (damping=0.85, 15 iterations) |
+| Quality | 10% | Content depth, heading structure, media richness |
+| Domain Authority | 10% | Site-level reputation: avg PageRank, avg quality, backlink domains |
+| Readability | 8% | Flesch-Kincaid readability score |
+| Citation | 8% | References to/from other sources |
+| Freshness | 8% | Graduated decay: time-sensitive (7d half-life), evergreen (365d) |
+| Relevance | 6% | Composite of E-E-A-T, Quality, Link, SEO, URL Quality |
+| URL Quality | 5% | Path depth, slug readability, tracking param detection |
+| SEO | 5% | Meta tags, heading structure, canonical URLs |
+| Link | 5% | Inbound/outbound link structure and quality |
+| Author Credibility | 5% | Author expertise signals |
+
+**StaticScore formula:** `(0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)` — range [0.1, 2.5]
+
+Basic quality factors (averaged into Quality signal):
 
 | Factor | Score 1.0 | Score 0.5 | Score 0.2 |
 |--------|-----------|-----------|-----------|
@@ -346,9 +379,9 @@ Unicode tokenizer → lowercase → stop word removal → Snowball stemmer
 
 **Multi-language support:** 15 languages registered via Bleve's built-in analyzers (en, de, fr, es, it, pt, nl, ru, sv, da, fi, hu, ro, tr, no). Language-specific analysis is applied at query time when `lang:xx` is used.
 
-**Indexed fields (analyzed):** title, description, content, anchor_text, keywords, categories
+**Indexed fields (analyzed):** title (5x boost), url_text (3x), headings_text (2x), description (1.5x), content (1x), anchor_text, keywords, categories
 **Stored fields (exact):** url, domain, content_hash, language
-**Numeric fields:** content_size, quality_score, spam_score, depth, pagerank_score, and 10+ scoring signals
+**Numeric fields:** content_size, quality_score, spam_score, depth, pagerank_score, domain_authority_score, url_quality_score, and 10+ scoring signals
 
 ---
 
@@ -366,18 +399,38 @@ Raw queries are parsed into a structured `ParsedQuery` before execution:
 | OR (uppercase) | `python OR ruby` | Disjunction group (min 1 match) |
 | `site:` | `site:docs.python.org` | Restrict to domain |
 | `lang:` | `lang:de` | Restrict to language + use language-specific analyzer |
-| Synonyms | `js` → `javascript` | Automatic synonym expansion (boost tier) |
+| Synonyms | `js` → `javascript` | Automatic synonym expansion (100+ pairs, boost tier) |
 | Fuzzy | short queries (≤3 terms) | Edit-distance matching |
 
 Lowercase `or` is treated as a stop word. `-` prefix works on any term.
 
+### Query Intent Classification
+
+Every query is classified into one of 4 intents, adjusting ranking weights:
+
+| Intent | Detection | Ranking Adjustment |
+|--------|-----------|-------------------|
+| **Navigational** | Single known domain/brand, "login", URL-like | Boost exact domain match (+5x), reduce diversity |
+| **Informational** | Question words (how/what/why), multi-word queries | Boost content quality, readability |
+| **Transactional** | Action words (buy/download/price) | Boost commercial pages |
+| **Local** | "near me", city names | Boost geo-tagged content |
+
+### Spelling Correction
+
+Built from Bleve index term frequencies (top terms by doc frequency). For each query token not in the dictionary, candidates within Damerau-Levenshtein distance ≤ 2 are generated and ranked by document frequency. Dictionary refreshes every 30 minutes in the background.
+
 ### Local Search
 
-1. Parse query into `ParsedQuery` (phrases, excludes, OR groups, site/lang filters, synonyms)
-2. Build Bleve query tree: Must(AND terms) + MustNot(excludes) + Must(OR groups) + Should(fuzzy/synonyms)
-3. Apply language-specific analyzer if `lang:` is set
-4. BM25 relevance scoring
-5. Return hits with all stored fields
+1. Parse query into `ParsedQuery` (phrases, excludes, OR groups, site/lang filters)
+2. Expand synonyms (100+ bidirectional pairs added as low-boost clauses)
+3. Classify intent (navigational, informational, transactional, local)
+4. Build Bleve query tree: Must(AND terms) + MustNot(excludes) + Must(OR groups) + Should(fuzzy/synonyms)
+5. Apply language-specific analyzer if `lang:` is set
+6. BM25 relevance scoring with field boosts (title 5x, url_text 3x, headings 2x, desc 1.5x)
+7. Extract passage-based snippets with term highlight positions
+8. Re-rank with intent-aware multipliers
+9. Generate spelling suggestion if applicable
+10. Return hits with all stored fields
 
 ### Search Cache
 
@@ -410,10 +463,13 @@ An LRU cache with TTL sits in front of distributed search:
 4. **Fan-out:** Open a libp2p stream to each peer (in parallel goroutines)
 5. **Timeout:** Each peer has `peerTimeout` (default 5s) to respond
 6. **Merge:** Combine all results into a single list
-7. **Re-rank:** Multi-signal scoring (BM25, quality, PageRank, freshness, spam penalty)
-8. **Deduplicate:** Keep first occurrence of each URL
-9. **Cache store:** Save response for future queries
-10. **Paginate:** Return `pageSize` results
+7. **Intent classification:** Classify query intent (navigational/informational/transactional/local)
+8. **Re-rank:** Intent-aware 12-signal scoring (BM25, quality, PageRank, domain authority, URL quality, freshness, etc.)
+9. **Deduplicate:** Keep first occurrence of each URL
+10. **Domain diversity:** Max 2 results per domain in top 10 positions (excess demoted, not removed)
+11. **Spelling suggestion:** "Did you mean?" if query terms are not in index dictionary
+12. **Cache store:** Save response for future queries
+13. **Paginate:** Return `pageSize` results
 
 Failed peer connections are logged but don't block the response.
 

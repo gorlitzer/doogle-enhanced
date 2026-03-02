@@ -16,14 +16,14 @@ func TestComputeFinalScore_WithStaticScore(t *testing.T) {
 		CrawledAt:   time.Now(),
 	}
 
-	score := computeFinalScore(r)
+	score := computeFinalScore(r, nil)
 	if score <= 0 {
 		t.Fatalf("expected positive score, got %f", score)
 	}
 
-	// With StaticScore=2.0, freshness~1.0 (just crawled), score ≈ 1.0 * 2.0 * 1.0 = 2.0
-	if score < 1.5 || score > 2.5 {
-		t.Fatalf("expected score ~2.0 with StaticScore=2.0, got %f", score)
+	// With StaticScore=2.0, freshness blended in, score should be substantial
+	if score < 1.0 || score > 3.0 {
+		t.Fatalf("expected score in range [1.0, 3.0] with StaticScore=2.0, got %f", score)
 	}
 }
 
@@ -38,7 +38,7 @@ func TestComputeFinalScore_FallbackWithoutStaticScore(t *testing.T) {
 		CrawledAt:    time.Now(),
 	}
 
-	score := computeFinalScore(r)
+	score := computeFinalScore(r, nil)
 	if score <= 0 {
 		t.Fatalf("expected positive score, got %f", score)
 	}
@@ -58,8 +58,8 @@ func TestComputeFinalScore_SpamPenaltyInStaticScore(t *testing.T) {
 		CrawledAt:   time.Now(),
 	}
 
-	spamScore := computeFinalScore(highSpam)
-	cleanScore := computeFinalScore(lowSpam)
+	spamScore := computeFinalScore(highSpam, nil)
+	cleanScore := computeFinalScore(lowSpam, nil)
 
 	if spamScore >= cleanScore {
 		t.Fatalf("expected spam score (%f) < clean score (%f)", spamScore, cleanScore)
@@ -79,34 +79,34 @@ func TestComputeFinalScore_FreshnessDecay(t *testing.T) {
 		CrawledAt:   time.Now().Add(-365 * 24 * time.Hour), // 1 year ago
 	}
 
-	recentScore := computeFinalScore(recent)
-	oldScore := computeFinalScore(old)
+	recentScore := computeFinalScore(recent, nil)
+	oldScore := computeFinalScore(old, nil)
 
 	if oldScore >= recentScore {
 		t.Fatalf("expected old score (%f) < recent score (%f)", oldScore, recentScore)
 	}
 }
 
-func TestFreshnessDecay_TimeSensitive(t *testing.T) {
+func TestGraduatedFreshness_TimeSensitive(t *testing.T) {
 	// Time-sensitive content decays faster
-	decay := freshnessDecay(time.Now().Add(-60*24*time.Hour), 0.5, true, false)
-	if decay >= 0.5 {
-		t.Fatalf("expected time-sensitive decay < 0.5 after 60 days, got %f", decay)
+	score := graduatedFreshnessScore(time.Now().Add(-60*24*time.Hour), true, false)
+	if score >= 0.7 {
+		t.Fatalf("expected time-sensitive freshness < 0.7 after 60 days, got %f", score)
 	}
 }
 
-func TestFreshnessDecay_Evergreen(t *testing.T) {
+func TestGraduatedFreshness_Evergreen(t *testing.T) {
 	// Evergreen content decays slower
-	decay := freshnessDecay(time.Now().Add(-180*24*time.Hour), 0.5, false, true)
-	if decay < 0.4 {
-		t.Fatalf("expected evergreen decay > 0.4 after 180 days, got %f", decay)
+	score := graduatedFreshnessScore(time.Now().Add(-180*24*time.Hour), false, true)
+	if score < 0.4 {
+		t.Fatalf("expected evergreen freshness > 0.4 after 180 days, got %f", score)
 	}
 }
 
-func TestFreshnessDecay_ZeroCrawledAt(t *testing.T) {
-	decay := freshnessDecay(time.Time{}, 0.5, false, false)
-	if decay != 0.8 {
-		t.Fatalf("expected 0.8 for zero time, got %f", decay)
+func TestGraduatedFreshness_ZeroCrawledAt(t *testing.T) {
+	score := graduatedFreshnessScore(time.Time{}, false, false)
+	if score != 0.5 {
+		t.Fatalf("expected 0.5 for zero time, got %f", score)
 	}
 }
 

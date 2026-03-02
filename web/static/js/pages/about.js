@@ -34,27 +34,35 @@ const pipelineSteps = [
   {
     icon: 'cpu', title: 'Analyze', color: 'var(--purple)',
     eli5: 'Doogle figures out what the page is about — is it about cats? Coding? Pizza recipes?',
-    detail: 'Content extraction pulls title, meta, headings, links, and images. Duplicate detection catches near-identical pages. Quality signals are computed for ranking.',
+    detail: 'Readability-style content extraction (Arc90 algorithm) pulls clean body text. Duplicate detection, link graph, and URL quality analysis.',
     modal: `<p>Every crawled document goes through content analysis:</p>
       <ul>
+        <li><strong>Readability Extraction</strong> — Arc90-style algorithm scores block elements (div, article, section) by paragraph count, text length, and class/ID signals to find the main content area, stripping boilerplate</li>
         <li><strong>Content Extraction</strong> — title, meta description, headings (H1-H6), links, images, OG tags, canonical URLs</li>
+        <li><strong>URL Quality Analysis</strong> — path depth, slug readability, tracking parameter detection</li>
         <li><strong>Content Dedup</strong> — SHA-256 content hash to detect near-identical pages</li>
-        <li><strong>Link Graph</strong> — internal and external links are recorded for PageRank computation</li>
+        <li><strong>Link Graph</strong> — internal and external links are recorded for PageRank and domain authority computation</li>
         <li><strong>Word Count &amp; Structure</strong> — used by the quality scorer to evaluate content depth</li>
       </ul>`,
   },
   {
     icon: 'star', title: 'Score', color: 'var(--amber)',
     eli5: 'Doogle gives the page a report card — is it well-written? Trustworthy? Useful?',
-    detail: 'E-E-A-T scoring evaluates expertise, authority, trustworthiness, link structure, freshness, and 10+ quality signals.',
-    modal: `<p>Quality scoring combines 10+ signals into a weighted score:</p>
+    detail: '12-signal scoring: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
+    modal: `<p>Quality scoring combines 12 signals into a weighted score:</p>
       <ul>
-        <li><strong>E-E-A-T</strong> (20%) — expertise, experience, authority, trust</li>
-        <li><strong>Quality</strong> (20%) — content depth, heading structure, media richness</li>
-        <li><strong>PageRank</strong> (20%) — graph-based link authority (<a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">Wikipedia</a>)</li>
+        <li><strong>E-E-A-T</strong> (15%) — expertise, experience, authority, trust</li>
+        <li><strong>Quality</strong> (10%) — content depth, heading structure, media richness</li>
+        <li><strong>PageRank</strong> (15%) — graph-based link authority (<a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">Wikipedia</a>)</li>
+        <li><strong>Domain Authority</strong> (10%) — site-level reputation: avg PageRank, avg quality, backlink domains</li>
         <li><strong>Readability</strong> (8%) — Flesch-Kincaid score</li>
         <li><strong>Citation</strong> (8%) — references to/from other sources</li>
-        <li><strong>SEO</strong> (8%) — meta tags, heading structure</li>
+        <li><strong>Freshness</strong> (8%) — graduated decay with time-sensitive vs evergreen half-lives</li>
+        <li><strong>Relevance</strong> (6%) — composite of other signals</li>
+        <li><strong>URL Quality</strong> (5%) — path depth, readability, tracking param detection</li>
+        <li><strong>SEO</strong> (5%) — meta tags, heading structure</li>
+        <li><strong>Link</strong> (5%) — inbound/outbound link structure</li>
+        <li><strong>Author Credibility</strong> (5%) — author expertise signals</li>
       </ul>
       <p>These signals are combined into a <strong>StaticScore</strong> at index time: <code>(0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code></p>`,
   },
@@ -74,17 +82,20 @@ const pipelineSteps = [
   {
     icon: 'database', title: 'Index', color: 'var(--green)',
     eli5: 'Doogle puts the good pages in a giant filing cabinet so it can find them fast later.',
-    detail: 'Batch-indexed into Bleve (100 docs/flush) with pre-computed StaticScore. BM25 weighting: title x3, desc x1.5, content x1, anchor x2.',
+    detail: 'Batch-indexed into Bleve (100 docs/flush) with pre-computed StaticScore. BM25 field boosts: title 5x, URL text 3x, headings 2x, desc 1.5x, content 1x.',
     modal: `<p>Documents are buffered and flushed to <a href="https://blevesearch.com/" target="_blank">Bleve</a> in batches of 100 (or every 5 seconds). Batch writes are 10-50x faster than single-doc indexing.</p>
-      <p>Each document stores a pre-computed <strong>StaticScore</strong> so search only needs: <code>BM25 * StaticScore * freshnessDecay</code> — no per-query recomputation of quality signals.</p>
-      <p>Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x). All stored in <a href="https://dgraph.io/badger" target="_blank">BadgerDB</a>.</p>`,
+      <p>Each document stores a pre-computed <strong>StaticScore</strong> so search only needs: <code>BM25 * StaticScore * freshnessDecay * intentMultiplier</code> — no per-query recomputation of quality signals.</p>
+      <p>Field boosts: title (5x), URL text (3x), headings (2x), description (1.5x), content (1x). Additional indexed fields: <code>url_text</code> (readable URL path words) and <code>headings_text</code> (concatenated h1-h3 text). All metadata stored in <a href="https://dgraph.io/badger" target="_blank">BadgerDB</a>.</p>`,
   },
   {
     icon: 'search', title: 'Search', color: 'var(--accent)',
     eli5: 'You ask a question, and Doogle looks through its filing cabinet super fast to find the best answers.',
-    detail: 'Queries are parsed (boolean operators, search dorks, phrases, fuzzy matching), matched against Bleve, then ranked by BM25 x StaticScore x freshness.',
+    detail: 'Queries are parsed, intent is classified, synonyms expanded, matched against Bleve, then ranked by 12 signals with domain diversity and spelling suggestions.',
     modal: `<p>The search pipeline parses your query into structured components:</p>
       <ul>
+        <li><strong>Intent Classification</strong> — navigational, informational, transactional, or local — adjusts ranking weights per query</li>
+        <li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs (e.g., "js" → "javascript", "k8s" → "kubernetes") added as low-boost clauses</li>
+        <li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein against the index dictionary</li>
         <li><strong>Phrases</strong> — <code>"exact match"</code> terms</li>
         <li><strong>Boolean operators</strong> — <code>-exclude</code>, <code>OR</code> disjunctions</li>
         <li><strong>Site filter</strong> — <code>site:example.com</code></li>
@@ -92,8 +103,10 @@ const pipelineSteps = [
         <li><strong>Search dorks</strong> — <code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code></li>
         <li><strong>Fuzzy matching</strong> — typo tolerance for short queries</li>
       </ul>
-      <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay</code></p>
-      <p>BM25 is the text relevance engine inside <a href="https://blevesearch.com/" target="_blank">Bleve</a>. StaticScore is pre-computed at index time. Freshness decay uses exponential decay with configurable half-lives.</p>`,
+      <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay * intentMultiplier</code></p>
+      <p><strong>Domain diversity:</strong> max 2 results per domain in top 10 — prevents one site from monopolizing results.</p>
+      <p><strong>Passage snippets:</strong> sentence-level extraction with term highlight positions for rich rendering.</p>
+      <p>BM25 is the text relevance engine inside <a href="https://blevesearch.com/" target="_blank">Bleve</a>. StaticScore is pre-computed at index time. Freshness uses graduated exponential decay with configurable half-lives (7 days for time-sensitive, 365 days for evergreen).</p>`,
   },
   {
     icon: 'radio', title: 'Share', color: 'var(--purple)',
@@ -112,12 +125,12 @@ const pipelineSteps = [
 const capabilities = [
   { icon: 'download', title: 'Distributed Crawling', desc: 'Multi-worker crawl engine with per-domain rate limiting, robots.txt respect, and configurable depth.',
     modal: `<p>The crawler uses a goroutine worker pool (default 4) with per-domain rate limiting. Each domain gets its own crawl queue with configurable max depth. Respects robots.txt exclusion rules and supports custom User-Agent strings.</p><p>Reference: Go's <code>net/http</code> + <a href="https://github.com/PuerkitoBio/goquery" target="_blank">goquery</a> for HTML parsing.</p>` },
-  { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered full-text search with boolean operators, search dorks (intitle:, inurl:, filetype:, etc.), 15 language stemmers, phrase matching, and fuzzy queries.',
-    modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. Queries support boolean operators (<code>-exclude</code>, <code>OR</code>), search dorks (<code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code>), phrase matching, fuzzy matching for typo tolerance, <code>site:</code> and <code>lang:</code> filters (15 language stemmers). Field boosts: title (3x), description (1.5x), content (1x), anchor text (2x).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
-  { icon: 'star', title: 'Quality Scoring (E-E-A-T)', desc: '10+ scoring signals including expertise, authority, trustworthiness, readability, freshness, and citation analysis.',
-    modal: `<p>E-E-A-T scoring evaluates pages across 10+ dimensions, mirroring Google's quality rater guidelines. Signals include expertise, authority, trustworthiness, content depth, heading structure, media richness, citation count, and readability (Flesch-Kincaid).</p>` },
-  { icon: 'cpu', title: 'Content Analysis', desc: 'Rich extraction of title, meta tags, headings, links, images, OG tags, and canonical URLs from every crawled page.',
-    modal: `<p>Every crawled document goes through content extraction: title, meta description, headings (H1-H6), outbound links (internal/external, nofollow), images with alt text, Open Graph tags, and canonical URLs. The extracted structure feeds into quality scoring, PageRank link graph, and anchor text indexing.</p>` },
+  { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered search with intent classification, synonym expansion, spelling correction, boolean operators, search dorks, 15 language stemmers, domain diversity, and passage snippets.',
+    modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. The pipeline: parse query → classify intent (navigational/informational/transactional/local) → expand synonyms (100+ pairs) → build Bleve query tree → match → intent-aware re-rank → domain diversity (max 2 per domain in top 10) → passage-based snippets with highlights → spelling suggestion ("Did you mean?").</p><p>Field boosts: title (5x), URL text (3x), headings (2x), description (1.5x), content (1x). Boolean operators, search dorks, phrase matching, fuzzy matching, <code>site:</code> and <code>lang:</code> filters (15 language stemmers).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
+  { icon: 'star', title: 'Quality Scoring (12 Signals)', desc: '12 weighted scoring signals: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
+    modal: `<p>12-signal scoring evaluates pages across multiple dimensions, mirroring Google's quality rater guidelines and insights from the Yandex ranking factor leak. Signals include E-E-A-T (15%), quality (10%), PageRank (15%), domain authority (10%), URL quality (5%), readability (8%), citation (8%), freshness (8%), relevance (6%), SEO (5%), link structure (5%), and author credibility (5%). Domain authority aggregates site-level reputation from avg PageRank, avg quality, and backlink domains.</p>` },
+  { icon: 'cpu', title: 'Content Analysis', desc: 'Readability-style main content extraction (Arc90 algorithm) plus rich metadata: headings, links, images, OG tags, canonical URLs.',
+    modal: `<p>Every crawled document goes through Readability-style content extraction: block elements (div, article, section) are scored by paragraph count, text length, comma density, and class/ID signals to isolate the main content area. Boilerplate (sidebars, navs, footers, ads) is stripped. Also extracts: title, meta description, headings (H1-H6), outbound links (internal/external, nofollow), images with alt text, Open Graph tags, and canonical URLs. URL quality signals score path depth, slug readability, and tracking parameter presence.</p>` },
   { icon: 'shield', title: 'Spam Detection', desc: 'Keyword stuffing detection, cloaking analysis, and quality threshold filtering to keep the index clean.',
     modal: `<p>Spam detection catches keyword stuffing, cloaking patterns, thin content, and link farms. Documents with spam score &gt; 0.7 are rejected before indexing. Below that threshold, spam scores are baked into the StaticScore penalty.</p>` },
   { icon: 'monitor', title: 'Headless JS Rendering', desc: 'go-rod powered headless Chromium fallback for React, Next.js, Angular, and Vue single-page applications.',
@@ -447,12 +460,17 @@ function renderHowItWorks(el) {
           <span class="about-rank-op">x</span>
           <div class="about-rank-block" style="--color:var(--green)">
             <div class="about-rank-bar" style="height:65%"></div>
-            <span>StaticScore<br><small style="opacity:0.7">pre-computed</small></span>
+            <span>StaticScore<br><small style="opacity:0.7">12 signals</small></span>
           </div>
           <span class="about-rank-op">x</span>
           <div class="about-rank-block" style="--color:var(--amber)">
             <div class="about-rank-bar" style="height:80%"></div>
             <span>Freshness<br>Decay</span>
+          </div>
+          <span class="about-rank-op">x</span>
+          <div class="about-rank-block" style="--color:var(--blue)">
+            <div class="about-rank-bar" style="height:55%"></div>
+            <span>Intent<br>Multiplier</span>
           </div>
           <span class="about-rank-op">=</span>
           <div class="about-rank-block about-rank-result" style="--color:var(--purple)">
@@ -462,12 +480,18 @@ function renderHowItWorks(el) {
         </div>
         <div class="about-rank-weights">
           <div style="grid-column:1/-1;margin-bottom:4px;color:var(--text-secondary);font-size:0.85em"><strong>StaticScore</strong> = (0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8) &nbsp; <em>range [0.1, 2.5] — computed once at index time</em></div>
-          <div><span class="about-dot" style="background:var(--accent)"></span> E-E-A-T: 20%</div>
-          <div><span class="about-dot" style="background:var(--green)"></span> Quality: 20%</div>
-          <div><span class="about-dot" style="background:var(--blue)"></span> PageRank: 20%</div>
+          <div><span class="about-dot" style="background:var(--accent)"></span> E-E-A-T: 15%</div>
+          <div><span class="about-dot" style="background:var(--blue)"></span> PageRank: 15%</div>
+          <div><span class="about-dot" style="background:var(--green)"></span> Quality: 10%</div>
+          <div><span class="about-dot" style="background:var(--purple)"></span> Domain Authority: 10%</div>
           <div><span class="about-dot" style="background:var(--amber)"></span> Readability: 8%</div>
-          <div><span class="about-dot" style="background:var(--purple)"></span> Citation: 8%</div>
-          <div><span class="about-dot" style="background:var(--red)"></span> SEO: 8%</div>
+          <div><span class="about-dot" style="background:var(--red)"></span> Citation: 8%</div>
+          <div><span class="about-dot" style="background:var(--accent)"></span> Freshness: 8%</div>
+          <div><span class="about-dot" style="background:var(--green)"></span> Relevance: 6%</div>
+          <div><span class="about-dot" style="background:var(--blue)"></span> URL Quality: 5%</div>
+          <div><span class="about-dot" style="background:var(--amber)"></span> SEO: 5%</div>
+          <div><span class="about-dot" style="background:var(--purple)"></span> Link: 5%</div>
+          <div><span class="about-dot" style="background:var(--red)"></span> Author: 5%</div>
         </div>
       </div>
     </section>

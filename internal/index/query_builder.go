@@ -45,14 +45,18 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 	if termStr != "" {
 		if langAnalyzer != "" {
 			primaryClauses = append(primaryClauses,
-				newAndMatchQueryWithAnalyzer(termStr, "title", 3.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "title", 5.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "url_text", 3.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "headings_text", 2.0, langAnalyzer),
 				newAndMatchQueryWithAnalyzer(termStr, "description", 1.5, langAnalyzer),
 				newAndMatchQueryWithAnalyzer(termStr, "content", 1.0, langAnalyzer),
 				newAndMatchQueryWithAnalyzer(termStr, "anchor_text", 2.0, langAnalyzer),
 			)
 		} else {
 			primaryClauses = append(primaryClauses,
-				newAndMatchQuery(termStr, "title", 3.0),
+				newAndMatchQuery(termStr, "title", 5.0),
+				newAndMatchQuery(termStr, "url_text", 3.0),
+				newAndMatchQuery(termStr, "headings_text", 2.0),
 				newAndMatchQuery(termStr, "description", 1.5),
 				newAndMatchQuery(termStr, "content", 1.0),
 				newAndMatchQuery(termStr, "anchor_text", 2.0),
@@ -106,6 +110,19 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 			fq.SetBoost(0.5)
 			fq.SetFuzziness(fuzziness)
 			boostClauses = append(boostClauses, fq)
+		}
+	}
+
+	// Synonym expansion: add as low-boost disjunction queries
+	if pq.Synonyms != nil {
+		for _, syn := range pq.Synonyms {
+			synTitle := bleve.NewMatchQuery(syn)
+			synTitle.SetField("title")
+			synTitle.SetBoost(0.3)
+			synContent := bleve.NewMatchQuery(syn)
+			synContent.SetField("content")
+			synContent.SetBoost(0.2)
+			boostClauses = append(boostClauses, synTitle, synContent)
 		}
 	}
 
