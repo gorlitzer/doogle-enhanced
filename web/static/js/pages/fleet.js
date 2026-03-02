@@ -125,7 +125,7 @@ async function loadFleetData(container) {
   } catch (err) {
     const msg = err.message === 'no token'
       ? 'Fleet token not available. Access this page from <code>localhost</code> or enter the token from your terminal logs in <a href="#/admin/actions">Actions &gt; Fleet</a>.'
-      : 'Fleet not available. Start with <code>--fleet-role coordinator</code> or remove <code>--fleet-role standalone</code>.';
+      : 'Fleet not available. Set the fleet role to <strong>Coordinator</strong> in the <a href="#/wizard">setup wizard</a>.';
     content.innerHTML = `<div class="empty-state"><p>${msg}</p></div>`;
   }
 }

@@ -90,6 +90,7 @@ func StatusHandler(deps *Deps) http.HandlerFunc {
 		if !isLoopback(r) {
 			status.FleetAPIToken = ""
 			status.FleetSecretFile = ""
+			status.FleetSecretHex = ""
 		}
 		writeJSON(w, http.StatusOK, status)
 	}

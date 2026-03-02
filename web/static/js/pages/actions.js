@@ -140,16 +140,23 @@ export function renderActions(container) {
               <div class="action-icon">${icon('link', 24, 'var(--green)')}</div>
               <div>
                 <strong>Add a Worker</strong>
-                <p>Run this command on another machine to connect it as a worker to your fleet.</p>
+                <p>Share these values with the worker node. On the worker, go to the setup wizard and select <strong>Worker</strong> role.</p>
               </div>
             </div>
             <div class="action-card-body">
-              <pre class="fleet-cmd-block" id="fleet-worker-cmd">Loading...</pre>
-              <div class="action-row">
-                <span class="action-hint">Replace <code>&lt;SECRET&gt;</code> with the hex from <code id="fleet-secret-path">data/fleet.secret</code></span>
-                <button class="btn btn-primary" id="fleet-cmd-copy-btn">
-                  <span class="btn-label">${icon('fileText', 16)} Copy</span>
-                </button>
+              <div class="action-input-col">
+                <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px">Coordinator Multiaddr</label>
+                <input type="text" id="fleet-worker-addr" class="action-input mono" readonly placeholder="Loading...">
+                <label style="font-size:0.82em;color:var(--text-secondary);margin-bottom:2px;margin-top:8px">Fleet Secret</label>
+                <input type="password" id="fleet-worker-secret" class="action-input mono" readonly placeholder="Loading...">
+                <div class="action-btn-group" style="margin-top:8px">
+                  <button class="btn" id="fleet-secret-reveal-btn" title="Show / Hide">
+                    <span class="btn-label">${icon('eye', 16)} Reveal</span>
+                  </button>
+                  <button class="btn btn-primary" id="fleet-cmd-copy-btn">
+                    <span class="btn-label">${icon('fileText', 16)} Copy All</span>
+                  </button>
+                </div>
               </div>
               <div id="fleet-cmd-result" class="action-result"></div>
             </div>
@@ -243,23 +250,14 @@ async function loadCurrentName() {
       fleetSection.style.display = '';
       document.getElementById('fleet-token-display').value = s.fleet_api_token;
 
-      // Build worker command with the node's first TCP multiaddr.
+      // Populate worker connection fields.
       const addr = (s.addrs || []).find(a => a.includes('/tcp/')) || '';
-      const cmdEl = document.getElementById('fleet-worker-cmd');
-      const secretPath = s.fleet_secret_file || 'data/fleet.secret';
-      if (cmdEl && addr) {
-        cmdEl.textContent =
-          `make run ARGS='\n` +
-          `  --fleet-role worker \\\n` +
-          `  --fleet-coordinator ${addr} \\\n` +
-          `  --fleet-secret <SECRET> \\\n` +
-          `  --port 7003 --api-port 7004 \\\n` +
-          `  --data-dir ./data/worker1'`;
-      } else if (cmdEl) {
-        cmdEl.textContent = 'Multiaddr not available — check node logs';
-      }
-      const secretPathEl = document.getElementById('fleet-secret-path');
-      if (secretPathEl) secretPathEl.textContent = secretPath;
+      const addrEl = document.getElementById('fleet-worker-addr');
+      if (addrEl) addrEl.value = addr || 'Multiaddr not available — check node logs';
+
+      const secretHex = s.fleet_secret_hex || '';
+      const secretEl = document.getElementById('fleet-worker-secret');
+      if (secretEl) secretEl.value = secretHex || 'Check ' + (s.fleet_secret_file || 'data/fleet.secret');
     }
   } catch { /* ignore */ }
 }
@@ -320,9 +318,30 @@ function setupHandlers() {
     fleetCopyBtn.addEventListener('click', () => copyField('fleet-token-display', 'fleet-token-result'));
   }
 
+  const fleetSecretRevealBtn = document.getElementById('fleet-secret-reveal-btn');
+  const fleetSecretInput = document.getElementById('fleet-worker-secret');
+  if (fleetSecretRevealBtn && fleetSecretInput) {
+    fleetSecretRevealBtn.addEventListener('click', () => {
+      const isHidden = fleetSecretInput.type === 'password';
+      fleetSecretInput.type = isHidden ? 'text' : 'password';
+      fleetSecretRevealBtn.querySelector('.btn-label').innerHTML = `${icon('eye', 16)}`;
+    });
+  }
+
   const fleetCmdCopyBtn = document.getElementById('fleet-cmd-copy-btn');
   if (fleetCmdCopyBtn) {
-    fleetCmdCopyBtn.addEventListener('click', () => copyField('fleet-worker-cmd', 'fleet-cmd-result'));
+    fleetCmdCopyBtn.addEventListener('click', () => {
+      const addr = document.getElementById('fleet-worker-addr')?.value || '';
+      const secret = document.getElementById('fleet-worker-secret')?.value || '';
+      const text = `Coordinator: ${addr}\nFleet Secret: ${secret}`;
+      navigator.clipboard.writeText(text).then(() => {
+        const result = document.getElementById('fleet-cmd-result');
+        if (result) {
+          result.innerHTML = '<span class="badge badge-green">Copied to clipboard</span>';
+          setTimeout(() => { result.innerHTML = ''; }, 2000);
+        }
+      });
+    });
   }
 
   // --- Backup ---
