@@ -135,7 +135,7 @@ func DefaultConfig() *Config {
 			CacheTTL:        5 * time.Minute,
 		},
 		Fleet: FleetConfig{
-			Role:              "standalone",
+			Role:              "coordinator",
 			HeartbeatInterval: 15 * time.Second,
 			NodeTimeout:       60 * time.Second,
 		},
@@ -180,7 +180,7 @@ func ParseFlags(cfg *Config) {
 	flag.BoolVar(&cfg.P2P.DHTDiscovery, "dht-discovery", cfg.P2P.DHTDiscovery, "Enable DHT-based peer discovery via IPFS bootstrap nodes")
 	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
 	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level: debug, info, warn, error")
-	flag.StringVar(&cfg.Fleet.Role, "fleet-role", cfg.Fleet.Role, "Fleet role: standalone, coordinator, worker")
+	flag.StringVar(&cfg.Fleet.Role, "fleet-role", cfg.Fleet.Role, "Fleet role: coordinator (default), worker, standalone")
 	flag.StringVar(&cfg.Fleet.CoordinatorPeer, "fleet-coordinator", cfg.Fleet.CoordinatorPeer, "Coordinator multiaddr (worker mode)")
 	flag.StringVar(&cfg.Fleet.FleetSecret, "fleet-secret", cfg.Fleet.FleetSecret, "Fleet secret (hex, 64 chars)")
 	flag.Parse()

@@ -489,31 +489,23 @@ Approximate storage per 1,000 indexed pages:
 
 ## Fleet Management (Multi-Node)
 
-Fleet mode lets you run multiple Doogle nodes and manage them from a single coordinator. This is optional — by default every node runs standalone with zero overhead.
+Every Doogle node is fleet-ready by default — it runs as a coordinator out of the box. If you never add workers, it behaves like a normal node with zero overhead.
 
-### Starting a Coordinator
-
-```bash
-make fleet-coordinator
-# or
-./bin/doogle --fleet-role coordinator --name coord1
-```
-
-The coordinator prints two important values to its logs:
+Your node prints two fleet values to its logs at startup:
 1. **Fleet secret** — a 256-bit hex string (also saved to `data/fleet.secret`)
-2. **API token** — for authenticating with the fleet dashboard
+2. **API token** — for authenticating with the fleet dashboard (also visible in Admin > Fleet)
 
-### Starting a Worker
+### Adding a Worker
 
-Workers need the coordinator's multiaddr and fleet secret:
+Workers need your node's multiaddr and fleet secret (from your logs or Admin > Fleet):
 
 ```bash
 make fleet-worker \
-  COORD=/ip4/<COORD_IP>/tcp/7001/p2p/<PEER_ID> \
+  COORD=/ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> \
   SECRET=<hex>
 # or
 ./bin/doogle --fleet-role worker \
-  --fleet-coordinator /ip4/<COORD_IP>/tcp/7001/p2p/<PEER_ID> \
+  --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p2p/<PEER_ID> \
   --fleet-secret <hex> \
   --name worker1 --port 7003 --api-port 7004
 ```
@@ -525,13 +517,13 @@ Workers automatically:
 
 ### Fleet Dashboard
 
-Open the coordinator's web UI → Admin → Fleet. Enter the API token (printed at coordinator startup) to access the dashboard. From there you can see all workers, their stats, and open each worker's full admin UI through the coordinator's secure tunnel.
+Open your node's web UI → Admin → Fleet. Enter the API token (printed at startup, also shown on the Fleet page) to access the dashboard. From there you can see all workers, their stats, and open each worker's full admin UI through the coordinator's secure tunnel.
 
 ### Fleet CLI Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--fleet-role` | `standalone` | `standalone`, `coordinator`, or `worker` |
+| `--fleet-role` | `coordinator` | `coordinator` (fleet-ready), `worker`, or `standalone` (disables fleet) |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Hex fleet secret (auto-generated on coordinator if omitted) |
 
@@ -539,7 +531,7 @@ Open the coordinator's web UI → Admin → Fleet. Enter the API token (printed 
 
 ```yaml
 fleet:
-  role: "standalone"             # standalone, coordinator, worker
+  role: "coordinator"            # coordinator (default), worker, standalone
   coordinator_peer: ""           # multiaddr (workers only)
   fleet_secret: ""               # hex override
   heartbeat_interval: 15s

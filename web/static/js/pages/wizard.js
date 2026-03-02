@@ -1507,7 +1507,7 @@ const CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.categories);
 const BASE_STEPS = ['Welcome', 'Identity', 'Focus', 'Settings', 'Launch'];
 
 function getStepLabels() {
-  if (fleetRole === 'coordinator' || fleetRole === 'worker') {
+  if (fleetRole === 'worker') {
     return ['Welcome', 'Identity', 'Fleet', 'Focus', 'Settings', 'Launch'];
   }
   return BASE_STEPS;

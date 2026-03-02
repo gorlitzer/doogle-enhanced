@@ -19,12 +19,12 @@ import (
 // initFleet configures the fleet subsystem based on the fleet role.
 func (n *Node) initFleet() error {
 	role := n.cfg.Fleet.Role
-	if role == "" || role == "standalone" {
+	if role == "standalone" {
 		return nil
 	}
 
 	switch role {
-	case "coordinator":
+	case "", "coordinator":
 		secret, err := fleet.LoadOrCreateSecret(n.cfg.Storage.DataDir, n.cfg.Fleet.FleetSecret)
 		if err != nil {
 			return fmt.Errorf("fleet secret: %w", err)

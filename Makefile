@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev stop clean nuke fleet-coordinator fleet-worker fleet-stop
+.PHONY: help setup build run test dev stop clean nuke fleet-worker fleet-stop
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -12,7 +12,7 @@ help:
 	@echo ""
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
 	@echo "    make build              Compile binary to bin/"
-	@echo "    make run                Build + launch node (0.0.0.0:7002)"
+	@echo "    make run                Build + launch node (fleet-ready on 0.0.0.0:7002)"
 	@echo "    make run ARGS='...'     Pass extra flags to the binary"
 	@echo "    make dev                Docker detached on :7002 (stop with: make stop)"
 	@echo "    make stop               Stop docker containers"
@@ -20,11 +20,10 @@ help:
 	@echo "    make clean              Remove binary and node data"
 	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
 	@echo ""
-	@echo "  Fleet (advanced — manage multiple nodes from one coordinator)"
+	@echo "  Fleet (add workers to your node — see Admin > Fleet for secret + token)"
 	@echo ""
-	@echo "    make fleet-coordinator                  Start coordinator (prints secret + token)"
-	@echo "    make fleet-worker COORD=... SECRET=...  Join a worker to the fleet"
-	@echo "    make fleet-stop                         Stop all fleet nodes"
+	@echo "    make fleet-worker COORD=... SECRET=...  Join a worker to this node"
+	@echo "    make fleet-stop                         Stop all fleet workers"
 	@echo ""
 
 setup:
@@ -104,19 +103,7 @@ clean:
 nuke: clean
 	rm -rf .go/
 
-# ---- Fleet Management ----
-
-FLEET_NAME ?= coordinator
-FLEET_PORT ?= 7001
-FLEET_API  ?= 7002
-FLEET_DATA ?= ./data/fleet-coordinator
-
-fleet-coordinator: build
-	@echo "Starting fleet coordinator..."
-	@echo "  After start, note the fleet secret printed to logs."
-	@echo "  Pass it to workers with SECRET=<hex>"
-	./$(BIN_DIR)/$(BINARY) --fleet-role coordinator --name $(FLEET_NAME) \
-		--port $(FLEET_PORT) --api-port $(FLEET_API) --data-dir $(FLEET_DATA) $(ARGS)
+# ---- Fleet Workers ----
 
 COORD   ?=
 SECRET  ?=
@@ -138,4 +125,4 @@ fleet-worker: build
 
 fleet-stop:
 	@pkill -f '$(BIN_DIR)/$(BINARY).*--fleet-role' 2>/dev/null || true
-	@echo "Fleet nodes stopped."
+	@echo "Fleet workers stopped."
