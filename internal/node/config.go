@@ -20,8 +20,19 @@ type Config struct {
 	Storage  StorageConfig `yaml:"storage"`
 	Search   SearchConfig  `yaml:"search"`
 
+	Fleet FleetConfig `yaml:"fleet"`
+
 	// Seed URLs provided via CLI
 	SeedURLs []string `yaml:"-"`
+}
+
+type FleetConfig struct {
+	Role              string        `yaml:"role"`               // "standalone", "coordinator", "worker"
+	CoordinatorPeer   string        `yaml:"coordinator_peer"`   // multiaddr (workers only)
+	FleetSecret       string        `yaml:"fleet_secret"`       // hex override
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"` // default 15s
+	NodeTimeout       time.Duration `yaml:"node_timeout"`       // default 60s
+	Allowlist         []string      `yaml:"allowlist"`          // coordinator only
 }
 
 type P2PConfig struct {
@@ -123,6 +134,11 @@ func DefaultConfig() *Config {
 			CacheSize:       1000,
 			CacheTTL:        5 * time.Minute,
 		},
+		Fleet: FleetConfig{
+			Role:              "standalone",
+			HeartbeatInterval: 15 * time.Second,
+			NodeTimeout:       60 * time.Second,
+		},
 	}
 }
 
@@ -164,6 +180,9 @@ func ParseFlags(cfg *Config) {
 	flag.BoolVar(&cfg.P2P.DHTDiscovery, "dht-discovery", cfg.P2P.DHTDiscovery, "Enable DHT-based peer discovery via IPFS bootstrap nodes")
 	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
 	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level: debug, info, warn, error")
+	flag.StringVar(&cfg.Fleet.Role, "fleet-role", cfg.Fleet.Role, "Fleet role: standalone, coordinator, worker")
+	flag.StringVar(&cfg.Fleet.CoordinatorPeer, "fleet-coordinator", cfg.Fleet.CoordinatorPeer, "Coordinator multiaddr (worker mode)")
+	flag.StringVar(&cfg.Fleet.FleetSecret, "fleet-secret", cfg.Fleet.FleetSecret, "Fleet secret (hex, 64 chars)")
 	flag.Parse()
 
 	// If a config file was specified, reload

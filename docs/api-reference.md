@@ -2,7 +2,7 @@
 
 Doogle v2 exposes a JSON HTTP API for search, status monitoring, and crawl management. All endpoints are served on the configured `--api-port` (default `7002`).
 
-Base URL: `http://localhost:7002`
+Base URL: `http://localhost:7002` (the default `--bind` is `0.0.0.0`, so the API is also reachable from other devices on your LAN at `http://<your-ip>:7002`)
 
 ---
 
@@ -13,6 +13,11 @@ Base URL: `http://localhost:7002`
 | `GET` | `/api/search` | Search the distributed index |
 | `GET` | `/api/status` | Get node status and metrics |
 | `POST` | `/api/crawl` | Submit a URL for crawling |
+| `POST` | `/api/crawl/batch` | Submit up to 200 URLs at once |
+| `POST` | `/api/report` | Report a URL as spam/malware/phishing |
+| `POST` | `/api/config/name` | Set the human-readable node name |
+| `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
+| `DELETE` | `/api/admin/data` | Delete all local data (index, crawl history) |
 | `GET` | `/` | Web search interface (HTML) |
 
 ---
@@ -221,14 +226,104 @@ The URL is queued and will be crawled asynchronously. Discovered links from this
 
 ## `GET /`
 
-Serves the embedded web search interface. Open `http://localhost:7002` in a browser.
+Serves the embedded web search interface. Open `http://localhost:7002` in a browser (or `http://<your-ip>:7002` from another device on your LAN).
 
 Features:
-- Search box with keyboard support (Enter to search)
-- Results displayed with title, URL, snippet, domain badge, and score
+- Search box with keyboard support (Enter to search, `/` or `Ctrl+K`/`Cmd+K` to focus)
+- Results displayed with title, URL, snippet highlighting, domain badge, and score
+- 6 switchable themes: Dracula, CRT Terminal, Modern, Light, Pride, Storm
+- Setup wizard with 16 topic categories
+- Trust dashboard for spam reporting and peer reputation
+- Network topology graph, crawler live feed, indexer stats
 - Status bar showing node info (peer count, indexed docs, crawled URLs)
 - Auto-refreshing status (every 10 seconds)
-- Dark theme
+
+---
+
+## Fleet Endpoints
+
+Fleet endpoints are only available when the node is running as a coordinator (`--fleet-role coordinator`). All fleet endpoints require a bearer token derived from the fleet secret.
+
+### Authentication
+
+Include the token in every request:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:7002/api/fleet/nodes
+```
+
+Or as a query parameter (for iframe embedding):
+
+```bash
+curl "http://localhost:7002/api/fleet/nodes?_token=<token>"
+```
+
+The token is printed to the coordinator's logs at startup.
+
+---
+
+### `GET /api/fleet/nodes`
+
+Returns the fleet summary with all registered workers.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:7002/api/fleet/nodes
+```
+
+**Response — `200 OK`**
+
+```json
+{
+  "coordinator_id": "12D3KooWDpJ7As...",
+  "total_nodes": 2,
+  "online_nodes": 2,
+  "total_docs": 5420,
+  "nodes": [
+    {
+      "peer_id": "12D3KooWRby3dH...",
+      "name": "worker-1",
+      "status": "online",
+      "first_seen": "2026-03-01T10:00:00Z",
+      "last_seen": "2026-03-01T12:30:00Z",
+      "stats": {
+        "indexed_docs": 3200,
+        "crawled_urls": 8400,
+        "urls_in_queue": 150,
+        "connected_peers": 5,
+        "uptime": "2h30m"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/fleet/nodes/{peerID}`
+
+Returns a single worker's detail.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:7002/api/fleet/nodes/12D3KooWRby3dH...
+```
+
+---
+
+### `ANY /api/fleet/nodes/{peerID}/proxy/*`
+
+Proxies any HTTP request to a worker's local API through the coordinator's encrypted libp2p tunnel. The path after `/proxy/` is forwarded to the worker.
+
+```bash
+# Get worker's status
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:7002/api/fleet/nodes/12D3KooWRby3dH.../proxy/api/status
+
+# Get worker's crawl feed
+curl -H "Authorization: Bearer <token>" \
+  http://localhost:7002/api/fleet/nodes/12D3KooWRby3dH.../proxy/api/admin/crawler/feed
+```
+
+**Limits:** 5MB request body, 100MB response, 60s timeout per request.
 
 ---
 
@@ -240,7 +335,7 @@ All API endpoints support CORS with the following policy:
 |---------|-------|
 | Allowed Origins | `*` (any origin) |
 | Allowed Methods | `GET`, `POST`, `OPTIONS` |
-| Allowed Headers | `Content-Type` |
+| Allowed Headers | `Content-Type`, `Authorization` |
 | Max Age | 3600 seconds |
 
 This means you can call the API from any frontend application.

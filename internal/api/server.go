@@ -34,7 +34,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 				strings.HasPrefix(origin, "https://127.0.0.1:")
 		},
 		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: false,
 		MaxAge:           3600,
 	}))
@@ -63,6 +63,16 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Post("/restore", RestoreHandler(deps))
 			r.Delete("/data", DeleteDataHandler(deps))
 		})
+
+		// Fleet endpoints (only if coordinator)
+		if deps.FleetAPIToken != "" {
+			r.Route("/fleet", func(r chi.Router) {
+				r.Use(BearerAuth(deps.FleetAPIToken))
+				r.Get("/nodes", FleetNodesHandler(deps))
+				r.Get("/nodes/{peerID}", FleetNodeDetailHandler(deps))
+				r.HandleFunc("/nodes/{peerID}/proxy/*", FleetProxyHandler(deps))
+			})
+		}
 	})
 
 	// Serve embedded static files

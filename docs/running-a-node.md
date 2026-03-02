@@ -34,8 +34,8 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 ### From Source
 
 ```bash
-git clone https://github.com/doogle/doogle-v2.git
-cd doogle-v2
+git clone https://github.com/gorlitzer/doogle-enhanced.git
+cd doogle-enhanced
 go mod tidy
 make build
 ```
@@ -197,14 +197,21 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--config` | — | Path to YAML config file |
+| `--name` | — | Human-readable node name shown in UI and to peers |
 | `--port` | `7001` | libp2p listen port (TCP and QUIC) |
 | `--api-port` | `7002` | HTTP API and web UI port |
+| `--bind` | `0.0.0.0` | API server bind address (LAN-accessible by default) |
 | `--data-dir` | `./data/doogle` | Where to store all persistent data |
 | `--bootstrap` | — | Multiaddr of a bootstrap peer |
 | `--seed` | — | Comma-separated seed URLs to crawl |
 | `--workers` | `4` | Number of concurrent crawl workers |
 | `--mdns` | `true` | Enable mDNS for LAN peer discovery |
 | `--dht-discovery` | `true` | Enable automatic peer discovery via IPFS public DHT |
+| `--headless` | `false` | Enable headless browser rendering for JS-heavy pages |
+| `--log-level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `--fleet-role` | `standalone` | Fleet mode: `standalone`, `coordinator`, `worker` |
+| `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
+| `--fleet-secret` | — | Shared fleet secret hex (auto-generated on coordinator) |
 
 ### Precedence
 
@@ -220,6 +227,7 @@ Create a YAML config for persistent settings:
 
 ```yaml
 # my-config.yaml
+log_level: "info"              # debug, info, warn, error
 
 p2p:
   port: 7001
@@ -423,18 +431,20 @@ Open `http://localhost:7002` in a browser. The bottom status bar shows real-time
 
 ### Logs
 
-The node logs to stdout. Key log lines:
+The node logs to stdout using structured logging (`log/slog` with colored tint output). Key log lines:
 
 ```
-node: peer ID = 12D3KooWPjce...                    # Identity
-libp2p host started: 12D3KooWPjce...               # P2P ready
-  listening on: /ip4/.../tcp/7001/p2p/...           # Multiaddr
-mDNS: discovered peer 12D3KooWAbc...               # Peer found
-crawler: starting 4 workers                         # Crawl begin
-worker 0: crawled https://example.com (depth=0)     # Crawl success
-indexer: indexed https://example.com (quality=0.75) # Indexed
-api: listening on 0.0.0.0:7002                      # API ready
+15:04:05 INF node started peer_id=12D3KooWPjce...
+15:04:05 INF libp2p host started peer_id=12D3KooWPjce...
+15:04:05 INF listening addr=/ip4/.../tcp/7001/p2p/...
+15:04:06 INF mDNS: discovered peer peer=12D3KooWAbc...
+15:04:06 INF crawler: starting workers count=4
+15:04:07 INF crawled url=https://example.com depth=0
+15:04:07 INF indexed url=https://example.com quality=0.75
+15:04:07 INF api: listening addr=0.0.0.0:7002
 ```
+
+Control verbosity with `--log-level` (default `info`). Use `debug` for detailed diagnostics.
 
 ---
 
@@ -474,6 +484,68 @@ rm -rf ./data/doogle
 Approximate storage per 1,000 indexed pages:
 - **BadgerDB:** ~5-20MB (metadata + URL queue)
 - **Bleve index:** ~10-50MB (depends on content size)
+
+---
+
+## Fleet Management (Multi-Node)
+
+Fleet mode lets you run multiple Doogle nodes and manage them from a single coordinator. This is optional — by default every node runs standalone with zero overhead.
+
+### Starting a Coordinator
+
+```bash
+make fleet-coordinator
+# or
+./bin/doogle --fleet-role coordinator --name coord1
+```
+
+The coordinator prints two important values to its logs:
+1. **Fleet secret** — a 256-bit hex string (also saved to `data/fleet.secret`)
+2. **API token** — for authenticating with the fleet dashboard
+
+### Starting a Worker
+
+Workers need the coordinator's multiaddr and fleet secret:
+
+```bash
+make fleet-worker \
+  COORD=/ip4/<COORD_IP>/tcp/7001/p2p/<PEER_ID> \
+  SECRET=<hex>
+# or
+./bin/doogle --fleet-role worker \
+  --fleet-coordinator /ip4/<COORD_IP>/tcp/7001/p2p/<PEER_ID> \
+  --fleet-secret <hex> \
+  --name worker1 --port 7003 --api-port 7004
+```
+
+Workers automatically:
+- Bind their HTTP API to `127.0.0.1` (not reachable from the network)
+- Send heartbeats to the coordinator every 15 seconds
+- Accept proxied requests only from the coordinator's peer ID
+
+### Fleet Dashboard
+
+Open the coordinator's web UI → Admin → Fleet. Enter the API token (printed at coordinator startup) to access the dashboard. From there you can see all workers, their stats, and open each worker's full admin UI through the coordinator's secure tunnel.
+
+### Fleet CLI Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--fleet-role` | `standalone` | `standalone`, `coordinator`, or `worker` |
+| `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
+| `--fleet-secret` | — | Hex fleet secret (auto-generated on coordinator if omitted) |
+
+### Fleet Configuration (YAML)
+
+```yaml
+fleet:
+  role: "standalone"             # standalone, coordinator, worker
+  coordinator_peer: ""           # multiaddr (workers only)
+  fleet_secret: ""               # hex override
+  heartbeat_interval: 15s
+  node_timeout: 60s
+  allowlist: []                  # peer IDs (empty = accept all with valid secret)
+```
 
 ---
 

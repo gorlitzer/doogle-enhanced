@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev stop clean nuke
+.PHONY: help setup build run test dev stop clean nuke fleet-coordinator fleet-worker fleet-stop
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -19,6 +19,12 @@ help:
 	@echo "    make test               Run all tests"
 	@echo "    make clean              Remove binary and node data"
 	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
+	@echo ""
+	@echo "  Fleet (advanced — manage multiple nodes from one coordinator)"
+	@echo ""
+	@echo "    make fleet-coordinator                  Start coordinator (prints secret + token)"
+	@echo "    make fleet-worker COORD=... SECRET=...  Join a worker to the fleet"
+	@echo "    make fleet-stop                         Stop all fleet nodes"
 	@echo ""
 
 setup:
@@ -97,3 +103,39 @@ clean:
 
 nuke: clean
 	rm -rf .go/
+
+# ---- Fleet Management ----
+
+FLEET_NAME ?= coordinator
+FLEET_PORT ?= 7001
+FLEET_API  ?= 7002
+FLEET_DATA ?= ./data/fleet-coordinator
+
+fleet-coordinator: build
+	@echo "Starting fleet coordinator..."
+	@echo "  After start, note the fleet secret printed to logs."
+	@echo "  Pass it to workers with SECRET=<hex>"
+	./$(BIN_DIR)/$(BINARY) --fleet-role coordinator --name $(FLEET_NAME) \
+		--port $(FLEET_PORT) --api-port $(FLEET_API) --data-dir $(FLEET_DATA) $(ARGS)
+
+COORD   ?=
+SECRET  ?=
+W_NAME  ?= worker1
+W_PORT  ?= 7003
+W_API   ?= 7004
+W_DATA  ?= ./data/fleet-worker1
+
+fleet-worker: build
+	@if [ -z "$(COORD)" ] || [ -z "$(SECRET)" ]; then \
+		echo "Usage: make fleet-worker COORD=/ip4/.../tcp/.../p2p/<ID> SECRET=<hex>"; \
+		echo ""; \
+		echo "  Optional: W_NAME=worker1 W_PORT=7003 W_API=7004 W_DATA=./data/fleet-worker1"; \
+		exit 1; \
+	fi
+	./$(BIN_DIR)/$(BINARY) --fleet-role worker --name $(W_NAME) \
+		--fleet-coordinator "$(COORD)" --fleet-secret "$(SECRET)" \
+		--port $(W_PORT) --api-port $(W_API) --data-dir $(W_DATA) $(ARGS)
+
+fleet-stop:
+	@pkill -f '$(BIN_DIR)/$(BINARY).*--fleet-role' 2>/dev/null || true
+	@echo "Fleet nodes stopped."

@@ -1,9 +1,11 @@
 package api
 
 import (
+	"crypto/subtle"
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -73,6 +75,36 @@ func RateLimiter(rps float64, burst int) func(http.Handler) http.Handler {
 			}
 			v.tokens--
 			mu.Unlock()
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// BearerAuth returns middleware that checks for a valid Bearer token.
+// Also accepts ?_token=... query param for iframe embedding.
+func BearerAuth(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			provided := ""
+
+			// Check Authorization header.
+			auth := r.Header.Get("Authorization")
+			if strings.HasPrefix(auth, "Bearer ") {
+				provided = auth[7:]
+			}
+
+			// Fallback: check query param.
+			if provided == "" {
+				provided = r.URL.Query().Get("_token")
+			}
+
+			if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(`{"error":"unauthorized: invalid or missing fleet token"}`))
+				return
+			}
 
 			next.ServeHTTP(w, r)
 		})

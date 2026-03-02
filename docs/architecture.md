@@ -64,7 +64,8 @@ The node orchestrator creates subsystems in this exact order:
 11. search.NewEngine()         Local BM25 search
 12. search.NewDistributedSearch()  Fan-out + merge
 13. Register P2P handlers      Search, Crawl, Index stream protocols
-14. api.NewServer()            HTTP API + embedded web UI
+14. initFleet()                Fleet coordinator/worker setup (if fleet role != standalone)
+15. api.NewServer()            HTTP API + embedded web UI
 ```
 
 ### Runtime (`node.Run()`)
@@ -108,7 +109,7 @@ The node orchestrator creates subsystems in this exact order:
 
 **Kademlia DHT** — Nodes maintain a distributed hash table. When bootstrapping, the node connects to known peers and populates its routing table. The DHT runs in `AutoServer` mode (acts as both client and server).
 
-**IPFS DHT Routing Discovery** — Enabled by default. On startup, the node connects to the IPFS public bootstrap peers (5 well-known nodes maintained by Protocol Labs) to join the global Kademlia DHT. It then uses `RoutingDiscovery` to advertise itself under the rendezvous namespace `doogle/network/v2` and periodically searches for other Doogle nodes. Discovery queries are wrapped in `BackoffDiscovery` (exponential backoff: 1s–5min, full jitter) to avoid overloading the DHT. New peers are found within 30–60 seconds — no manual `--bootstrap` needed for internet-wide discovery. Disable with `--dht-discovery=false`.
+**IPFS DHT Routing Discovery** — Enabled by default. On startup, the node connects to the IPFS public bootstrap peers (5 well-known nodes maintained by Protocol Labs) to join the global Kademlia DHT. It then uses raw `RoutingDiscovery` to advertise itself under the rendezvous namespace `doogle/network/v2` and periodically searches for other Doogle nodes with a 30-second polling interval. No `BackoffDiscovery` wrapper is used — the fixed polling interval already provides reasonable rate-limiting, and backoff's result caching would delay discovery of new peers. New peers are found within 30–60 seconds — no manual `--bootstrap` needed for internet-wide discovery. Disable with `--dht-discovery=false`.
 
 **mDNS** — For local/dev networks, nodes broadcast on the LAN using the service name `doogle-p2p`. No bootstrap peers needed on the same network.
 
@@ -172,6 +173,28 @@ Forwards documents for indexing (used for shard replication in Phase 2).
 → Sender sends:    Document JSON + \n
 ← Receiver sends:  {"status": "ok"} or {"status": "error"}
 ```
+
+#### `/doogle/fleet/heartbeat/1.0.0`
+
+Workers send heartbeats to the coordinator every 15 seconds with their stats. All messages are HMAC-SHA256 signed with the shared fleet secret.
+
+```
+→ Worker sends:    {peer_id, node_name, stats, timestamp, signature} + \n
+← Coordinator:    {status: "ok"|"rejected", reason?} + \n
+```
+
+The coordinator verifies: (1) peer ID matches the stream sender, (2) peer is in the allowlist (if configured), (3) HMAC signature is valid, (4) timestamp is within ±60s.
+
+#### `/doogle/fleet/proxy/1.0.0`
+
+The coordinator tunnels HTTP requests to workers through encrypted libp2p streams. Workers only bind their API to `127.0.0.1` — this tunnel is the only remote access path.
+
+```
+Phase 1 (coord → worker):  {method, path, query, headers, body, timestamp, signature} + \n  <CloseWrite>
+Phase 2 (worker → coord):  {status_code, headers, content_length} + \n  <raw body bytes until EOF>
+```
+
+Limits: 5MB request, 100MB response, 60s timeout.
 
 ### GossipSub — URL Frontier
 
@@ -444,7 +467,7 @@ data_dir/
 cmd/doogle/main.go
   └─ internal/node
        ├─ internal/p2p
-       │    ├─ libp2p (host, dht, pubsub, mdns, routing discovery, backoff)
+       │    ├─ libp2p (host, dht, pubsub, mdns, routing discovery)
        │    └─ internal/models
        ├─ internal/crawler
        │    ├─ goquery
@@ -461,9 +484,13 @@ cmd/doogle/main.go
        │    ├─ internal/index
        │    ├─ internal/p2p
        │    └─ internal/models
+       ├─ internal/fleet
+       │    ├─ internal/p2p
+       │    └─ internal/store
        ├─ internal/api
        │    ├─ chi/v5
        │    ├─ internal/search
+       │    ├─ internal/fleet (fleet handlers)
        │    └─ web (embedded static files)
        └─ internal/store
             ├─ badger/v4

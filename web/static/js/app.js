@@ -12,8 +12,10 @@ import { renderAbout } from './pages/about.js';
 import { renderWizard } from './pages/wizard.js';
 import { renderActions } from './pages/actions.js';
 import { renderTrust } from './pages/trust.js';
+import { renderFleet } from './pages/fleet.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
+import { initTabIdentity, updateNodeIdentity } from './tab-identity.js';
 
 const routes = {
   '':            { render: renderHome,   layout: 'home' },
@@ -24,6 +26,7 @@ const routes = {
   'admin/network': { render: renderNetwork, layout: 'admin' },
   'admin/actions': { render: renderActions, layout: 'admin' },
   'admin/trust':   { render: renderTrust,   layout: 'admin' },
+  'admin/fleet':   { render: renderFleet,   layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
   'wizard':      { render: renderWizard, layout: 'search' },
@@ -96,6 +99,7 @@ function startStatusPolling() {
   async function poll() {
     try {
       const s = await api.status();
+      updateNodeIdentity(s);
       const badge = document.getElementById('node-badge-text');
       if (badge) {
         const name = s.node_name || `${s.peer_id.slice(0, 12)}...`;
@@ -123,6 +127,7 @@ window.addEventListener('DOMContentLoaded', () => {
   createThemePicker();
   initBgAnimation();
   initLogoAnimation();
+  initTabIdentity();
   // Hamburger menu toggle
   const navToggle = document.getElementById('nav-toggle');
   const navLinks = document.querySelector('.nav-links');
