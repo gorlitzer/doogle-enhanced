@@ -46,6 +46,110 @@ var stopWords = map[string]bool{
 	"it": true, "its": true, "they": true, "them": true, "their": true,
 }
 
+// synonymMap maps terms to their synonyms for query expansion.
+var synonymMap = map[string][]string{
+	// Programming languages
+	"javascript": {"js", "ecmascript"}, "js": {"javascript"}, "ecmascript": {"javascript"},
+	"python": {"py"}, "py": {"python"},
+	"typescript": {"ts"}, "ts": {"typescript"},
+	"golang": {"go language"}, "csharp": {"c#", "c sharp"}, "cpp": {"c++"},
+	"ruby": {"rb"}, "rb": {"ruby"},
+
+	// Tech concepts
+	"machine learning": {"ml", "deep learning"}, "ml": {"machine learning"},
+	"artificial intelligence": {"ai"}, "ai": {"artificial intelligence"},
+	"api": {"application programming interface", "rest api", "web api"},
+	"database": {"db", "data base"}, "db": {"database"},
+	"frontend": {"front-end", "front end"}, "backend": {"back-end", "back end"},
+	"devops": {"dev ops"}, "ci/cd": {"continuous integration", "continuous deployment"},
+	"ui": {"user interface"}, "ux": {"user experience"},
+	"os": {"operating system"}, "cpu": {"processor"},
+	"gpu": {"graphics card", "graphics processing unit"},
+	"ram": {"memory"}, "ssd": {"solid state drive"}, "hdd": {"hard drive"},
+	"html": {"hypertext markup language"}, "css": {"cascading style sheets"},
+	"sql": {"structured query language"}, "nosql": {"non-relational database"},
+	"oop": {"object oriented programming"}, "fp": {"functional programming"},
+	"cli": {"command line"}, "gui": {"graphical user interface"},
+	"cdn": {"content delivery network"}, "dns": {"domain name system"},
+	"http": {"hypertext transfer protocol"}, "https": {"secure http"},
+	"ssh": {"secure shell"}, "ftp": {"file transfer protocol"},
+	"json": {"javascript object notation"}, "xml": {"extensible markup language"},
+	"yaml": {"yml"}, "yml": {"yaml"},
+	"regex": {"regular expression", "regexp"}, "regexp": {"regex", "regular expression"},
+
+	// Frameworks and tools
+	"react": {"reactjs", "react.js"}, "reactjs": {"react"},
+	"vue": {"vuejs", "vue.js"}, "vuejs": {"vue"},
+	"angular": {"angularjs"}, "angularjs": {"angular"},
+	"node": {"nodejs", "node.js"}, "nodejs": {"node"},
+	"docker": {"container", "containerization"},
+	"kubernetes": {"k8s"}, "k8s": {"kubernetes"},
+	"postgres": {"postgresql"}, "postgresql": {"postgres"},
+	"mongo": {"mongodb"}, "mongodb": {"mongo"},
+	"redis": {"in-memory cache"},
+
+	// Common tech terms
+	"repo": {"repository"}, "repository": {"repo"},
+	"config": {"configuration"}, "configuration": {"config"},
+	"auth": {"authentication"}, "authentication": {"auth"},
+	"admin": {"administrator"}, "dev": {"developer"},
+	"docs": {"documentation"}, "documentation": {"docs"},
+	"lib": {"library"}, "library": {"lib"},
+	"pkg": {"package"},
+	"env": {"environment"}, "environment": {"env"},
+	"async": {"asynchronous"}, "sync": {"synchronous"},
+
+	// General terms
+	"photo": {"picture", "image"}, "picture": {"photo", "image"}, "image": {"photo", "picture"},
+	"video": {"clip", "footage"}, "movie": {"film"}, "film": {"movie"},
+	"car": {"automobile", "vehicle"}, "automobile": {"car"},
+	"phone": {"smartphone", "mobile"}, "smartphone": {"phone", "mobile"},
+	"laptop": {"notebook computer"}, "computer": {"pc"},
+	"website": {"web site", "site"}, "webpage": {"web page"},
+	"email": {"e-mail"}, "e-mail": {"email"},
+	"wifi": {"wi-fi", "wireless"}, "bluetooth": {"bt"},
+	"cheap": {"affordable", "inexpensive", "budget"},
+	"fast": {"quick", "rapid", "speedy"},
+	"big": {"large", "huge"}, "small": {"tiny", "little"},
+	"error": {"bug", "issue", "problem"}, "bug": {"error", "issue", "defect"},
+	"fix": {"solve", "resolve", "repair"}, "install": {"setup", "set up"},
+	"remove": {"delete", "uninstall"}, "delete": {"remove"},
+	"create": {"make", "build", "generate"}, "update": {"upgrade", "modify"},
+}
+
+// ExpandQuery adds synonym expansions to a parsed query.
+func ExpandQuery(pq *models.ParsedQuery) []string {
+	var expansions []string
+	seen := make(map[string]bool)
+
+	// Add synonyms for individual terms
+	for _, term := range pq.Terms {
+		if syns, ok := synonymMap[term]; ok {
+			for _, syn := range syns {
+				if !seen[syn] {
+					seen[syn] = true
+					expansions = append(expansions, syn)
+				}
+			}
+		}
+	}
+
+	// Check multi-word phrases in the cleaned query
+	lower := strings.ToLower(pq.CleanedQuery)
+	for phrase, syns := range synonymMap {
+		if strings.Contains(phrase, " ") && strings.Contains(lower, phrase) {
+			for _, syn := range syns {
+				if !seen[syn] {
+					seen[syn] = true
+					expansions = append(expansions, syn)
+				}
+			}
+		}
+	}
+
+	return expansions
+}
+
 // ParseQuery processes a raw query string into a structured ParsedQuery.
 func ParseQuery(raw string) *models.ParsedQuery {
 	pq := &models.ParsedQuery{

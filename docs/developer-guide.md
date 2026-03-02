@@ -71,9 +71,11 @@ doogle-v2/
 │   ├── indexer/                # Document processing pipeline
 │   │   ├── indexer.go          # Main pipeline: dedup → score → store
 │   │   ├── analyzer.go         # Text tokenization, keyword extraction
-│   │   ├── scorer.go           # Quality and spam scoring
+│   │   ├── scorer.go           # Quality and spam scoring (12 signals)
 │   │   ├── duplicate.go        # Content fingerprinting (shingling)
 │   │   ├── pagerank.go         # PageRank computation on backlink graph
+│   │   ├── domain_authority.go # Domain authority (site-level reputation scoring)
+│   │   ├── url_signals.go      # URL quality scoring (path depth, readability, tracking)
 │   │   ├── batch_indexer.go    # Batched Bleve writes with flush interval
 │   │   └── trust_manager.go    # Peer trust scoring and quarantine logic
 │   ├── index/                  # Full-text search index
@@ -87,8 +89,12 @@ doogle-v2/
 │   │   ├── engine.go           # Local search against Bleve
 │   │   ├── distributed.go      # Fan-out to peers + merge results + cache
 │   │   ├── cache.go            # LRU + TTL search result cache
-│   │   ├── ranker.go           # Multi-signal re-ranking (BM25, quality, PageRank, freshness)
-│   │   └── query.go            # Query parsing (boolean operators, phrases, site/lang filters)
+│   │   ├── ranker.go           # 12-signal re-ranking with intent awareness
+│   │   ├── query.go            # Query parsing, synonyms (boolean operators, phrases, site/lang)
+│   │   ├── intent.go           # Query intent classification (navigational/informational/transactional/local)
+│   │   ├── diversity.go        # Domain diversity (max N per domain in top K)
+│   │   ├── snippets.go         # Passage-based snippet extraction with term highlights
+│   │   └── spelling.go         # Spell checker (Damerau-Levenshtein, index dictionary)
 │   ├── fleet/                  # Fleet coordinator/worker management
 │   │   ├── coordinator.go      # Coordinator: heartbeat handler, proxy, staleness loop
 │   │   ├── worker.go           # Worker: heartbeat sender, proxy handler
@@ -167,7 +173,7 @@ The `Store` interface abstracts the index backend. `BleveStore` is the implement
 
 ### `internal/search` — Query Execution
 
-Three layers: `Engine` (local-only), `DistributedSearch` (local + peers + cache), and `SearchCache` (LRU+TTL). The distributed search checks the cache first, then uses the local engine and fans out to peers. Query parsing handles boolean operators (`-exclude`, uppercase `OR`), phrases, `site:`, `lang:` filters, and synonym expansion.
+Multiple layers: `Engine` (local-only), `DistributedSearch` (local + peers + cache), `SearchCache` (LRU+TTL), `SpellChecker` (Damerau-Levenshtein against index dictionary), and intent classification. The distributed search checks the cache first, then uses the local engine and fans out to peers. Query parsing handles boolean operators (`-exclude`, uppercase `OR`), phrases, `site:`, `lang:` filters, and synonym expansion (100+ bidirectional pairs). Intent classification (navigational/informational/transactional/local) adjusts ranking weights per query. Domain diversity caps max 2 results per domain in top 10. Passage-based snippet extraction scores sentences by query term coverage.
 
 ### `internal/fleet` — Fleet Management
 
@@ -227,13 +233,16 @@ Stateless handlers that delegate to `search.DistributedSearch` and `node.Status(
          │
          ▼
 2. distributed.Search(req):
-   a. localEngine.Search(req)     → Bleve BM25 query
+   a. localEngine.Search(req)     → parse → synonyms → intent → Bleve BM25 → snippets → re-rank
    b. For each connected peer:
       └─ p2p.QueryPeer()          → open stream → send request → read response
    c. Merge all results
-   d. Re-rank: score × (1 + quality × 0.5)
-   e. Deduplicate by URL
-   f. Return paginated results
+   d. Classify intent (navigational/informational/transactional/local)
+   e. Re-rank with intent-aware 12-signal scoring
+   f. Deduplicate by URL
+   g. Apply domain diversity (max 2 per domain in top 10)
+   h. Generate spelling suggestion if applicable
+   i. Return paginated results with intent and suggestion
 ```
 
 ---

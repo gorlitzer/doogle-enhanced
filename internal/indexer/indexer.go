@@ -2,9 +2,11 @@ package indexer
 
 import (
 	"log"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/models"
@@ -93,6 +95,7 @@ func (ix *Indexer) Index(doc *models.Document) error {
 	doc.LinkScore = scores.Link
 	doc.SEOScore = scores.SEO
 	doc.RelevanceScore = scores.Relevance
+	doc.URLQualityScore = scores.URLQuality
 
 	// 5. Reject high-spam
 	if scores.Spam > 0.7 {
@@ -104,15 +107,17 @@ func (ix *Indexer) Index(doc *models.Document) error {
 	// 6. Convert to index document
 	idxDoc := ix.toIndexDocument(doc)
 
-	// 7. Pre-compute static score: quality * spam factor
+	// 7. Pre-compute static score: quality * spam factor (updated weights)
 	qualitySignal := 0.0
-	qualitySignal += scores.EEAT * 0.20
-	qualitySignal += scores.Quality * 0.20
-	qualitySignal += doc.PageRankScore * 0.20
+	qualitySignal += scores.EEAT * 0.15
+	qualitySignal += scores.Quality * 0.10
+	qualitySignal += doc.PageRankScore * 0.15
+	qualitySignal += idxDoc.DomainAuthorityScore * 0.10
+	qualitySignal += scores.URLQuality * 0.05
 	qualitySignal += doc.ReadabilityScore * 0.08
 	qualitySignal += doc.CitationScore * 0.08
 	qualitySignal += scores.Link * 0.05
-	qualitySignal += scores.SEO * 0.08
+	qualitySignal += scores.SEO * 0.05
 	qualitySignal += doc.AuthorCredibility * 0.05
 	qualitySignal += scores.Relevance * 0.06
 	idxDoc.StaticScore = (0.5 + qualitySignal*2.0) * (1.0 - doc.SpamScore*0.8)
@@ -183,7 +188,7 @@ func (ix *Indexer) enrich(doc *models.Document) {
 }
 
 func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
-	return &index.IndexDocument{
+	idxDoc := &index.IndexDocument{
 		ID:          doc.ID,
 		URL:         doc.URL,
 		Domain:      doc.Domain,
@@ -213,9 +218,59 @@ func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
 		FreshnessScore:    doc.FreshnessScore,
 		AuthorCredibility: doc.AuthorCredibility,
 		RelevanceScore:    doc.RelevanceScore,
+		URLQualityScore:   doc.URLQualityScore,
 
 		IsHTTPS:         doc.IsHTTPS,
 		IsTimeSensitive: doc.IsTimeSensitive,
 		IsEvergreen:     doc.IsEvergreen,
 	}
+
+	// Populate URL text: extract readable words from URL path
+	idxDoc.URLText = extractURLText(doc.URL)
+
+	// Populate headings text: concatenate h1-h3 headings
+	idxDoc.HeadingsText = extractHeadingsText(doc.Headings)
+
+	return idxDoc
+}
+
+// extractURLText extracts readable words from a URL path for full-text search.
+func extractURLText(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+
+	path := strings.Trim(u.Path, "/")
+	if path == "" {
+		return ""
+	}
+
+	// Replace separators with spaces
+	r := strings.NewReplacer("/", " ", "-", " ", "_", " ", ".", " ")
+	words := r.Replace(path)
+
+	// Filter out non-alphabetic tokens
+	var parts []string
+	for _, w := range strings.Fields(words) {
+		cleaned := strings.TrimFunc(w, func(r rune) bool {
+			return !unicode.IsLetter(r)
+		})
+		if len(cleaned) >= 2 {
+			parts = append(parts, strings.ToLower(cleaned))
+		}
+	}
+
+	return strings.Join(parts, " ")
+}
+
+// extractHeadingsText concatenates h1-h3 heading texts for indexing.
+func extractHeadingsText(headings []models.Heading) string {
+	var parts []string
+	for _, h := range headings {
+		if h.Level <= 3 && h.Text != "" {
+			parts = append(parts, h.Text)
+		}
+	}
+	return strings.Join(parts, " ")
 }

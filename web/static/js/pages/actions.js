@@ -25,7 +25,7 @@ export function renderActions(container) {
               </div>
             </div>
             <div class="action-card-body">
-              <div class="action-input-row">
+              <div class="action-input-col">
                 <input type="text" id="seed-url-input" placeholder="https://example.com" class="action-input">
                 <button class="btn btn-primary" id="add-seed-btn">
                   <span class="btn-label">Add Seed</span>
@@ -120,14 +120,16 @@ export function renderActions(container) {
               </div>
             </div>
             <div class="action-card-body">
-              <div class="action-input-row">
+              <div class="action-input-col">
                 <input type="password" id="fleet-token-display" class="action-input mono" readonly placeholder="Only visible from localhost">
-                <button class="btn" id="fleet-token-reveal-btn" title="Show / Hide">
-                  <span class="btn-label">${icon('eye', 16)}</span>
-                </button>
-                <button class="btn btn-primary" id="fleet-token-copy-btn">
-                  <span class="btn-label">${icon('fileText', 16)} Copy</span>
-                </button>
+                <div class="action-btn-group">
+                  <button class="btn" id="fleet-token-reveal-btn" title="Show / Hide">
+                    <span class="btn-label">${icon('eye', 16)} Reveal</span>
+                  </button>
+                  <button class="btn btn-primary" id="fleet-token-copy-btn">
+                    <span class="btn-label">${icon('fileText', 16)} Copy</span>
+                  </button>
+                </div>
               </div>
               <div id="fleet-token-result" class="action-result"></div>
             </div>

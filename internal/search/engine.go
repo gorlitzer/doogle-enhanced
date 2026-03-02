@@ -10,12 +10,18 @@ import (
 
 // Engine performs local searches against the Bleve index.
 type Engine struct {
-	store index.Store
+	store        index.Store
+	spellChecker *SpellChecker
 }
 
 // NewEngine creates a local search engine.
 func NewEngine(store index.Store) *Engine {
 	return &Engine{store: store}
+}
+
+// SetSpellChecker attaches a spell checker to the engine.
+func (e *Engine) SetSpellChecker(sc *SpellChecker) {
+	e.spellChecker = sc
 }
 
 // Search performs a local search and returns results.
@@ -24,6 +30,12 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 	if pq.CleanedQuery == "" && len(pq.Phrases) == 0 {
 		return &models.SearchResponse{Query: req.Query}, nil
 	}
+
+	// Expand synonyms
+	pq.Synonyms = ExpandQuery(pq)
+
+	// Classify intent
+	intent := ClassifyIntent(pq)
 
 	page := req.Page
 	if page < 1 {
@@ -38,7 +50,6 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 	}
 
 	// Over-fetch from Bleve so re-ranking can re-order across a wider pool.
-	// We fetch up to 100 results from offset 0 and paginate after re-ranking.
 	fetchSize := pageSize * 5
 	if fetchSize < 100 {
 		fetchSize = 100
@@ -52,40 +63,48 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 
 	var results []models.SearchResult
 	for _, hit := range hits {
-		desc := extractSnippet(hit.Doc.Content, pq.Terms, 200)
+		// Use passage-based snippet extraction with highlights
+		snippet := ExtractSnippet(hit.Doc.Content, pq.Terms, 280)
+		desc := snippet.Text
 		if desc == "" {
-			desc = truncate(hit.Doc.Description, 200)
+			desc = truncate(hit.Doc.Description, 280)
 		}
 		if desc == "" {
-			desc = truncate(hit.Doc.Content, 200)
+			desc = truncate(hit.Doc.Content, 280)
 		}
+
 		result := models.SearchResult{
-			URL:               hit.Doc.URL,
-			Title:             hit.Doc.Title,
-			Description:       desc,
-			Domain:            hit.Doc.Domain,
-			Language:          hit.Doc.Language,
-			Score:             hit.Score,
-			PageRankScore:     hit.Doc.PageRankScore,
-			EEATScore:         hit.Doc.EEATScore,
-			QualityScore:      hit.Doc.QualityScore,
-			SpamScore:         hit.Doc.SpamScore,
-			LinkScore:         hit.Doc.LinkScore,
-			SEOScore:          hit.Doc.SEOScore,
-			ReadabilityScore:  hit.Doc.ReadabilityScore,
-			CitationScore:     hit.Doc.CitationScore,
-			FreshnessScore:    hit.Doc.FreshnessScore,
-			AuthorCredibility: hit.Doc.AuthorCredibility,
-			RelevanceScore:    hit.Doc.RelevanceScore,
-			StaticScore:       hit.Doc.StaticScore,
-			CrawledAt:         hit.Doc.CrawledAt,
-			IsTimeSensitive:   hit.Doc.IsTimeSensitive,
-			IsEvergreen:       hit.Doc.IsEvergreen,
+			URL:                  hit.Doc.URL,
+			Title:                hit.Doc.Title,
+			Description:          desc,
+			Domain:               hit.Doc.Domain,
+			Language:             hit.Doc.Language,
+			Score:                hit.Score,
+			PageRankScore:        hit.Doc.PageRankScore,
+			EEATScore:            hit.Doc.EEATScore,
+			QualityScore:         hit.Doc.QualityScore,
+			SpamScore:            hit.Doc.SpamScore,
+			LinkScore:            hit.Doc.LinkScore,
+			SEOScore:             hit.Doc.SEOScore,
+			ReadabilityScore:     hit.Doc.ReadabilityScore,
+			CitationScore:        hit.Doc.CitationScore,
+			FreshnessScore:       hit.Doc.FreshnessScore,
+			AuthorCredibility:    hit.Doc.AuthorCredibility,
+			RelevanceScore:       hit.Doc.RelevanceScore,
+			StaticScore:          hit.Doc.StaticScore,
+			DomainAuthorityScore: hit.Doc.DomainAuthorityScore,
+			URLQualityScore:      hit.Doc.URLQualityScore,
+			CrawledAt:            hit.Doc.CrawledAt,
+			IsTimeSensitive:      hit.Doc.IsTimeSensitive,
+			IsEvergreen:          hit.Doc.IsEvergreen,
 		}
 		results = append(results, result)
 	}
 
-	// Paginate after caller re-ranks
+	// Re-rank with intent awareness
+	RerankWithIntent(results, &intent)
+
+	// Paginate after re-ranking
 	if offset >= len(results) {
 		results = nil
 	} else if offset+pageSize >= len(results) {
@@ -94,17 +113,28 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 		results = results[offset : offset+pageSize]
 	}
 
-	return &models.SearchResponse{
+	resp := &models.SearchResponse{
 		Query:    req.Query,
 		Results:  results,
 		Total:    total,
 		Page:     page,
 		PageSize: pageSize,
-	}, nil
+		Intent:   intent.Type.String(),
+	}
+
+	// Spelling suggestion
+	if e.spellChecker != nil {
+		if suggestion, ok := e.spellChecker.Suggest(req.Query); ok {
+			resp.Suggestion = suggestion
+		}
+	}
+
+	return resp, nil
 }
 
 // extractSnippet finds the best passage in content that contains the most query terms.
 // Returns a ~maxLen character window around the best match, or "" if no terms found.
+// Deprecated: use ExtractSnippet from snippets.go instead. Kept for backward compat.
 func extractSnippet(content string, terms []string, maxLen int) string {
 	if content == "" || len(terms) == 0 {
 		return ""
@@ -122,7 +152,6 @@ func extractSnippet(content string, terms []string, maxLen int) string {
 
 	// Step through the content in chunks, scoring each window
 	step := 40
-	halfWindow := maxLen / 2
 	for pos := 0; pos < len(lower); pos += step {
 		start := pos
 		end := pos + maxLen
@@ -180,7 +209,6 @@ func extractSnippet(content string, terms []string, maxLen int) string {
 		return ""
 	}
 
-	_ = halfWindow // reserved for future centering logic
 	return prefix + strings.TrimSpace(content[start:end]) + suffix
 }
 

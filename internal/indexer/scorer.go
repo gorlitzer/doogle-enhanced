@@ -25,20 +25,22 @@ type Scores struct {
 	Spam       float64
 	Link       float64
 	SEO        float64
+	URLQuality float64
 	Relevance  float64 // composite
 }
 
 // Score computes all scoring signals for a document.
 func (s *Scorer) Score(doc *models.Document) Scores {
 	sc := Scores{
-		EEAT:    s.eeatScore(doc),
-		Quality: s.qualityScore(doc),
-		Spam:    s.spamScore(doc),
-		Link:    s.linkScore(doc),
-		SEO:     s.seoScore(doc),
+		EEAT:       s.eeatScore(doc),
+		Quality:    s.qualityScore(doc),
+		Spam:       s.spamScore(doc),
+		Link:       s.linkScore(doc),
+		SEO:        s.seoScore(doc),
+		URLQuality: ScoreURL(doc.URL).Score,
 	}
 	// Composite relevance: weighted combination
-	sc.Relevance = (sc.EEAT*0.30 + sc.Quality*0.35 + sc.Link*0.20 + sc.SEO*0.15)
+	sc.Relevance = (sc.EEAT*0.30 + sc.Quality*0.30 + sc.Link*0.20 + sc.SEO*0.10 + sc.URLQuality*0.10)
 	// Penalize by spam
 	sc.Relevance *= (1.0 - sc.Spam*0.5)
 	sc.Relevance = clamp(sc.Relevance)

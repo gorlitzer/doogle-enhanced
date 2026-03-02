@@ -22,6 +22,7 @@ type ParsedQuery struct {
 	HasHTTPS     bool                // from has:https
 	UseFuzzy     bool                // true for short queries (≤3 terms)
 	CleanedQuery string              // fallback plain string
+	Synonyms     []string            // synonym expansions for query terms
 }
 
 // SearchRequest represents a search query.
@@ -40,6 +41,10 @@ type SearchResponse struct {
 	PageSize   int            `json:"page_size"`
 	TookMs     int64          `json:"took_ms"`
 	PeersAsked int            `json:"peers_asked,omitempty"`
+
+	// Search intelligence
+	Suggestion string `json:"suggestion,omitempty"` // "Did you mean: X?"
+	Intent     string `json:"intent,omitempty"`     // informational, navigational, transactional, local
 }
 
 // SearchResult represents a single search hit.
@@ -67,8 +72,10 @@ type SearchResult struct {
 	RelevanceScore    float64   `json:"relevance_score,omitempty"`
 	StaticScore       float64   `json:"static_score,omitempty"`
 	CrawledAt         time.Time `json:"crawled_at,omitempty"`
-	IsTimeSensitive   bool      `json:"is_time_sensitive,omitempty"`
-	IsEvergreen       bool      `json:"is_evergreen,omitempty"`
+	IsTimeSensitive      bool    `json:"is_time_sensitive,omitempty"`
+	IsEvergreen          bool    `json:"is_evergreen,omitempty"`
+	DomainAuthorityScore float64 `json:"domain_authority_score,omitempty"`
+	URLQualityScore      float64 `json:"url_quality_score,omitempty"`
 }
 
 // NodeStatus represents the current state of a node.

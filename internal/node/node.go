@@ -244,6 +244,11 @@ func (n *Node) init() error {
 	n.search.LocalName = n.cfg.NodeName
 	n.search.LocalID = n.peerID.String()
 
+	// Initialize spell checker from Bleve index dictionary
+	spellChecker := search.NewSpellChecker(bleveIdx.BleveIndex())
+	n.localEng.SetSpellChecker(spellChecker)
+	spellChecker.StartRefresh(n.ctx, bleveIdx.BleveIndex(), 30*time.Minute)
+
 	// 13. Register P2P protocol handlers
 	p2p.RegisterSearchProtocol(h, n.handlePeerSearch)
 	p2p.RegisterCrawlProtocol(h, n.handlePeerCrawlTask)

@@ -129,8 +129,13 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 
 	wg.Wait()
 
-	// Re-rank merged results
-	RerankResults(allResults)
+	// Classify intent for reranking
+	pq := ParseQuery(req.Query)
+	pq.Synonyms = ExpandQuery(pq)
+	intent := ClassifyIntent(pq)
+
+	// Re-rank merged results with intent awareness
+	RerankWithIntent(allResults, &intent)
 
 	// Deduplicate by URL
 	seen := make(map[string]bool)
@@ -141,6 +146,9 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 			deduped = append(deduped, r)
 		}
 	}
+
+	// Apply domain diversity: max 2 per domain in top 10
+	deduped = ApplyDomainDiversity(deduped, 2, 10)
 
 	// Paginate
 	pageSize := req.PageSize
@@ -159,6 +167,14 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		PageSize:   pageSize,
 		TookMs:     time.Since(start).Milliseconds(),
 		PeersAsked: peersAsked,
+		Intent:     intent.Type.String(),
+	}
+
+	// Spelling suggestion
+	if ds.localEngine.spellChecker != nil {
+		if suggestion, ok := ds.localEngine.spellChecker.Suggest(req.Query); ok {
+			resp.Suggestion = suggestion
+		}
 	}
 
 	// Store in cache

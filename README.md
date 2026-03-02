@@ -130,9 +130,18 @@ make build
 - Boolean query operators: `AND`, `OR`, `NOT` (`-term` exclusion, `python OR ruby`)
 - Multi-language stemmers: 15 languages (English + DE, FR, ES, IT, PT, NL, RU, SV, DA, FI, HU, RO, TR, NO)
 - PageRank computation on the backlink graph
+- Domain authority scoring (aggregated PageRank, quality, backlink domains per site)
+- Query intent classification (navigational, informational, transactional, local) with ranking adjustments
+- Spelling correction ("Did you mean?") with dictionary from index term frequencies
+- Synonym expansion (100+ bidirectional pairs, acronyms, compound splitting)
+- Domain diversity: max 2 results per domain in top 10 to prevent monopolization
+- Passage-based snippets with term highlight positions for `<mark>` rendering
 - Search dorks: `intitle:`, `inurl:`, `intext:`, `filetype:`, `before:`/`after:`, `has:https`
 - Query understanding: `site:` filter, `lang:` filter, quoted phrases
-- Snippet highlighting — matched query terms highlighted in search results
+- URL quality signals (path depth, readability, tracking param detection)
+- Graduated freshness scoring with configurable half-lives (time-sensitive vs evergreen)
+- Readability-style main content extraction (Arc90 algorithm) for cleaner indexing
+- 12-signal ranking: E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness
 - Paginated results with prev/next navigation
 - Keyboard shortcuts: `/` and `Ctrl+K`/`Cmd+K` to focus search
 - LRU search result cache with TTL (configurable size and expiry)
@@ -156,7 +165,10 @@ make build
 - Custom protocols: `/doogle/search/1.0.0`, `/doogle/crawl/1.0.0`, `/doogle/index/1.0.0`, `/doogle/fleet/heartbeat/1.0.0`, `/doogle/fleet/proxy/1.0.0`
 
 **Indexer Pipeline**
-- Quality scoring, spam detection, duplicate filtering
+- Quality scoring (12 weighted signals), spam detection, duplicate filtering
+- Domain authority computation (site-level reputation from PageRank, quality, backlinks)
+- URL quality scoring (path depth, query params, slug readability, tracking detection)
+- Readability-style main content extraction for cleaner body text
 - Batch indexing with configurable flush interval
 - Content-size and depth-based filtering
 
@@ -250,7 +262,7 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
 |----------|------|--------|
 | macOS Sequoia 15.x | Apple M3 (arm64) | Verified |
 | macOS Sequoia 15.x | Apple M4 (arm64) | Verified |
-| macOS | Intel x64 | Planned |
+| macOS | Intel x64 | Verified |
 | Linux (Ubuntu/Debian) | x64 / arm64 | Planned |
 | Windows 10/11 | x64 | Planned |
 
@@ -277,16 +289,18 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── Indexer ────────────────────┐  │
-              │  │  Quality + spam scoring         │  │
+              │  │  12-signal quality scoring       │  │
+              │  │  Domain authority + URL quality  │  │
               │  │  Duplicate detection            │  │
               │  │  PageRank on backlink graph      │  │
               │  │  Bleve BM25 full-text            │  │
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── Search Engine ──────────────┐  │
-              │  │  Local Bleve queries            │  │
-              │  │  Fan-out to peers               │  │
-              │  │  Merge + re-rank + dedup         │  │
+              │  │  Intent classification          │  │
+              │  │  Synonym expansion + spelling    │  │
+              │  │  Local Bleve + fan-out to peers  │  │
+              │  │  Re-rank + diversity + dedup     │  │
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── HTTP API + Web UI ──────────┐  │
@@ -302,7 +316,7 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               └──────────────────────────────────────┘
 ```
 
-**Data flow:** Seed URLs → GossipSub broadcast → crawl → extract content → score quality → detect duplicates → index in Bleve → search queries fan out to peers → merge, re-rank, deduplicate → return results.
+**Data flow:** Seed URLs → GossipSub broadcast → crawl → Readability content extraction → quality scoring (12 signals) → domain authority → URL quality → detect duplicates → index in Bleve (title 5x, URL 3x, headings 2x, desc 1.5x) → search queries: parse → classify intent → expand synonyms → BM25 match → fan out to peers → merge → intent-aware re-rank → domain diversity → spelling suggestion → return results.
 
 ---
 
@@ -436,9 +450,9 @@ doogle-v2/
 │   ├── node/                      Orchestrator, config, identity
 │   ├── p2p/                       libp2p host, DHT, GossipSub, protocols
 │   ├── crawler/                   Worker pool, scheduler, rate limiter
-│   ├── indexer/                   Quality scoring, dedup, PageRank, pipeline
+│   ├── indexer/                   Quality scoring, dedup, PageRank, domain authority, URL signals
 │   ├── index/                     Bleve store, query builder, multi-lang, shard manager
-│   ├── search/                    Local + distributed search, ranking, LRU cache
+│   ├── search/                    Local + distributed search, ranking, intent, spelling, diversity, snippets
 │   ├── fleet/                     Coordinator, worker, HMAC auth, fleet models
 │   ├── api/                       HTTP server, handlers, middleware
 │   ├── store/                     BadgerDB wrapper, URL queue, link store, fleet store
@@ -589,10 +603,19 @@ The admin dashboard at `http://localhost:7002` also has built-in docs covering c
 - [ ] Tor circuit management (connection pooling, circuit rotation, bandwidth-aware scheduling)
 
 ### Phase 4 — Intelligence
+- [x] Query intent classification (navigational, informational, transactional, local) with ranking adjustments
+- [x] Spelling correction ("Did you mean?") via index term dictionary + Damerau-Levenshtein
+- [x] Synonym expansion (100+ bidirectional pairs, acronyms, compound words)
+- [x] Domain diversity (max 2 per domain in top 10, demote excess)
+- [x] Passage-based snippets with term highlight positions
+- [x] Domain authority scoring (aggregated site-level reputation signal)
+- [x] URL quality signals (path depth, readability, tracking params)
+- [x] Readability-style content extraction (Arc90 algorithm, boilerplate removal)
+- [x] Graduated freshness scoring (time-sensitive vs evergreen half-lives)
+- [x] 12-signal ranking model (E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness)
 - [ ] Semantic search (sentence embeddings via ONNX, hybrid BM25 + vector scoring)
 - [ ] Knowledge graph (NER → entity graph in BadgerDB, entity cards in search results)
 - [ ] ML-based ranking (learn-to-rank from local-only click signals, XGBoost/ONNX)
-- [ ] Query intent classification (navigational / informational / transactional)
 - [ ] Automatic summarization (extractive or local LLM via llama.cpp bindings)
 - [ ] Topic clustering (group documents, surface related topics in results)
 - [ ] Trend detection (crawl velocity + query frequency across network)

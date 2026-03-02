@@ -116,6 +116,13 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	// Date fields
 	dateField := bleve.NewDateTimeFieldMapping()
 
+	// New searchable fields
+	urlTextField := bleve.NewTextFieldMapping()
+	urlTextField.Analyzer = analyzer
+
+	headingsTextField := bleve.NewTextFieldMapping()
+	headingsTextField.Analyzer = analyzer
+
 	// --- Primary text fields ---
 	docMapping.AddFieldMappingsAt("title", titleField)
 	docMapping.AddFieldMappingsAt("description", descField)
@@ -123,6 +130,8 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	docMapping.AddFieldMappingsAt("keywords", textField)
 	docMapping.AddFieldMappingsAt("categories", textField)
 	docMapping.AddFieldMappingsAt("anchor_text", anchorField)
+	docMapping.AddFieldMappingsAt("url_text", urlTextField)
+	docMapping.AddFieldMappingsAt("headings_text", headingsTextField)
 
 	// --- Keyword / identifier fields ---
 	docMapping.AddFieldMappingsAt("url", keywordField)
@@ -149,6 +158,8 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	docMapping.AddFieldMappingsAt("author_credibility", numericField)
 	docMapping.AddFieldMappingsAt("relevance_score", numericField)
 	docMapping.AddFieldMappingsAt("static_score", numericField)
+	docMapping.AddFieldMappingsAt("domain_authority_score", numericField)
+	docMapping.AddFieldMappingsAt("url_quality_score", numericField)
 	docMapping.AddFieldMappingsAt("generation", numericField)
 
 	// --- Boolean fields ---
@@ -409,6 +420,11 @@ func (bs *BleveStore) ListDomains() ([]string, error) {
 	return domains, nil
 }
 
+// BleveIndex returns the underlying bleve.Index for direct access (e.g., spell checking).
+func (bs *BleveStore) BleveIndex() bleve.Index {
+	return bs.index
+}
+
 // Close closes the Bleve index.
 func (bs *BleveStore) Close() error {
 	log.Println("bleve: closing index")
@@ -429,6 +445,8 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.Categories = fieldString(fields, "categories")
 	doc.Keywords = fieldString(fields, "keywords")
 	doc.AnchorText = fieldString(fields, "anchor_text")
+	doc.URLText = fieldString(fields, "url_text")
+	doc.HeadingsText = fieldString(fields, "headings_text")
 
 	// Integer fields (Bleve returns numerics as float64)
 	doc.ContentSize = fieldInt(fields, "content_size")
@@ -449,6 +467,8 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.AuthorCredibility = fieldFloat(fields, "author_credibility")
 	doc.RelevanceScore = fieldFloat(fields, "relevance_score")
 	doc.StaticScore = fieldFloat(fields, "static_score")
+	doc.DomainAuthorityScore = fieldFloat(fields, "domain_authority_score")
+	doc.URLQualityScore = fieldFloat(fields, "url_quality_score")
 	doc.Generation = uint64(fieldFloat(fields, "generation"))
 
 	// Boolean fields

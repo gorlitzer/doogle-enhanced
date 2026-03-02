@@ -53,7 +53,10 @@ curl "http://localhost:7002/api/search?q=distributed+systems&page=1&size=5"
       "domain": "example.com",
       "score": 3.42,
       "quality_score": 0.85,
-      "peer_id": ""
+      "domain_authority_score": 0.72,
+      "url_quality_score": 0.90,
+      "peer_id": "",
+      "peer_name": ""
     },
     {
       "url": "https://another-site.org/dist-computing",
@@ -62,14 +65,19 @@ curl "http://localhost:7002/api/search?q=distributed+systems&page=1&size=5"
       "domain": "another-site.org",
       "score": 2.18,
       "quality_score": 0.72,
-      "peer_id": "12D3KooWAbc..."
+      "domain_authority_score": 0.55,
+      "url_quality_score": 0.80,
+      "peer_id": "12D3KooWAbc...",
+      "peer_name": "Tokyo-Relay-01"
     }
   ],
   "total": 23,
   "page": 1,
   "page_size": 5,
   "took_ms": 145,
-  "peers_asked": 3
+  "peers_asked": 3,
+  "intent": "informational",
+  "suggestion": ""
 }
 ```
 
@@ -81,16 +89,21 @@ curl "http://localhost:7002/api/search?q=distributed+systems&page=1&size=5"
 | `results` | array | List of search results |
 | `results[].url` | string | Page URL |
 | `results[].title` | string | Page title |
-| `results[].description` | string | Snippet (meta description or content excerpt, max 200 chars) |
+| `results[].description` | string | Passage-based snippet with best query term coverage (max 280 chars) |
 | `results[].domain` | string | Domain name |
-| `results[].score` | float | Combined relevance score (BM25 × quality bonus) |
+| `results[].score` | float | Combined relevance score (BM25 × StaticScore × freshness × intent) |
 | `results[].quality_score` | float | Document quality score (0.0–1.0) |
+| `results[].domain_authority_score` | float | Site-level authority (0.0–1.0): avg PageRank, quality, backlink domains |
+| `results[].url_quality_score` | float | URL quality (0.0–1.0): path depth, slug readability, tracking params |
 | `results[].peer_id` | string | Peer that provided this result (empty if local) |
+| `results[].peer_name` | string | Human-readable peer name (truncated peer ID if no name set) |
 | `total` | int | Total matching results (across all peers) |
 | `page` | int | Current page number |
 | `page_size` | int | Results per page |
 | `took_ms` | int | Query execution time in milliseconds |
 | `peers_asked` | int | Number of peers queried |
+| `intent` | string | Classified query intent: `navigational`, `informational`, `transactional`, `local`, or `general` |
+| `suggestion` | string | Spelling correction suggestion ("Did you mean: X?"), empty if none |
 
 ### Error Response — `400 Bad Request`
 

@@ -12,16 +12,103 @@ import (
 )
 
 // ExtractContent extracts title, description, and body text from an HTML document.
+// Uses Readability-style main content extraction for cleaner body text.
 func ExtractContent(doc *goquery.Document, pageURL string) (title, description, content string) {
 	title = strings.TrimSpace(doc.Find("title").Text())
 	description = strings.TrimSpace(doc.Find("meta[name=description]").AttrOr("content", ""))
 
 	// Remove non-content elements before extracting body text
 	doc.Find("script, style, nav, header, footer, aside, noscript, iframe, svg").Remove()
-	content = strings.TrimSpace(doc.Find("body").Text())
-	content = collapseWhitespace(content)
+
+	// Try Readability-style main content extraction first
+	mainContent := extractMainContent(doc)
+	if mainContent != "" {
+		content = mainContent
+	} else {
+		// Fallback to full body text
+		content = strings.TrimSpace(doc.Find("body").Text())
+		content = collapseWhitespace(content)
+	}
 
 	return
+}
+
+// extractMainContent scores block elements to find the main content area,
+// similar to Arc90 Readability's algorithm.
+func extractMainContent(doc *goquery.Document) string {
+	type scored struct {
+		sel   *goquery.Selection
+		score int
+	}
+
+	var candidates []scored
+
+	doc.Find("article, main, div, section, td").Each(func(_ int, s *goquery.Selection) {
+		score := 0
+
+		// Count paragraphs
+		pCount := s.Find("p").Length()
+		score += pCount
+
+		// Count commas in text (natural prose indicator)
+		text := s.Text()
+		score += strings.Count(text, ",")
+
+		// Text length bonus
+		textLen := len(strings.TrimSpace(text))
+		score += textLen / 100
+
+		// Class/ID bonuses and penalties
+		classID := strings.ToLower(s.AttrOr("class", "") + " " + s.AttrOr("id", ""))
+
+		// Positive signals
+		positiveWords := []string{"article", "content", "post", "entry", "main", "text", "body", "story"}
+		for _, w := range positiveWords {
+			if strings.Contains(classID, w) {
+				score += 25
+				break
+			}
+		}
+
+		// Negative signals
+		negativeWords := []string{"sidebar", "nav", "footer", "comment", "ad", "widget", "banner", "menu", "social", "share", "related"}
+		for _, w := range negativeWords {
+			if strings.Contains(classID, w) {
+				score -= 25
+				break
+			}
+		}
+
+		// Tag bonus
+		tagName := goquery.NodeName(s)
+		if tagName == "article" || tagName == "main" {
+			score += 30
+		}
+
+		if score > 0 {
+			candidates = append(candidates, scored{sel: s, score: score})
+		}
+	})
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	// Select highest scoring
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.score > best.score {
+			best = c
+		}
+	}
+
+	// Threshold: need at least 50 score to override fallback
+	if best.score < 50 {
+		return ""
+	}
+
+	text := strings.TrimSpace(best.sel.Text())
+	return collapseWhitespace(text)
 }
 
 // ExtractMetadata extracts rich metadata: Open Graph, canonical, keywords.

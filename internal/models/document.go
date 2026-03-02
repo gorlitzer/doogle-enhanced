@@ -56,6 +56,9 @@ type Document struct {
 	// PageRank (set by PageRank computer)
 	PageRankScore float64 `json:"pagerank_score"`
 
+	// URL quality (set by indexer)
+	URLQualityScore float64 `json:"url_quality_score"`
+
 	// Composite
 	RelevanceScore float64 `json:"relevance_score"`
 }
