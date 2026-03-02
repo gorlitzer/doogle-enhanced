@@ -9,16 +9,16 @@ import { SpotlightDiagram, formatNum } from '../spotlight.js';
 // ============================================================
 const GAUGE_COMPONENTS = [
   // Column 0 — Queue Input
-  { id: 'queue',     label: 'URL Queue',        col: 0, row: 0, boxH: 200 },
-  { id: 'ratelimit', label: 'Rate Limiter',      col: 0, row: 1, boxH: 140 },
+  { id: 'queue',     label: 'URL Queue',        col: 0, row: 0, boxH: 150 },
+  { id: 'ratelimit', label: 'Rate Limiter',      col: 0, row: 1, boxH: 110 },
   // Column 1 — Processing
-  { id: 'workers',   label: 'Worker Pool',       col: 1, row: 0, boxH: 200 },
-  { id: 'fetch',     label: 'HTTP Fetch',        col: 1, row: 1, boxH: 160 },
-  { id: 'extract',   label: 'Content Extractor', col: 1, row: 2, boxH: 120 },
+  { id: 'workers',   label: 'Worker Pool',       col: 1, row: 0, boxH: 150 },
+  { id: 'fetch',     label: 'HTTP Fetch',        col: 1, row: 1, boxH: 120 },
+  { id: 'extract',   label: 'Content Extractor', col: 1, row: 2, boxH: 100 },
   // Column 2 — Auxiliary + Output
-  { id: 'robots',    label: 'robots.txt Cache',  col: 2, row: 0, boxH: 140 },
-  { id: 'redirect',  label: 'Redirect Handler',  col: 2, row: 1, boxH: 120 },
-  { id: 'output',    label: 'To Indexer',        col: 2, row: 2, boxH: 200 },
+  { id: 'robots',    label: 'robots.txt Cache',  col: 2, row: 0, boxH: 110 },
+  { id: 'redirect',  label: 'Redirect Handler',  col: 2, row: 1, boxH: 100 },
+  { id: 'output',    label: 'To Indexer',        col: 2, row: 2, boxH: 150 },
 ];
 
 const GAUGE_CONNECTIONS = [
@@ -126,8 +126,8 @@ function buildDiagram() {
     layout: isGauge ? 'grid' : 'flow',
     cols: 3,
     rows: isGauge ? 3 : 5,
-    boxW: isGauge ? 190 : 180,
-    boxH: isGauge ? 130 : 90,
+    boxW: isGauge ? 160 : 180,
+    boxH: isGauge ? 105 : 90,
     minHeight: isGauge ? 500 : 560,
     maxHeight: isGauge ? 600 : 680,
     onTooltipExtra: (box, data) => {
