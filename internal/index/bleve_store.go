@@ -283,6 +283,11 @@ func (bs *BleveStore) SearchAdvanced(pq *models.ParsedQuery, offset, limit int) 
 	return hits, int(result.Total), nil
 }
 
+// Delete removes a document from the index by ID.
+func (bs *BleveStore) Delete(id string) error {
+	return bs.index.Delete(id)
+}
+
 // DocCount returns the number of indexed documents.
 func (bs *BleveStore) DocCount() (uint64, error) {
 	return bs.index.DocCount()

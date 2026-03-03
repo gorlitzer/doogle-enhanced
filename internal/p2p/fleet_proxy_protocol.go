@@ -76,7 +76,7 @@ func SendFleetProxy(ctx context.Context, h host.Host, workerID peer.ID, req *fle
 	s.CloseWrite()
 
 	// Phase 2: read response header line
-	reader := bufio.NewReader(io.LimitReader(s, 100<<20)) // 100 MB max
+	reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 	headerLine, err := reader.ReadBytes('\n')
 	if err != nil && err != io.EOF {
 		return nil, nil, fmt.Errorf("read proxy response header: %w", err)

@@ -10,6 +10,7 @@ type Store interface {
 	SearchAdvanced(pq *models.ParsedQuery, offset, limit int) ([]SearchHit, int, error)
 	DocCount() (uint64, error)
 	Get(id string) (*IndexDocument, error)
+	Delete(id string) error
 	ListRecent(offset, limit int) ([]IndexDocument, int, error)
 	ListAll(callback func(doc *IndexDocument) bool) error
 	ListIDsByDomain(domain string) ([]string, error)

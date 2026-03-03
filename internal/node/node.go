@@ -167,6 +167,9 @@ func (n *Node) init() error {
 
 	// 5a. Foundation stores
 	n.dedupStore = store.NewDedupStore(bs)
+	if n.cfg.Storage.SeenTTL > 0 {
+		n.dedupStore.SeenTTL = n.cfg.Storage.SeenTTL
+	}
 	n.urlStore = store.NewURLStore(bs, n.dedupStore)
 	n.linkStore = store.NewLinkStore(bs)
 	n.contentStore = store.NewContentStore(bs)
@@ -344,6 +347,7 @@ func (n *Node) Run() error {
 	go n.shardCatalogPublisher()
 	go n.antiEntropyLoop()
 	go n.spamReportLoop()
+	go n.maintenanceLoop()
 
 	// Start fleet subsystems.
 	if n.coordinator != nil {
@@ -1091,6 +1095,47 @@ func (n *Node) spamReportLoop() {
 
 		if _, err := n.trustManager.HandleReport(report); err != nil {
 			slog.Error("trust: error handling peer report", "err", err)
+		}
+	}
+}
+
+// maintenanceLoop periodically runs BadgerDB GC and store pruning.
+func (n *Node) maintenanceLoop() {
+	interval := n.cfg.Storage.GCInterval
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// BadgerDB value log GC — run in a loop to reclaim multiple vlog files per cycle
+			for {
+				if err := n.badger.RunGC(); err != nil {
+					break
+				}
+				slog.Debug("badger GC: reclaimed vlog space")
+			}
+
+			// Prune expired dedup entries (TTL-based, just log the count)
+			if count, err := n.dedupStore.PruneExpired(); err == nil {
+				slog.Debug("maintenance: dedup store", "seen_count", count)
+			}
+
+			// Prune stale content records
+			maxAge := n.cfg.Storage.ContentMaxAge
+			if maxAge <= 0 {
+				maxAge = 30 * 24 * time.Hour
+			}
+			if pruned, err := n.contentStore.PruneStale(maxAge); err != nil {
+				slog.Error("maintenance: content prune error", "err", err)
+			} else if pruned > 0 {
+				slog.Info("maintenance: pruned stale content records", "count", pruned)
+			}
+		case <-n.ctx.Done():
+			return
 		}
 	}
 }

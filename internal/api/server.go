@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
@@ -79,6 +80,13 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			})
 		}
 	})
+
+	// Debug profiling (localhost only — behind existing CORS/bind)
+	r.HandleFunc("/debug/pprof/*", pprof.Index)
+	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
 	// Serve embedded static files
 	staticContent, err := fs.Sub(web.StaticFS, "static")
