@@ -53,6 +53,9 @@ func main() {
 
 	// Load config with defaults, then apply CLI flags
 	cfg := node.DefaultConfig()
+	cfg.Version = version
+	cfg.Commit = commit
+	cfg.BuildDate = date
 	node.ParseFlags(cfg)
 
 	// Set up structured logging

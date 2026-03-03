@@ -79,4 +79,10 @@ export const api = {
   domainOwnership() {
     return fetchJSON('/api/admin/domains');
   },
+  checkUpdate() {
+    return fetchJSON('/api/admin/update-check');
+  },
+  applyUpdate() {
+    return postJSON('/api/admin/update', {});
+  },
 };

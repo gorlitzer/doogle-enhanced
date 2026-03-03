@@ -17,6 +17,8 @@ Base URL: `http://localhost:7002` (the default `--bind` is `0.0.0.0`, so the API
 | `POST` | `/api/report` | Report a URL as spam/malware/phishing |
 | `POST` | `/api/config/name` | Set the human-readable node name |
 | `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
+| `GET` | `/api/admin/update-check` | Check for new release (localhost-only) |
+| `POST` | `/api/admin/update` | Download and apply binary update (localhost-only) |
 | `DELETE` | `/api/admin/data` | Delete all local data (index, crawl history) |
 | `GET` | `/` | Web search interface (HTML) |
 
@@ -155,6 +157,9 @@ curl http://localhost:7002/api/status
 ```json
 {
   "peer_id": "12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
+  "version": "v0.2.0",
+  "commit": "a1b2c3d",
+  "build_date": "2026-03-01T12:00:00Z",
   "addrs": [
     "/ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
     "/ip4/192.168.1.100/udp/7001/quic-v1/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X",
@@ -181,6 +186,9 @@ curl http://localhost:7002/api/status
 | Field | Type | Description |
 |-------|------|-------------|
 | `peer_id` | string | This node's libp2p peer ID |
+| `version` | string | Build version tag (e.g., `"v0.2.0"` or `"dev"`) |
+| `commit` | string | Short git commit hash |
+| `build_date` | string | ISO 8601 build timestamp |
 | `addrs` | []string | Multiaddrs this node is listening on (share these with other nodes) |
 | `connected_peers` | int | Number of currently connected peers |
 | `peer_list` | []string | Peer IDs of connected nodes |
@@ -250,6 +258,69 @@ Features:
 - Network topology graph, crawler live feed, indexer stats
 - Status bar showing node info (peer count, indexed docs, crawled URLs)
 - Auto-refreshing status (every 10 seconds)
+
+---
+
+## `GET /api/admin/update-check`
+
+Check whether a newer release is available on GitHub. **Localhost-only** — returns `403` for non-localhost requests.
+
+### Example Request
+
+```bash
+curl http://localhost:7002/api/admin/update-check
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "current": "v0.1.0",
+  "latest": "v0.2.0",
+  "update_available": true
+}
+```
+
+If no GitHub token is configured or GitHub is unreachable, the response includes an `error` field and `update_available: false`:
+
+```json
+{
+  "current": "v0.1.0",
+  "update_available": false,
+  "error": "no GitHub token found..."
+}
+```
+
+---
+
+## `POST /api/admin/update`
+
+Download, verify, and replace the running binary with the latest release. **Localhost-only** — returns `403` for non-localhost requests. The node must be restarted after a successful update.
+
+### Example Request
+
+```bash
+curl -X POST http://localhost:7002/api/admin/update
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "updated",
+  "old_version": "v0.1.0",
+  "new_version": "v0.2.0",
+  "message": "Restart the node to use the new version."
+}
+```
+
+### Error Response — `500`
+
+```json
+{
+  "error": "no binary found for doogle-darwin-arm64"
+}
+```
 
 ---
 

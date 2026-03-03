@@ -395,6 +395,14 @@ With mDNS enabled, nodes on the same network find each other automatically:
 
 ## Monitoring
 
+### Quick Check (Terminal)
+
+```bash
+make status
+```
+
+This checks whether the Doogle node process is running and shows the PID, version, and helpful commands.
+
 ### Status Endpoint
 
 ```bash
@@ -406,6 +414,9 @@ Response:
 ```json
 {
   "peer_id": "12D3KooWPjce...",
+  "version": "v0.2.0",
+  "commit": "a1b2c3d",
+  "build_date": "2026-03-01T12:00:00Z",
   "addrs": [
     "/ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjce...",
     "/ip4/192.168.1.100/udp/7001/quic-v1/p2p/12D3KooWPjce..."

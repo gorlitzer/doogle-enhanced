@@ -576,6 +576,7 @@ cmd/doogle/main.go
        │    ├─ chi/v5
        │    ├─ internal/search
        │    ├─ internal/fleet (fleet handlers)
+       │    ├─ internal/updater (update-check + update-apply)
        │    └─ web (embedded static files)
        └─ internal/store
             ├─ badger/v4

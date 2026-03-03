@@ -78,6 +78,7 @@ make build     # compile binary
 make run       # build + launch detached
 make test      # run all tests
 make stop      # stop running node
+make status    # check if the node is running
 ```
 
 ## Fleet Workers

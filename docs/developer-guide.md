@@ -102,9 +102,11 @@ doogle-v2/
 │   │   └── models.go           # FleetNode, FleetSummary, HeartbeatRequest, etc.
 │   ├── api/                    # HTTP layer
 │   │   ├── server.go           # Chi router, embedded static files, server lifecycle
-│   │   ├── handlers.go         # /api/search, /api/status, /api/crawl
+│   │   ├── handlers.go         # /api/search, /api/status, /api/crawl, update endpoints
 │   │   ├── fleet_handlers.go   # /api/fleet/* endpoints (coordinator only)
 │   │   └── middleware.go       # Request logging, bearer auth
+│   ├── updater/                # Shared GitHub release/update logic
+│   │   └── updater.go          # ResolveToken, FetchLatestRelease, ApplyUpdate, etc.
 │   ├── store/                  # Persistent storage
 │   │   ├── badger.go           # BadgerDB wrapper (Get, Set, Has, Delete)
 │   │   ├── url_store.go        # URL queue + seen set (wraps BadgerDB)

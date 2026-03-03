@@ -1,4 +1,4 @@
-.PHONY: help setup build run upgrade test dev stop clean nuke release checksums patch minor major
+.PHONY: help setup build run upgrade test dev stop status clean nuke release checksums patch minor major
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -23,6 +23,7 @@ help:
 	@echo "    make upgrade            Pull latest code + rebuild + restart node"
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
+	@echo "    make status             Check if the node is running"
 	@echo "    make test               Run all tests"
 	@echo "    make clean              Remove build artifacts (bin/, dist/, logs, pid)"
 	@echo "    make nuke               Full reset: clean + delete crawl data + Go runtime"
@@ -119,6 +120,33 @@ stop:
 	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
 	@docker compose down 2>/dev/null || true
 	@echo "Stopped."
+
+status:
+	@if [ -f .doogle.pid ]; then \
+	  PID=$$(cat .doogle.pid); \
+	  if kill -0 "$$PID" 2>/dev/null; then \
+	    echo ""; \
+	    echo "  Doogle is running (PID $$PID)"; \
+	    echo ""; \
+	    echo "    Open:   http://localhost:7002"; \
+	    echo "    Logs:   tail -f doogle.log"; \
+	    echo "    Stop:   make stop"; \
+	    VER=$$(curl -sf http://localhost:7002/api/status 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4); \
+	    if [ -n "$$VER" ]; then echo "    Version: $$VER"; fi; \
+	    echo ""; \
+	  else \
+	    echo ""; \
+	    echo "  Doogle is not running (stale PID $$PID)"; \
+	    rm -f .doogle.pid; \
+	    echo "    Start:  make run"; \
+	    echo ""; \
+	  fi; \
+	else \
+	  echo ""; \
+	  echo "  Doogle is not running"; \
+	  echo "    Start:  make run"; \
+	  echo ""; \
+	fi
 
 clean: stop
 	rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log
