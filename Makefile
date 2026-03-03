@@ -1,4 +1,4 @@
-.PHONY: help setup build run restart test dev stop clean nuke release checksums tag
+.PHONY: help setup build run upgrade test dev stop clean nuke release checksums tag
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -20,7 +20,7 @@ help:
 	@echo "    make build              Compile binary to bin/"
 	@echo "    make run                Build + stop old process + launch node detached"
 	@echo "    make run ARGS='...'     Pass extra flags (run ./bin/doogle --help for all flags)"
-	@echo "    make restart            Alias for 'make run' (rebuild + restart)"
+	@echo "    make upgrade            Pull latest code + rebuild + restart node"
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make test               Run all tests"
@@ -94,7 +94,11 @@ run: build stop
 	@echo "    Stop:   make stop"
 	@echo ""
 
-restart: run
+upgrade:
+	@echo "==> Pulling latest..."
+	git pull
+	@echo "==> Rebuilding + restarting..."
+	$(MAKE) run
 
 test:
 	$(GO) test ./...

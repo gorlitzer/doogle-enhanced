@@ -334,7 +334,7 @@ make setup                      # install Go, Docker checks, all prerequisites
 make build                      # compile binary to bin/
 make run                        # build + stop old process + launch node detached
 make run ARGS='--seed ...'      # pass extra flags
-make restart                    # alias for 'make run' (rebuild + restart)
+make upgrade                    # pull latest + rebuild + restart
 make stop                       # gracefully stop running node (SIGTERM, 15s timeout)
 make test                       # run all tests
 make dev                        # Docker foreground on :7002 (Ctrl+C to stop)
