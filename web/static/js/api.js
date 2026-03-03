@@ -85,4 +85,10 @@ export const api = {
   applyUpdate() {
     return postJSON('/api/admin/update', {});
   },
+  profile() {
+    return fetchJSON('/api/admin/profile');
+  },
+  recordInterests(subcategoryIDs) {
+    return postJSON('/api/profile/interests', { subcategory_ids: subcategoryIDs });
+  },
 };

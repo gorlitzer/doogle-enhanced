@@ -47,6 +47,11 @@ type Deps struct {
 	// Build version info (for update endpoints)
 	VersionInfo struct{ Version, Commit, BuildDate string }
 
+	// Master profile
+	ProfileFn         func() *models.MasterProfile
+	RecordInterestsFn func(subcategoryIDs []string) error
+	RecordSearchFn    func(query string)
+
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
 	FleetGetNode  func(peerID string) *fleet.FleetNode
@@ -92,6 +97,11 @@ func SearchHandler(deps *Deps) http.HandlerFunc {
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
+		}
+
+		// Record search topic for profile (async, non-blocking)
+		if deps.RecordSearchFn != nil {
+			go deps.RecordSearchFn(query)
 		}
 
 		writeJSON(w, http.StatusOK, resp)
@@ -718,6 +728,39 @@ func UpdateApplyHandler(deps *Deps) http.HandlerFunc {
 			"new_version": newVersion,
 			"message":     "Restart the node to use the new version.",
 		})
+	}
+}
+
+// ProfileHandler handles GET /api/admin/profile (localhost-only).
+func ProfileHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.ProfileFn == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.ProfileFn())
+	}
+}
+
+// ProfileInterestsHandler handles POST /api/profile/interests.
+func ProfileInterestsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.RecordInterestsFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "profile not available"})
+			return
+		}
+		var body struct {
+			SubcategoryIDs []string `json:"subcategory_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.SubcategoryIDs) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'subcategory_ids' in request body"})
+			return
+		}
+		if err := deps.RecordInterestsFn(body.SubcategoryIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "recorded", "count": strconv.Itoa(len(body.SubcategoryIDs))})
 	}
 }
 

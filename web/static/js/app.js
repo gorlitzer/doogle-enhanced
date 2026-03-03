@@ -14,6 +14,7 @@ import { renderActions } from './pages/actions.js';
 import { renderTrust } from './pages/trust.js';
 import { renderFleet } from './pages/fleet.js';
 import { renderLeaderboard } from './pages/leaderboard.js';
+import { renderProfile } from './pages/profile.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
 import { initTabIdentity, updateNodeIdentity } from './tab-identity.js';
@@ -29,6 +30,7 @@ const routes = {
   'admin/trust':   { render: renderTrust,   layout: 'admin' },
   'admin/fleet':   { render: renderFleet,   layout: 'admin' },
   'admin/leaderboard': { render: renderLeaderboard, layout: 'admin' },
+  'admin/profile': { render: renderProfile, layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
   'wizard':      { render: renderWizard, layout: 'search' },
