@@ -76,4 +76,7 @@ export const api = {
   leaderboard() {
     return fetchJSON('/api/admin/leaderboard');
   },
+  domainOwnership() {
+    return fetchJSON('/api/admin/domains');
+  },
 };

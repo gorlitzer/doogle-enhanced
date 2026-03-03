@@ -368,6 +368,16 @@ function renderCrawlerSummary(s, cr) {
           <span class="spotlight-metric-value">${formatNum(cr.total_failed || 0)}</span>
           <span class="spotlight-metric-label">Failed</span>
         </div>
+        <div class="spotlight-metric">
+          ${icon('upload', 16, 'var(--amber)')}
+          <span class="spotlight-metric-value">${formatNum(cr.forwarded_tasks || 0)}</span>
+          <span class="spotlight-metric-label">Forwarded</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('download', 16, 'var(--green)')}
+          <span class="spotlight-metric-value">${formatNum(cr.received_from_peers || 0)}</span>
+          <span class="spotlight-metric-label">From Peers</span>
+        </div>
       </div>
     </div>
   `;
@@ -473,6 +483,8 @@ async function renderStatus(el) {
         <div class="card"><div class="card-label">Active Workers</div><div class="card-value">${activeWorkers} <span style="font-size:0.5em;color:var(--text-muted)">/ ${workers}</span></div></div>
         <div class="card"><div class="card-label">Success Rate</div><div class="card-value">${successRate}${successRate !== '—' ? '%' : ''}</div><div class="card-sub">${totalCrawled.toLocaleString()} ok / ${totalFailed.toLocaleString()} failed</div></div>
         <div class="card"><div class="card-label">Seen URLs</div><div class="card-value">${seenURLs.toLocaleString()}</div><div class="card-sub">unique URLs discovered</div></div>
+        <div class="card"><div class="card-label">Forwarded</div><div class="card-value">${(crawler?.forwarded_tasks || 0).toLocaleString()}</div><div class="card-sub">tasks sent to domain owners</div></div>
+        <div class="card"><div class="card-label">From Peers</div><div class="card-value">${(crawler?.received_from_peers || 0).toLocaleString()}</div><div class="card-sub">tasks received from peers</div></div>
       </div>
       <div class="section">
         <h3>Configuration</h3>
@@ -671,6 +683,7 @@ function renderFeatures(el) {
       <h3>Crawler Features</h3>
       <div class="card-grid">
         ${feature('Distributed Crawling', 'URLs broadcast via GossipSub to the P2P network. Nodes claim URLs by consistent hash.', true)}
+        ${feature('Domain-Aware Task Routing', 'Before crawling, each URL is checked against the shard ring. Non-owners forward tasks to the responsible peer via /doogle/crawl/1.0.0. Falls back to local crawl if the owner is offline.', true)}
         ${feature('robots.txt Compliance', 'Respects robots.txt directives per domain with 24h TTL cache.', true)}
         ${feature('Per-Domain Rate Limiting', 'Sliding window rate limiter prevents overloading any single domain.', true)}
         ${feature('Depth Control', 'Configurable max crawl depth to prevent endless recursion.', true)}

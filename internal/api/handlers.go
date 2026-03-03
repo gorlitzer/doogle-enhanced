@@ -40,7 +40,8 @@ type Deps struct {
 	SetNodeName    func(name string)
 	DataDir        string
 	StorageFn      func() (*models.StorageInfo, error)
-	LeaderboardFn  func() (*models.LeaderboardResponse, error)
+	LeaderboardFn      func() (*models.LeaderboardResponse, error)
+	DomainOwnershipFn  func() (*models.DomainOwnership, error)
 
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
@@ -633,6 +634,22 @@ func LeaderboardHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, lb)
+	}
+}
+
+// DomainOwnershipHandler handles GET /api/admin/domains
+func DomainOwnershipHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.DomainOwnershipFn == nil {
+			writeJSON(w, http.StatusOK, &models.DomainOwnership{})
+			return
+		}
+		ownership, err := deps.DomainOwnershipFn()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, ownership)
 	}
 }
 

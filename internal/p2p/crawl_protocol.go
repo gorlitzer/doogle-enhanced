@@ -2,12 +2,16 @@ package p2p
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/doogle/doogle-v2/internal/models"
 )
@@ -41,4 +45,31 @@ func RegisterCrawlProtocol(h host.Host, handler CrawlTaskHandler) {
 
 		s.Write([]byte(`{"status":"ok"}` + "\n"))
 	})
+}
+
+// SendCrawlTask forwards a CrawlTask to a peer via /doogle/crawl/1.0.0.
+func SendCrawlTask(ctx context.Context, h host.Host, peerID peer.ID, task *models.CrawlTask, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	s, err := h.NewStream(ctx, peerID, CrawlProtocol)
+	if err != nil {
+		return fmt.Errorf("open crawl stream to %s: %w", peerID.String()[:12], err)
+	}
+	defer s.Close()
+
+	data, err := json.Marshal(task)
+	if err != nil {
+		return fmt.Errorf("marshal crawl task: %w", err)
+	}
+	data = append(data, '\n')
+	if _, err := s.Write(data); err != nil {
+		return fmt.Errorf("write crawl task: %w", err)
+	}
+	s.CloseWrite()
+
+	// Read response (fire-and-forget semantics — we don't use the response)
+	reader := bufio.NewReader(io.LimitReader(s, 1<<20))
+	reader.ReadBytes('\n') // drain response
+	return nil
 }

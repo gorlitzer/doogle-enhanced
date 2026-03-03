@@ -156,7 +156,7 @@ function buildDiagram() {
       const ix = data.indexer || {};
       const map = {
         p2p:     () => [`Uptime: ${s.uptime || '—'}`, `Addrs: ${(s.addrs || []).length}`],
-        crawler: () => [`Rate limit: ${cr.rate_limit || '—'}`, `Errors: ${cr.total_errors || 0}`, `JS rendered: ${cr.js_rendered || 0}`],
+        crawler: () => [`Rate limit: ${cr.rate_limit || '—'}`, `Errors: ${cr.total_errors || 0}`, `JS rendered: ${cr.js_rendered || 0}`, ...(cr.forwarded_tasks ? [`Forwarded: ${cr.forwarded_tasks}`] : []), ...(cr.received_from_peers ? [`From peers: ${cr.received_from_peers}`] : [])],
         indexer: () => [`Avg spam: ${(ix.avg_spam || 0).toFixed(2)}`, `Empty skipped: ${ix.empty_skipped || 0}`],
         trust:   () => [`Spam: ${ix.spam_rejected || 0}`, `Dupes: ${ix.duplicates_skipped || 0}`],
       };
@@ -387,5 +387,28 @@ function renderSummaryStrip(status, crawler, indexer) {
         </div>
       </div>
     </div>
+    ${(s.forwarded_tasks || s.received_tasks) ? `
+    <div class="spotlight-metric-sep"></div>
+    <div class="spotlight-group">
+      <span class="spotlight-group-label">Crawl Coordination</span>
+      <div class="spotlight-metrics-row">
+        <div class="spotlight-metric">
+          ${icon('globe', 16, 'var(--accent)')}
+          <span class="spotlight-metric-value">${formatNum(s.owned_domains || 0)}</span>
+          <span class="spotlight-metric-label">My Domains</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('upload', 16, 'var(--amber)')}
+          <span class="spotlight-metric-value">${formatNum(s.forwarded_tasks || 0)}</span>
+          <span class="spotlight-metric-label">Forwarded</span>
+        </div>
+        <div class="spotlight-metric">
+          ${icon('download', 16, 'var(--green)')}
+          <span class="spotlight-metric-value">${formatNum(s.received_tasks || 0)}</span>
+          <span class="spotlight-metric-label">Received</span>
+        </div>
+      </div>
+    </div>
+    ` : ''}
   `;
 }

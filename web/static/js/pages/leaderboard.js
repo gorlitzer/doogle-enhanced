@@ -328,6 +328,7 @@ function renderPodium(explorers, localPeerID) {
         <div class="lb-ring-wrap">${ring}</div>
         <div class="lb-doc-count${goldCountCls}" data-target="${e.doc_count}">0</div>
         <div class="lb-doc-label">documents</div>
+        ${e.domain_count ? `<div class="lb-doc-label" style="font-size:0.78em;color:var(--text-muted);margin-top:2px">${e.domain_count} domain${e.domain_count !== 1 ? 's' : ''}</div>` : ''}
         ${trustBadge(e.trust_score)}
       </div>
     `;
@@ -368,6 +369,7 @@ function renderTable(explorers, localPeerID) {
             <div class="lb-table-bar"><div class="lb-bar-animated" style="--bar-pct:${barPct}%"></div></div>
           </div>
         </td>
+        <td>${e.domain_count || 0}</td>
         <td>${trustBadge(e.trust_score)}</td>
         <td>${formatDate(e.first_seen)}</td>
       </tr>
@@ -384,6 +386,7 @@ function renderTable(explorers, localPeerID) {
               <th>Rank</th>
               <th>Explorer</th>
               <th>Documents</th>
+              <th>Domains</th>
               <th>Trust</th>
               <th>First Seen</th>
             </tr>

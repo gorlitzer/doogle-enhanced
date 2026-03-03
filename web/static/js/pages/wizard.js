@@ -2120,6 +2120,7 @@ function renderFocus(el) {
     <div class="wizard-focus">
       <h2>What should your node crawl?</h2>
       <p class="wizard-subtitle">Each topic you select adds seed URLs — starting points your crawler will visit and follow links from. The more topics you pick, the broader your index. Don't overthink it: you can add or remove seeds anytime from the Admin Dashboard.</p>
+      <p class="wizard-subtitle" style="font-size:0.82em;color:var(--text-tertiary);margin-top:6px">If other peers are online, the shard ring automatically routes each domain to its assigned owner — even if two nodes pick the same topics, they won't duplicate crawl work.</p>
 
       <div class="wizard-category-groups" id="wizard-categories">
         ${CATEGORY_GROUPS.map(group => {

@@ -96,6 +96,9 @@ type NodeStatus struct {
 	StartedAt      time.Time `json:"started_at"`
 	LocalDocs      int       `json:"local_docs"`
 	PeerDocs       int       `json:"peer_docs"`
+	OwnedDomains   int       `json:"owned_domains"`
+	ForwardedTasks int64     `json:"forwarded_tasks"`
+	ReceivedTasks  int64     `json:"received_tasks"`
 
 	// Fleet (omitted when standalone)
 	FleetRole          string `json:"fleet_role,omitempty"`           // "coordinator" or "worker"
@@ -115,7 +118,9 @@ type CrawlerInfo struct {
 	TotalFailed   int64  `json:"total_failed"`
 	ActiveWorkers int64  `json:"active_workers"`
 	SeenURLs      int    `json:"seen_urls"`
-	JSRendered    int64  `json:"js_rendered"`
+	JSRendered        int64 `json:"js_rendered"`
+	ForwardedTasks    int64 `json:"forwarded_tasks"`
+	ReceivedFromPeers int64 `json:"received_from_peers"`
 }
 
 // IndexerInfo holds indexer-specific stats for the admin dashboard.
@@ -160,7 +165,8 @@ type ExplorerStats struct {
 	TrustScore float64   `json:"trust_score"`
 	IsLocal    bool      `json:"is_local"`
 	FirstSeen  time.Time `json:"first_seen,omitempty"`
-	LastSeen   time.Time `json:"last_seen,omitempty"`
+	LastSeen    time.Time `json:"last_seen,omitempty"`
+	DomainCount int       `json:"domain_count,omitempty"`
 }
 
 // LeaderboardResponse is the API response for the WebExplorers leaderboard.
@@ -168,6 +174,20 @@ type LeaderboardResponse struct {
 	Explorers   []ExplorerStats `json:"explorers"`
 	TotalDocs   int             `json:"total_docs"`
 	LocalPeerID string          `json:"local_peer_id"`
+}
+
+// DomainOwnership shows which domains this node owns in the shard ring.
+type DomainOwnership struct {
+	TotalDomains int                `json:"total_domains"`
+	OwnedDomains int                `json:"owned_domains"`
+	Domains      []DomainAssignment `json:"domains"`
+}
+
+// DomainAssignment maps a domain to its shard owner.
+type DomainAssignment struct {
+	Domain  string `json:"domain"`
+	OwnerID string `json:"owner_id"`
+	IsLocal bool   `json:"is_local"`
 }
 
 // PeerInfo holds detailed info about a connected peer.

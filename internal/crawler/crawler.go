@@ -18,6 +18,12 @@ import (
 	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
+// StatsStore persists crawler stats across restarts.
+type StatsStore interface {
+	GetCrawlerStats() (crawled, failed, jsRendered int64)
+	SetCrawlerStats(crawled, failed, jsRendered int64) error
+}
+
 // OnDocumentCrawled is called when a page has been successfully crawled.
 type OnDocumentCrawled func(doc *models.Document, discoveredURLs []string)
 
@@ -34,6 +40,9 @@ type Crawler struct {
 	rateLimit      int
 	respectRobots  bool
 	workers        int
+
+	// Stats persistence
+	statsStore StatsStore
 
 	// Headless browser rendering
 	browser           *BrowserPool
@@ -69,6 +78,7 @@ type Config struct {
 	EnableHeadless    bool
 	HeadlessThreshold int
 	HeadlessTimeout   time.Duration
+	StatsStore        StatsStore
 }
 
 // New creates a new crawler engine.
@@ -90,6 +100,18 @@ func New(cfg Config, scheduler *Scheduler, onCrawled OnDocumentCrawled) *Crawler
 		headlessThreshold: cfg.HeadlessThreshold,
 		ctx:               ctx,
 		cancel:            cancel,
+	}
+
+	// Load persisted stats from previous session
+	if cfg.StatsStore != nil {
+		c.statsStore = cfg.StatsStore
+		crawled, failed, jsRendered := cfg.StatsStore.GetCrawlerStats()
+		c.totalCrawled.Store(crawled)
+		c.totalFailed.Store(failed)
+		c.jsRendered.Store(jsRendered)
+		if crawled > 0 || failed > 0 {
+			log.Printf("crawler: restored stats — crawled=%d failed=%d jsRendered=%d", crawled, failed, jsRendered)
+		}
 	}
 
 	if cfg.EnableHeadless {
@@ -122,13 +144,23 @@ func (c *Crawler) Start() {
 	}
 }
 
-// Stop gracefully shuts down all workers.
+// Stop gracefully shuts down all workers and persists stats.
 func (c *Crawler) Stop() {
 	log.Println("crawler: stopping workers")
 	c.cancel()
 	c.wg.Wait()
 	if c.browser != nil {
 		c.browser.Close()
+	}
+	if c.statsStore != nil {
+		crawled := c.totalCrawled.Load()
+		failed := c.totalFailed.Load()
+		jsRendered := c.jsRendered.Load()
+		if err := c.statsStore.SetCrawlerStats(crawled, failed, jsRendered); err != nil {
+			log.Printf("crawler: failed to persist stats: %v", err)
+		} else {
+			log.Printf("crawler: persisted stats — crawled=%d failed=%d jsRendered=%d", crawled, failed, jsRendered)
+		}
 	}
 	log.Println("crawler: all workers stopped")
 }

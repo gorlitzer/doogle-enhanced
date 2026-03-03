@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -67,6 +68,10 @@ type Node struct {
 	// Peer name resolution
 	peerNames   map[string]string // peer ID → node name
 	peerNamesMu sync.RWMutex
+
+	// Crawl coordination counters
+	forwardedTasks atomic.Int64
+	receivedTasks  atomic.Int64
 
 	startedAt time.Time
 	ctx       context.Context
@@ -210,7 +215,7 @@ func (n *Node) init() error {
 	)
 
 	// 9. Indexer + PageRank
-	n.indexer = indexer.New(bleveIdx, n.batchIndexer, n.genStore)
+	n.indexer = indexer.New(bleveIdx, n.batchIndexer, n.genStore, n.badger)
 	n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
 
 	// 10. Incremental indexer
@@ -234,6 +239,7 @@ func (n *Node) init() error {
 		EnableHeadless:    n.cfg.Crawler.EnableHeadless,
 		HeadlessThreshold: n.cfg.Crawler.HeadlessThreshold,
 		HeadlessTimeout:   n.cfg.Crawler.HeadlessTimeout,
+		StatsStore:        n.urlStore,
 	}, n.scheduler, n.onDocumentCrawled)
 
 	// 12. Search engines (shard-aware distributed search)
@@ -283,7 +289,7 @@ func (n *Node) init() error {
 	deps := &api.Deps{
 		Search:       n.search,
 		StatusFn:     n.Status,
-		CrawlSeed:    n.crawler.AddSeed,
+		CrawlSeed:    n.routeSeedURL,
 		CrawlerInfo:  n.CrawlerInfo,
 		CrawlerFeed:  n.crawler.RecentEvents,
 		IndexerStats: n.IndexerStats,
@@ -296,9 +302,10 @@ func (n *Node) init() error {
 			n.search.LocalName = name
 			_ = SaveNodeName(dataDir, name)
 		},
-		DataDir:        dataDir,
-		StorageFn:      n.StorageInfo,
-		LeaderboardFn:  n.Leaderboard,
+		DataDir:            dataDir,
+		StorageFn:          n.StorageInfo,
+		LeaderboardFn:      n.Leaderboard,
+		DomainOwnershipFn:  n.DomainOwnership,
 	}
 
 	// Wire fleet deps if coordinator.
@@ -360,30 +367,49 @@ func (n *Node) Run() error {
 	n.discovery.StartAdvertising(n.ctx)
 	go n.discovery.StartFindingPeers(n.ctx)
 
-	// Add seed URLs
+	// Add seed URLs (routed through domain ownership checks)
 	for _, seed := range n.cfg.SeedURLs {
-		n.crawler.AddSeed(seed)
+		n.routeSeedURL(seed)
 	}
 
 	// Start API server (blocks)
 	return n.apiServer.Start()
 }
 
-// Shutdown gracefully stops all subsystems.
+// Shutdown gracefully stops all subsystems in dependency order.
 func (n *Node) Shutdown() {
 	slog.Info("node: shutting down")
-	n.cancel()
+	n.cancel() // 1. cancel root ctx — stops background goroutines
 
+	// 2. drain HTTP connections
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
 	n.apiServer.Shutdown(ctx)
+
+	// 3. save queued crawl tasks from memory to BadgerDB
+	n.scheduler.Drain()
+
+	// 4. persist crawled count
+	_ = n.urlStore.FlushCrawledCount()
+
+	// 5. stop crawler workers + persist crawler stats
 	n.crawler.Stop()
+
+	// 6. final Bleve batch flush
 	n.batchIndexer.Stop()
+
+	// 7. persist indexer stats
+	n.indexer.FlushStats()
+
+	// 8. close P2P subsystems
 	n.gossip.Close()
 	n.discovery.Close()
 	n.host.Close()
+
+	// 9. close Bleve index
 	n.bleveIdx.Close()
+
+	// 10. close BadgerDB last (all other stores depend on it)
 	n.badger.Close()
 
 	slog.Info("node: shutdown complete")
@@ -417,6 +443,9 @@ func (n *Node) Status() *models.NodeStatus {
 		StartedAt:      n.startedAt,
 		LocalDocs:      localDocs,
 		PeerDocs:       peerDocs,
+		OwnedDomains:   n.countOwnedDomains(),
+		ForwardedTasks: n.forwardedTasks.Load(),
+		ReceivedTasks:  n.receivedTasks.Load(),
 	}
 
 	// Fleet info.
@@ -444,8 +473,10 @@ func (n *Node) CrawlerInfo() *models.CrawlerInfo {
 		TotalCrawled:  crawled,
 		TotalFailed:   failed,
 		ActiveWorkers: active,
-		SeenURLs:      n.urlStore.SeenCount(),
-		JSRendered:    jsRendered,
+		SeenURLs:          n.urlStore.SeenCount(),
+		JSRendered:        jsRendered,
+		ForwardedTasks:    n.forwardedTasks.Load(),
+		ReceivedFromPeers: n.receivedTasks.Load(),
 	}
 }
 
@@ -501,6 +532,14 @@ func (n *Node) Leaderboard() (*models.LeaderboardResponse, error) {
 		repMap[reps[i].PeerID] = &reps[i]
 	}
 
+	// Compute domain counts per peer
+	allDomains, _ := n.bleveIdx.ListDomains()
+	domainCountMap := make(map[string]int)
+	for _, d := range allDomains {
+		ownerID := n.shards.Owner(d)
+		domainCountMap[ownerID]++
+	}
+
 	totalDocs := 0
 	explorers := make([]models.ExplorerStats, 0, len(counts))
 	for peerID, docCount := range counts {
@@ -518,6 +557,9 @@ func (n *Node) Leaderboard() (*models.LeaderboardResponse, error) {
 		} else {
 			es.NodeName = n.PeerName(peerID)
 		}
+
+		// Domain count
+		es.DomainCount = domainCountMap[peerID]
 
 		// Trust enrichment
 		if rep, ok := repMap[peerID]; ok {
@@ -540,6 +582,52 @@ func (n *Node) Leaderboard() (*models.LeaderboardResponse, error) {
 		Explorers:   explorers,
 		TotalDocs:   totalDocs,
 		LocalPeerID: selfID,
+	}, nil
+}
+
+// countOwnedDomains returns the number of domains this node owns in the shard ring.
+func (n *Node) countOwnedDomains() int {
+	domains, err := n.bleveIdx.ListDomains()
+	if err != nil {
+		return 0
+	}
+	selfID := n.peerID.String()
+	rf := n.cfg.Index.ReplicationFactor
+	count := 0
+	for _, d := range domains {
+		if n.shards.IsOwner(selfID, d, rf) {
+			count++
+		}
+	}
+	return count
+}
+
+// DomainOwnership returns domain assignment info for the admin API.
+func (n *Node) DomainOwnership() (*models.DomainOwnership, error) {
+	domains, err := n.bleveIdx.ListDomains()
+	if err != nil {
+		return nil, fmt.Errorf("list domains: %w", err)
+	}
+	selfID := n.peerID.String()
+	rf := n.cfg.Index.ReplicationFactor
+	assignments := make([]models.DomainAssignment, 0, len(domains))
+	owned := 0
+	for _, d := range domains {
+		ownerID := n.shards.Owner(d)
+		isLocal := n.shards.IsOwner(selfID, d, rf)
+		if isLocal {
+			owned++
+		}
+		assignments = append(assignments, models.DomainAssignment{
+			Domain:  d,
+			OwnerID: ownerID,
+			IsLocal: isLocal,
+		})
+	}
+	return &models.DomainOwnership{
+		TotalDomains: len(domains),
+		OwnedDomains: owned,
+		Domains:      assignments,
 	}, nil
 }
 
@@ -640,7 +728,7 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 	// Replicate to shard owners if we're in a multi-node setup
 	n.replicateDocument(doc)
 
-	// Schedule discovered URLs
+	// Schedule discovered URLs (route through domain ownership)
 	for _, u := range discoveredURLs {
 		domain := urlutil.ExtractDomain(u)
 		task := &models.CrawlTask{
@@ -651,7 +739,11 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 			SourceURL: doc.URL,
 			CreatedAt: time.Now(),
 		}
-		n.scheduler.Schedule(task)
+		if n.shouldCrawlLocally(domain) {
+			n.scheduler.Schedule(task)
+		} else {
+			n.forwardCrawlTask(task)
+		}
 	}
 
 	// Broadcast discovered URLs to peers
@@ -722,6 +814,66 @@ func (n *Node) recordLinks(doc *models.Document) {
 	}
 }
 
+// shouldCrawlLocally checks if this node owns the domain in the shard ring.
+// Single-node mode always returns true.
+func (n *Node) shouldCrawlLocally(domain string) bool {
+	if n.shards.NodeCount() <= 1 {
+		return true
+	}
+	return n.shards.IsOwner(n.peerID.String(), domain, n.cfg.Index.ReplicationFactor)
+}
+
+// forwardCrawlTask sends a crawl task to the domain's shard owner.
+// Falls back to local crawl if owner is unreachable.
+func (n *Node) forwardCrawlTask(task *models.CrawlTask) {
+	owner := n.shards.Owner(task.Domain)
+	if owner == "" || owner == n.peerID.String() {
+		n.scheduler.Schedule(task)
+		return
+	}
+	pid, err := peer.Decode(owner)
+	if err != nil {
+		n.scheduler.Schedule(task)
+		return
+	}
+	if n.host.Network().Connectedness(pid) != network.Connected {
+		n.scheduler.Schedule(task) // owner offline — fallback
+		return
+	}
+	n.forwardedTasks.Add(1)
+	go func() {
+		if err := p2p.SendCrawlTask(n.ctx, n.host, pid, task, 10*time.Second); err != nil {
+			slog.Debug("crawl forward: failed, crawling locally", "domain", task.Domain, "err", err)
+			n.scheduler.Schedule(task)
+		}
+	}()
+}
+
+// routeSeedURL routes a seed URL through domain ownership checks.
+func (n *Node) routeSeedURL(rawURL string) {
+	normalized := urlutil.Normalize(rawURL)
+	domain := urlutil.ExtractDomain(normalized)
+	task := &models.CrawlTask{
+		URL:       normalized,
+		Domain:    domain,
+		Depth:     0,
+		Priority:  1,
+		CreatedAt: time.Now(),
+	}
+	if n.shouldCrawlLocally(domain) {
+		n.scheduler.Schedule(task)
+		slog.Info("crawler: seeded URL (local)", "url", normalized)
+	} else {
+		n.forwardCrawlTask(task)
+		owner := n.shards.Owner(domain)
+		ownerShort := owner
+		if len(ownerShort) > 12 {
+			ownerShort = ownerShort[:12]
+		}
+		slog.Info("crawler: seeded URL (forwarded)", "url", normalized, "owner", ownerShort)
+	}
+}
+
 // gossipLoop listens for URL announcements from peers.
 func (n *Node) gossipLoop() {
 	for {
@@ -757,7 +909,11 @@ func (n *Node) gossipLoop() {
 				SourceURL: ann.SourceURL,
 				CreatedAt: time.Now(),
 			}
-			n.scheduler.Schedule(task)
+			if n.shouldCrawlLocally(domain) {
+				n.scheduler.Schedule(task)
+			} else {
+				n.forwardCrawlTask(task)
+			}
 		}
 	}
 }
@@ -830,6 +986,7 @@ func (n *Node) handlePeerSearch(req *models.SearchRequest) (*models.SearchRespon
 }
 
 func (n *Node) handlePeerCrawlTask(task *models.CrawlTask) error {
+	n.receivedTasks.Add(1)
 	n.scheduler.Schedule(task)
 	return nil
 }
