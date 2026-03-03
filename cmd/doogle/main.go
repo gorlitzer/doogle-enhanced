@@ -61,7 +61,7 @@ func main() {
 	slog.SetDefault(slog.New(handler))
 
 	slog.Info("Doogle v2 — P2P Decentralized Search Engine")
-	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "log_level", cfg.LogLevel)
+	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "workers", cfg.Crawler.Workers, "replication", cfg.Index.ReplicationFactor, "log_level", cfg.LogLevel)
 
 	// Create and initialize the node
 	n, err := node.New(cfg)
