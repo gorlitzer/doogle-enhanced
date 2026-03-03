@@ -1,4 +1,4 @@
-// Doogle v2 — Node Overview: Dual-View Monitoring Dashboard
+// Doogle v2 — Node Spotlight: Dual-View Monitoring Dashboard
 // Toggle between Spotlight gauge columns and Architecture flow diagram
 import { api } from '../api.js';
 import { icon, getCSS, escapeHtml } from '../components.js';
@@ -64,8 +64,8 @@ export function renderNode(container) {
   container.innerHTML = `
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <div>
-        <h2>Node Overview</h2>
-        <p>Live system monitor — architecture &amp; metrics of your Doogle node</p>
+        <h2>Node Spotlight</h2>
+        <p>Live spotlight on your node — architecture &amp; metrics at a glance</p>
       </div>
       <div class="view-toggle" id="view-toggle">
         <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">

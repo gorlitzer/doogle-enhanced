@@ -515,6 +515,49 @@ a:hover { text-decoration: underline; }
 .badge-purple  { background: var(--purple-dim); color: var(--purple); }
 .badge-accent  { background: var(--accent-dim); color: var(--accent); }
 
+/* ---- Trust badge tooltip ---- */
+.trust-badge {
+  position: relative;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+}
+.trust-badge .badge svg {
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.trust-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  width: 240px;
+  font-size: 0.8em;
+  font-weight: 600;
+  line-height: 1.4;
+  z-index: 10;
+  box-shadow: var(--shadow);
+  text-align: center;
+  color: var(--text-primary);
+  pointer-events: none;
+  white-space: normal;
+}
+.trust-tooltip-desc {
+  display: block;
+  margin-top: 4px;
+  font-weight: 400;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+.trust-badge:hover .trust-tooltip {
+  display: block;
+}
+
 /* ---- Cards grid ---- */
 .card-grid {
   display: grid;
