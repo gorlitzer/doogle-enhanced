@@ -1,6 +1,6 @@
 // Doogle v2 — Search Page (enhanced with detail modal + content warnings)
 import { api } from '../api.js';
-import { showModal, closeModal, scoreBar, escapeHtml, skeleton, icon } from '../components.js';
+import { showModal, closeModal, scoreBar, escapeHtml, skeleton, icon, timeAgo } from '../components.js';
 
 let currentPage = 1;
 let currentQuery = '';
@@ -173,50 +173,93 @@ async function doSearch(keepPage = false) {
   }
 }
 
+function miniGauge(value, color, label) {
+  if (value == null || value === undefined) return '';
+  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
+  return `
+    <div class="mini-gauge" title="${label}: ${value.toFixed(2)}">
+      <div class="mini-gauge-bar">
+        <div class="mini-gauge-fill" style="width:${pct}%;background:var(--${color})"></div>
+      </div>
+      <span class="mini-gauge-label">${label}</span>
+    </div>
+  `;
+}
+
+function truncateUrl(url, maxLen = 70) {
+  if (!url || url.length <= maxLen) return url;
+  return url.slice(0, maxLen) + '…';
+}
+
+function trustLevel(r) {
+  const spam = r.spam_score || 0;
+  const quality = r.quality_score || 0;
+  const eeat = r.eeat_score || 0;
+  const avg = (quality + eeat + (1 - spam)) / 3;
+  if (avg >= 0.7) return { label: 'Trusted', color: 'green' };
+  if (avg >= 0.4) return { label: 'Moderate', color: 'amber' };
+  return { label: 'Low trust', color: 'red' };
+}
+
 function renderResult(r, index) {
   const title = escapeHtml(r.title || r.url);
   const desc = highlightTerms(escapeHtml(r.description || ''), currentQuery);
   const domain = escapeHtml(r.domain || '');
-  const scoreColor = r.score > 1.0 ? 'green' : r.score > 0.5 ? 'blue' : 'default';
+  const crawlTime = r.crawled_at ? timeAgo(r.crawled_at) : '';
 
-  const badges = [];
-  badges.push(`<span class="badge badge-default">${domain}</span>`);
-  badges.push(`<span class="badge badge-${scoreColor}">score: ${r.score.toFixed(2)}</span>`);
-
-  if (r.quality_score > 0) badges.push(`<span class="badge badge-${qualColor(r.quality_score)}">quality: ${r.quality_score.toFixed(2)}</span>`);
-  if (r.eeat_score > 0.3) badges.push(`<span class="badge badge-purple">E-E-A-T: ${r.eeat_score.toFixed(2)}</span>`);
-  if (r.readability_score > 0.6) badges.push(`<span class="badge badge-blue">readable</span>`);
-  if (r.citation_score > 0.3) badges.push(`<span class="badge badge-purple">cited</span>`);
-  if (r.is_time_sensitive) badges.push('<span class="badge badge-amber">time-sensitive</span>');
-  if (r.is_evergreen) badges.push('<span class="badge badge-green">evergreen</span>');
-  if (r.peer_name || r.peer_id) {
-    const src = r.peer_name || r.peer_id.slice(0, 12) + '...';
-    badges.push(`<span class="badge badge-blue">${escapeHtml(src)}</span>`);
-  }
-  if (r.origin_peer_id) {
-    const isLocal = r.origin_peer_id === searchPeerID;
-    if (isLocal) {
-      badges.push('<span class="badge badge-green">local</span>');
-    } else {
-      const originLabel = r.origin_peer_name || r.origin_peer_id.slice(0, 12) + '...';
-      badges.push(`<span class="badge badge-blue" title="${escapeHtml(r.origin_peer_id)}">origin: ${escapeHtml(originLabel)}</span>`);
-    }
-  }
-
-  const spamWarning = r.spam_score > 0.3
-    ? `<div class="content-warning">Low trust score (spam: ${r.spam_score.toFixed(2)}) — content may be unreliable</div>`
+  // Provenance
+  const isLocal = r.origin_peer_id && r.origin_peer_id === searchPeerID;
+  const provLabel = isLocal ? 'local' : (r.origin_peer_name || (r.origin_peer_id ? r.origin_peer_id.slice(0, 10) + '…' : ''));
+  const provColor = isLocal ? 'green' : 'blue';
+  const provPill = provLabel
+    ? `<span class="result-prov result-prov--${provColor}" title="${escapeHtml(r.origin_peer_id || '')}">${provLabel}</span>`
     : '';
 
+  // Score-level border class
+  const borderClass = r.score > 1.0 ? 'result-item--high' : r.score > 0.5 ? 'result-item--mid' : '';
+
+  // Spam warning
+  const spamWarning = r.spam_score > 0.3
+    ? `<div class="content-warning">${icon('alertTriangle', 14)} Low trust — content may be unreliable</div>`
+    : '';
+
+  // Mini gauges
+  const gauges = [];
+  if (r.quality_score > 0) gauges.push(miniGauge(r.quality_score, 'green', 'Quality'));
+  if (r.eeat_score > 0) gauges.push(miniGauge(r.eeat_score, 'purple', 'E-E-A-T'));
+  const trust = trustLevel(r);
+  if (r.quality_score > 0 || r.eeat_score > 0) gauges.push(miniGauge((r.quality_score + r.eeat_score + (1 - (r.spam_score || 0))) / 3, trust.color, 'Trust'));
+
+  // Tags
+  const tags = [];
+  if (r.is_evergreen) tags.push('evergreen');
+  if (r.citation_score > 0.3) tags.push('cited');
+  if (r.readability_score > 0.6) tags.push('readable');
+  if (r.is_time_sensitive) tags.push('time-sensitive');
+
   return `
-    <div class="result-item">
+    <div class="result-item ${borderClass}">
+      <div class="result-header">
+        <div class="result-header-left">
+          <span class="result-dot result-dot--${provColor}"></span>
+          <span class="result-domain">${domain}</span>
+          ${crawlTime ? `<span class="result-time">${crawlTime}</span>` : ''}
+        </div>
+        ${provPill}
+      </div>
       <a class="result-title" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${title}</a>
-      <div class="result-url">${escapeHtml(r.url)}</div>
+      <div class="result-url">${escapeHtml(truncateUrl(r.url))}</div>
       <div class="result-desc">${desc}</div>
       ${spamWarning}
-      <div class="result-badges">
-        ${badges.join('')}
-        <button class="badge badge-accent result-detail-btn" data-index="${index}" style="cursor:pointer;border:none;font-family:inherit">details</button>
-        <button class="badge badge-red result-report-btn" data-url="${escapeHtml(r.url)}" style="cursor:pointer;border:none;font-family:inherit">${icon('flag', 12)} report</button>
+      <div class="result-footer">
+        <div class="result-footer-left">
+          ${gauges.length ? `<div class="result-gauges">${gauges.join('')}</div>` : ''}
+          ${tags.length ? `<div class="result-tags">${tags.map(t => `<span class="result-tag">${t}</span>`).join('')}</div>` : ''}
+        </div>
+        <div class="result-actions">
+          <button class="result-detail-btn" data-index="${index}">${icon('eye', 14)} <span class="action-label">Details</span></button>
+          <button class="result-report-btn" data-url="${escapeHtml(r.url)}">${icon('flag', 14)}</button>
+        </div>
       </div>
     </div>
   `;
@@ -234,75 +277,118 @@ function renderPagination(total, page, pageSize) {
   `;
 }
 
+function scoreRing(value, color, size = 80) {
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - Math.min(1, Math.max(0, value)));
+  return `
+    <svg class="trust-ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="6"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--${color})" stroke-width="6"
+        stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+        stroke-linecap="round" transform="rotate(-90 ${size/2} ${size/2})"
+        class="trust-ring-fill"/>
+    </svg>
+  `;
+}
+
 function showResultDetail(r) {
-  const scoreRows = [
-    ['E-E-A-T', r.eeat_score, 'purple'],
-    ['Quality', r.quality_score, 'green'],
-    ['Spam', r.spam_score, 'red'],
-    ['Link Score', r.link_score, 'blue'],
-    ['SEO Score', r.seo_score, 'amber'],
-    ['Readability', r.readability_score, 'blue'],
-    ['Citations', r.citation_score, 'purple'],
+  const trust = trustLevel(r);
+  const trustVal = (r.quality_score + r.eeat_score + (1 - (r.spam_score || 0))) / 3;
+  const crawledAt = r.crawled_at ? new Date(r.crawled_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown';
+  const lang = r.language ? r.language.toUpperCase() : '';
+
+  // Provenance info
+  const isLocal = r.origin_peer_id && r.origin_peer_id === searchPeerID;
+  const originLabel = isLocal ? 'This Node (local)' : (r.origin_peer_name || (r.origin_peer_id ? r.origin_peer_id.slice(0, 20) + '…' : 'Unknown'));
+  const servedBy = r.peer_name || (r.peer_id ? r.peer_id.slice(0, 20) + '…' : '');
+
+  // Content flags
+  const flags = [];
+  if (r.is_time_sensitive) flags.push('<span class="badge badge-amber">' + icon('zap', 12) + ' Time-Sensitive</span>');
+  if (r.is_evergreen) flags.push('<span class="badge badge-green">' + icon('coffee', 12) + ' Evergreen</span>');
+  if (r.quality_score > 0.7) flags.push('<span class="badge badge-green">' + icon('star', 12) + ' High Quality</span>');
+  if (r.spam_score > 0.5) flags.push('<span class="badge badge-red">' + icon('alertTriangle', 12) + ' High Spam Risk</span>');
+  if (r.eeat_score > 0.5) flags.push('<span class="badge badge-purple">' + icon('shield', 12) + ' Expert Content</span>');
+
+  // Score groups
+  const relevanceScores = [
+    ['BM25 Score', r.score, 'accent'],
+    ['Relevance', r.relevance_score, 'accent'],
     ['Freshness', r.freshness_score, 'amber'],
-    ['Author Credibility', r.author_credibility, 'purple'],
-    ['Relevance (composite)', r.relevance_score, 'accent'],
   ].filter(([, v]) => v != null && v !== undefined);
 
-  const crawledAt = r.crawled_at ? new Date(r.crawled_at).toLocaleString() : 'Unknown';
+  const qualityScores = [
+    ['Quality', r.quality_score, 'green'],
+    ['E-E-A-T', r.eeat_score, 'purple'],
+    ['Readability', r.readability_score, 'blue'],
+  ].filter(([, v]) => v != null && v !== undefined);
+
+  const trustScores = [
+    ['Spam Risk', r.spam_score, 'red'],
+    ['Link Score', r.link_score, 'blue'],
+    ['SEO Score', r.seo_score, 'amber'],
+    ['Citations', r.citation_score, 'purple'],
+    ['Author Credibility', r.author_credibility, 'purple'],
+  ].filter(([, v]) => v != null && v !== undefined);
 
   const html = `
-    <div class="detail-grid">
-      <span class="detail-label">URL</span>
-      <span class="detail-value"><a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a></span>
-      <span class="detail-label">Title</span>
-      <span class="detail-value">${escapeHtml(r.title)}</span>
-      <span class="detail-label">Domain</span>
-      <span class="detail-value">${escapeHtml(r.domain)}</span>
-      <span class="detail-label">Description</span>
-      <span class="detail-value">${escapeHtml(r.description)}</span>
-      <span class="detail-label">Crawled</span>
-      <span class="detail-value">${crawledAt}</span>
-      <span class="detail-label">BM25 Score</span>
-      <span class="detail-value">${r.score.toFixed(4)}</span>
-      ${r.peer_id ? `
-        <span class="detail-label">Source Node</span>
-        <span class="detail-value">${r.peer_name ? escapeHtml(r.peer_name) + ' ' : ''}<span style="font-family:monospace;font-size:0.8em;color:var(--text-muted)">${escapeHtml(r.peer_id.slice(0, 20))}...</span></span>
-      ` : ''}
-      ${r.origin_peer_id ? `
-        <span class="detail-label">Origin Peer</span>
-        <span class="detail-value">${r.origin_peer_id === searchPeerID ? '<span class="badge badge-green">local</span>' : `${r.origin_peer_name ? escapeHtml(r.origin_peer_name) + ' ' : ''}<span style="font-family:monospace;font-size:0.8em;color:var(--text-muted)">${escapeHtml(r.origin_peer_id.slice(0, 20))}...</span>`}</span>
-      ` : ''}
-    </div>
-
-    <div class="detail-section">
-      <h4>Quality Scoring Breakdown</h4>
-      ${scoreRows.map(([label, val, color]) =>
-        scoreBar(val || 0, color, label)
-      ).join('')}
-    </div>
-
-    <div class="detail-section">
-      <h4>Content Flags</h4>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-        ${r.is_time_sensitive ? '<span class="badge badge-amber">Time-Sensitive Content</span>' : ''}
-        ${r.is_evergreen ? '<span class="badge badge-green">Evergreen Content</span>' : ''}
-        ${r.spam_score > 0.5 ? '<span class="badge badge-red">High Spam Risk</span>' : ''}
-        ${r.spam_score > 0.3 && r.spam_score <= 0.5 ? '<span class="badge badge-amber">Moderate Spam Risk</span>' : ''}
-        ${r.quality_score > 0.7 ? '<span class="badge badge-green">High Quality</span>' : ''}
-        ${r.eeat_score > 0.5 ? '<span class="badge badge-purple">Expert Content</span>' : ''}
-        ${r.citation_score > 0.3 ? '<span class="badge badge-blue">Well-Cited</span>' : ''}
-        ${r.readability_score > 0.7 ? '<span class="badge badge-blue">Highly Readable</span>' : ''}
+    <div class="detail-overview">
+      <div class="detail-overview-left">
+        <div class="detail-overview-title">${escapeHtml(r.title || 'Untitled')}</div>
+        <a class="detail-overview-url" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>
+        <div class="detail-overview-meta">
+          <span class="result-dot result-dot--${trust.color}"></span>
+          <span>${escapeHtml(r.domain || '')}</span>
+          <span class="detail-sep">·</span>
+          <span>${crawledAt}</span>
+          ${lang ? `<span class="detail-sep">·</span><span>${lang}</span>` : ''}
+        </div>
+      </div>
+      <div class="detail-overview-right">
+        ${scoreRing(trustVal, trust.color, 80)}
+        <span class="detail-trust-label" style="color:var(--${trust.color})">${trust.label}</span>
       </div>
     </div>
+
+    <div class="detail-provenance">
+      <div class="detail-prov-row">
+        <span class="detail-prov-label">Origin Node</span>
+        <span class="detail-prov-value">${escapeHtml(originLabel)}</span>
+      </div>
+      ${servedBy ? `
+      <div class="detail-prov-row">
+        <span class="detail-prov-label">Served By</span>
+        <span class="detail-prov-value" style="font-family:var(--font-mono);font-size:0.85em">${escapeHtml(servedBy)}</span>
+      </div>` : ''}
+    </div>
+
+    ${flags.length ? `
+    <div class="detail-flags">
+      <span class="detail-flags-label">Content Flags</span>
+      <div class="detail-flags-list">${flags.join('')}</div>
+    </div>` : ''}
+
+    ${relevanceScores.length ? `
+    <div class="detail-section">
+      <h4>Relevance</h4>
+      ${relevanceScores.map(([label, val, color]) => scoreBar(val || 0, color, label)).join('')}
+    </div>` : ''}
+
+    ${qualityScores.length ? `
+    <div class="detail-section">
+      <h4>Content Quality</h4>
+      ${qualityScores.map(([label, val, color]) => scoreBar(val || 0, color, label)).join('')}
+    </div>` : ''}
+
+    ${trustScores.length ? `
+    <div class="detail-section">
+      <h4>Trust &amp; Authority</h4>
+      ${trustScores.map(([label, val, color]) => scoreBar(val || 0, color, label)).join('')}
+    </div>` : ''}
   `;
 
   showModal('Document Details', html, { width: '700px' });
-}
-
-function qualColor(score) {
-  if (score >= 0.7) return 'green';
-  if (score >= 0.4) return 'blue';
-  return 'amber';
 }
 
 function showReportModal(url) {
