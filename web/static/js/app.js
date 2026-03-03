@@ -1,5 +1,5 @@
 // Doogle v2 — SPA Router & App Shell
-import { api } from './api.js';
+import { api, peerNames } from './api.js';
 import { initTheme, createThemePicker } from './theme-switcher.js';
 import { renderHome } from './pages/home.js';
 import { renderSearch } from './pages/search.js';
@@ -103,6 +103,7 @@ function startStatusPolling() {
   async function poll() {
     try {
       const s = await api.status();
+      peerNames.update(s);
       updateNodeIdentity(s);
       const badge = document.getElementById('node-badge-text');
       if (badge) {

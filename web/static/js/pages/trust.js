@@ -1,5 +1,5 @@
 // Doogle v2 — Trust & Safety Admin Page
-import { api } from '../api.js';
+import { api, peerNames } from '../api.js';
 import { icon, cardSkeleton, escapeHtml, timeAgo } from '../components.js';
 
 let activeTab = 'overview';
@@ -107,7 +107,7 @@ async function renderOverview(el) {
                   <td class="mono" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.url)}">${escapeHtml(r.url)}</td>
                   <td>${escapeHtml(r.domain || '')}</td>
                   <td><span class="badge badge-${reasonColor(r.reason)}">${escapeHtml(r.reason)}</span></td>
-                  <td class="mono" style="font-size:0.85em" title="${escapeHtml(r.reporter_id || '')}">${(r.reporter_id || '').slice(0, 12)}...</td>
+                  <td style="font-size:0.85em" title="${escapeHtml(r.reporter_id || '')}">${escapeHtml(peerNames.resolve(r.reporter_id))}</td>
                   <td>${timeAgo(r.timestamp)}</td>
                 </tr>`).join('')}
               </tbody>
@@ -146,7 +146,7 @@ async function renderQuarantined(el) {
           </tr></thead>
           <tbody>
             ${peers.map(p => `<tr>
-              <td class="mono" style="font-size:0.85em" title="${escapeHtml(p.peer_id)}">${(p.peer_id || '').slice(0, 16)}...</td>
+              <td style="font-size:0.85em" title="${escapeHtml(p.peer_id)}">${escapeHtml(peerNames.resolve(p.peer_id))}</td>
               <td><span class="badge badge-${trustColor(p.trust_score)}">${(p.trust_score || 0).toFixed(2)}</span></td>
               <td>${(p.good_docs || 0).toLocaleString()}</td>
               <td>${(p.spam_docs || 0).toLocaleString()}</td>
