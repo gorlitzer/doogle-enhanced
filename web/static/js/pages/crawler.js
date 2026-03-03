@@ -322,65 +322,155 @@ function applyDiagramData(status, crawler) {
   }
 
   if (diagram) diagram.setSpawnRate(Math.max(1, activeW));
-  renderCrawlerSummary(s, cr);
+  renderCrawlerDashboard(s, cr);
   syncMobileView();
 }
 
-function renderCrawlerSummary(s, cr) {
+// ── Dashboard Helpers ──
+
+function healthDot(color) {
+  return `<span class="sl-health sl-health--${color}"></span>`;
+}
+
+function cssRing(value, max, color, label, size = 64) {
+  const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
+  return `
+    <div class="sl-ring-group">
+      <div class="sl-ring" style="--value:${pct};--color:${color};--size:${size}px">
+        <span class="sl-ring-value">${pct}%</span>
+      </div>
+      <div class="sl-ring-meta">
+        <span class="sl-ring-pct">${pct}%</span>
+        <span class="sl-ring-label">${escapeHtml(label)}</span>
+      </div>
+    </div>`;
+}
+
+function cardWrap(title, health, content, extra = '') {
+  const hc = health === 'amber' ? 'sl-card--warning' : health === 'red' ? 'sl-card--critical' : '';
+  return `
+    <div class="sl-card ${extra} ${hc}">
+      <div class="sl-card-header">
+        ${healthDot(health)}
+        <span class="sl-card-title">${escapeHtml(title)}</span>
+      </div>
+      ${content}
+    </div>`;
+}
+
+function renderCrawlerDashboard(s, cr) {
   const el = document.getElementById('crawler-summary');
   if (!el) return;
+
+  const totalCrawled = cr.total_crawled || s.crawled_urls || 0;
+  const totalFailed = cr.total_failed || 0;
+  const totalFetches = totalCrawled + totalFailed;
+  const successRate = totalFetches > 0 ? totalCrawled / totalFetches : 1;
+  const successPct = Math.round(successRate * 100);
   const activeW = cr.active_workers || 0;
   const totalW = cr.workers || 0;
+  const jsRendered = cr.js_rendered || 0;
+  const queueDepth = s.urls_in_queue || 0;
+  const seenUrls = cr.seen_urls || 0;
+  const forwarded = cr.forwarded_tasks || 0;
+  const received = cr.received_from_peers || 0;
   const upMins = parseUptimeMinutes(s.uptime);
   const crawlRate = upMins > 0 ? ((s.crawled_urls || 0) / upMins).toFixed(1) : '0';
 
-  el.innerHTML = `
-    <div class="spotlight-group">
-      <span class="spotlight-group-label">This Crawler</span>
-      <div class="spotlight-metrics-row">
-        <div class="spotlight-metric">
-          ${icon('link', 16, 'var(--accent)')}
-          <span class="spotlight-metric-value">${formatNum(s.urls_in_queue || 0)}</span>
-          <span class="spotlight-metric-label">Queue</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('globe', 16, 'var(--accent)')}
-          <span class="spotlight-metric-value">${formatNum(cr.total_crawled || s.crawled_urls || 0)}</span>
-          <span class="spotlight-metric-label">Crawled</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('cpu', 16, 'var(--accent)')}
-          <span class="spotlight-metric-value">${activeW}/${totalW}</span>
-          <span class="spotlight-metric-label">Workers</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('zap', 16, 'var(--accent)')}
-          <span class="spotlight-metric-value">${crawlRate}</span>
-          <span class="spotlight-metric-label">URLs/min</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('eye', 16, 'var(--accent)')}
-          <span class="spotlight-metric-value">${formatNum(cr.seen_urls || 0)}</span>
-          <span class="spotlight-metric-label">Seen</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('alertTriangle', 16, 'var(--red)')}
-          <span class="spotlight-metric-value">${formatNum(cr.total_failed || 0)}</span>
-          <span class="spotlight-metric-label">Failed</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('upload', 16, 'var(--amber)')}
-          <span class="spotlight-metric-value">${formatNum(cr.forwarded_tasks || 0)}</span>
-          <span class="spotlight-metric-label">Forwarded</span>
-        </div>
-        <div class="spotlight-metric">
-          ${icon('download', 16, 'var(--green)')}
-          <span class="spotlight-metric-value">${formatNum(cr.received_from_peers || 0)}</span>
-          <span class="spotlight-metric-label">From Peers</span>
-        </div>
+  // ── Card 1: Crawl Overview (wide, span 2) ──
+  const overviewHealth = totalCrawled > 0 ? 'green' : 'amber';
+  const card1 = cardWrap('Crawl Overview', overviewHealth, `
+    <div class="sl-body-row">
+      <div>
+        <div class="sl-big-num">${formatNum(totalCrawled)}</div>
+        <div class="sl-big-label">pages crawled</div>
+      </div>
+      ${cssRing(successRate, 1, successPct > 80 ? 'var(--green)' : successPct > 50 ? 'var(--amber)' : 'var(--red)', 'success rate')}
+    </div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${crawlRate}</span><span class="sl-stat-label">URLs/min</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(jsRendered)}</span><span class="sl-stat-label">JS Rendered</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalFailed)}</span><span class="sl-stat-label">Failed</span></div>
+    </div>
+  `, 'sl-card--wide');
+
+  // ── Card 2: Worker Pool ──
+  const workerHealth = activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red');
+  const card2 = cardWrap('Worker Pool', workerHealth, `
+    <div class="sl-body-row">
+      ${cssRing(activeW, totalW || 1, 'var(--accent)', `${activeW}/${totalW} workers`)}
+      <div>
+        <div class="sl-big-num">${activeW}</div>
+        <div class="sl-big-label">active workers</div>
       </div>
     </div>
-  `;
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${totalW}</span><span class="sl-stat-label">Configured</span></div>
+    </div>
+  `);
+
+  // ── Card 3: Queue & Discovery ──
+  const queueHealth = queueDepth > 0 ? 'green' : 'amber';
+  const card3 = cardWrap('Queue & Discovery', queueHealth, `
+    <div class="sl-big-num">${formatNum(queueDepth)}</div>
+    <div class="sl-big-label">URLs in queue</div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(seenUrls)}</span><span class="sl-stat-label">Seen URLs</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${crawlRate}</span><span class="sl-stat-label">URLs/min</span></div>
+    </div>
+  `);
+
+  // ── Card 4: Fetch Performance ──
+  const fetchHealth = successPct > 80 ? 'green' : successPct >= 50 ? 'amber' : 'red';
+  const card4 = cardWrap('Fetch Performance', fetchHealth, `
+    <div class="sl-body-row">
+      ${cssRing(successRate, 1, successPct > 80 ? 'var(--green)' : successPct >= 50 ? 'var(--amber)' : 'var(--red)', 'success rate')}
+      <div>
+        <div class="sl-big-num">${formatNum(totalFailed)}</div>
+        <div class="sl-big-label">failed fetches</div>
+      </div>
+    </div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(jsRendered)}</span><span class="sl-stat-label">JS Rendered</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalFetches)}</span><span class="sl-stat-label">Total Fetches</span></div>
+    </div>
+  `);
+
+  // ── Card 5: Peer Coordination ──
+  const peerActivity = forwarded + received;
+  const peerHealth = peerActivity > 0 ? 'green' : 'amber';
+  const card5 = cardWrap('Peer Coordination', peerHealth, `
+    <div class="sl-body-row" style="gap:24px">
+      <div style="text-align:center">
+        <div class="sl-big-num">${formatNum(forwarded)}</div>
+        <div class="sl-big-label">forwarded</div>
+      </div>
+      <div style="text-align:center">
+        <div class="sl-big-num">${formatNum(received)}</div>
+        <div class="sl-big-label">from peers</div>
+      </div>
+    </div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerActivity)}</span><span class="sl-stat-label">Total Coordination</span></div>
+    </div>
+  `);
+
+  // ── Card 6: Pipeline Config ──
+  const card6 = cardWrap('Pipeline Config', 'green', `
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${cr.rate_limit || '—'}</span><span class="sl-stat-label">Rate Limit (req/min)</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${cr.max_depth || '—'}</span><span class="sl-stat-label">Max Depth</span></div>
+    </div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value sl-stat-value--sm">${escapeHtml(String(cr.user_agent || '—').slice(0, 30))}</span><span class="sl-stat-label">User Agent</span></div>
+    </div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="badge badge-green" style="font-size:0.75em">robots.txt respected</span></div>
+    </div>
+  `);
+
+  el.className = 'sl-dashboard';
+  el.innerHTML = card1 + card2 + card3 + card4 + card5 + card6;
 }
 
 // ============================================================

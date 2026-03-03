@@ -851,14 +851,15 @@ export class SpotlightDiagram {
       ctx.restore();
     }
 
-    // Render gauges
+    // Render gauges — reserve vertical space for metrics so labels don't overlap
     const gauges = box.gauges || [];
+    const metrics = box.metrics || [];
+    const metricsReserve = gauges.length > 0 && metrics.length > 0 ? metrics.length * 13 + 8 : 0;
     const gaugeAreaY = y + 28;
-    const gaugeAreaH = h - 32;
+    const gaugeAreaH = h - 32 - metricsReserve;
     this._drawGauges(ctx, x, gaugeAreaY, w, gaugeAreaH, gauges);
 
     // Render text metrics below gauges
-    const metrics = box.metrics || [];
     if (metrics.length > 0) {
       const metricsY = gauges.length > 0 ? y + h - 4 - metrics.length * 13 : gaugeAreaY + 6;
       ctx.fillStyle = getCSS('--text-secondary');
@@ -875,7 +876,8 @@ export class SpotlightDiagram {
     if (!gauges || gauges.length === 0) return;
 
     const count = gauges.length;
-    const tall = areaH > 150 && count <= 3; // Stack vertically in tall panels
+    const allCylinders = gauges.every(g => g.type === 'cylinder');
+    const tall = !allCylinders && areaH > 150 && count <= 3;
 
     if (tall) {
       // Vertical stacking
