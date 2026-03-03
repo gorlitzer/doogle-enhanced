@@ -44,9 +44,22 @@ function animateCounter(el, target) {
 }
 
 function trustBadge(score) {
-  if (score >= 0.8) return '<span class="badge badge-green" title="Trusted">Trusted</span>';
-  if (score >= 0.5) return '<span class="badge" title="Neutral">Neutral</span>';
-  return '<span class="badge badge-red" title="Low Trust">Low</span>';
+  const svgAttrs = 'width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+
+  if (score >= 0.8) {
+    const svg = `<svg ${svgAttrs}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>`;
+    return `<span class="trust-badge"><span class="badge badge-green">${svg} Trusted</span><span class="trust-tooltip">Trusted<span class="trust-tooltip-desc">Consistently reliable peer with quality contributions.</span></span></span>`;
+  }
+  if (score >= 0.6) {
+    const svg = `<svg ${svgAttrs}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+    return `<span class="trust-badge"><span class="badge badge-blue">${svg} Good</span><span class="trust-tooltip">Good<span class="trust-tooltip-desc">Good standing with a solid contribution history.</span></span></span>`;
+  }
+  if (score > 0.4) {
+    const svg = `<svg ${svgAttrs}><path d="M12 20V10"/><path d="M8 16c0-3 2-5 4-8"/><path d="M16 16c0-3-2-5-4-8"/></svg>`;
+    return `<span class="trust-badge"><span class="badge badge-amber">${svg} New</span><span class="trust-tooltip">New<span class="trust-tooltip-desc">Recently joined the network, still building reputation.</span></span></span>`;
+  }
+  const svg = `<svg ${svgAttrs}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+  return `<span class="trust-badge"><span class="badge badge-red">${svg} Low</span><span class="trust-tooltip">Low<span class="trust-tooltip-desc">Low trust score — contributions may be unreliable.</span></span></span>`;
 }
 
 function formatDate(d) {
@@ -328,8 +341,7 @@ function renderPodium(explorers, localPeerID) {
         <div class="lb-ring-wrap">${ring}</div>
         <div class="lb-doc-count${goldCountCls}" data-target="${e.doc_count}">0</div>
         <div class="lb-doc-label">documents</div>
-        ${e.domain_count ? `<div class="lb-doc-label" style="font-size:0.78em;color:var(--text-muted);margin-top:2px">${e.domain_count} domain${e.domain_count !== 1 ? 's' : ''}</div>` : ''}
-        ${trustBadge(e.trust_score)}
+        <div class="lb-doc-label" style="font-size:0.78em;color:var(--text-muted);margin-top:2px">${formatNum(e.domain_count || 0)} domain${(e.domain_count || 0) !== 1 ? 's' : ''}</div>
       </div>
     `;
   }).join('');
