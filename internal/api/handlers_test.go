@@ -156,6 +156,44 @@ func TestCrawlerFeedHandler_ContentType(t *testing.T) {
 	}
 }
 
+// ---- pprof endpoint tests ----
+
+func TestPprofEndpoint_Index(t *testing.T) {
+	srv := NewServer("127.0.0.1", 0, &Deps{})
+
+	req := httptest.NewRequest("GET", "/debug/pprof/", nil)
+	w := httptest.NewRecorder()
+	srv.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /debug/pprof/, got %d", w.Code)
+	}
+}
+
+func TestPprofEndpoint_Cmdline(t *testing.T) {
+	srv := NewServer("127.0.0.1", 0, &Deps{})
+
+	req := httptest.NewRequest("GET", "/debug/pprof/cmdline", nil)
+	w := httptest.NewRecorder()
+	srv.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /debug/pprof/cmdline, got %d", w.Code)
+	}
+}
+
+func TestPprofEndpoint_Symbol(t *testing.T) {
+	srv := NewServer("127.0.0.1", 0, &Deps{})
+
+	req := httptest.NewRequest("GET", "/debug/pprof/symbol", nil)
+	w := httptest.NewRecorder()
+	srv.router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /debug/pprof/symbol, got %d", w.Code)
+	}
+}
+
 func TestIsSafeURL(t *testing.T) {
 	tests := []struct {
 		url  string

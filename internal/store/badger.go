@@ -22,7 +22,7 @@ func NewBadgerStore(path string) (*BadgerStore, error) {
 		WithNumLevelZeroTablesStall(4).
 		WithBlockCacheSize(32 << 20).
 		WithIndexCacheSize(16 << 20).
-		WithNumCompactors(1).
+		WithNumCompactors(2).
 		WithCompactL0OnClose(true)
 
 	db, err := badger.Open(opts)
