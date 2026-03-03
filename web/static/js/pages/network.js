@@ -206,11 +206,11 @@ function buildGraph(status, peerList) {
   // Connected peers
   peerList.forEach((p, i) => {
     const id = typeof p === 'string' ? p : p.peer_id;
-    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : `Peer ${i + 1}`;
+    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : id.slice(0, 12) + '…';
     nodes.push({
       id: id,
       label: peerName,
-      tooltip: (typeof p !== 'string' && p.node_name ? p.node_name + ' — ' : '') + id.slice(0, 20) + '...',
+      tooltip: peerName + ' — ' + id.slice(0, 20) + '...',
       type: 'peer',
       color: getCSS('--green'),
       radius: 14,

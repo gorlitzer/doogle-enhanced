@@ -18,6 +18,43 @@ async function postJSON(url, body) {
   return resp.json();
 }
 
+// ── Peer name cache ──
+// Populated from /api/status peer_list. Any page can call
+// peerNames.refresh() to update, then peerNames.resolve(id) to display.
+const _nameMap = new Map();  // peer_id → node_name
+let _localPeerID = '';
+let _localNodeName = '';
+
+export const peerNames = {
+  /** Update cache from a status object (call after api.status()). */
+  update(status) {
+    if (!status) return;
+    if (status.peer_id) _localPeerID = status.peer_id;
+    if (status.node_name) _localNodeName = status.node_name;
+    const list = status.peer_list || [];
+    for (const p of list) {
+      const entry = typeof p === 'string' ? { peer_id: p } : p;
+      if (entry.node_name) _nameMap.set(entry.peer_id, entry.node_name);
+    }
+  },
+  /** Fetch status and refresh the cache. */
+  async refresh() {
+    try { this.update(await fetchJSON('/api/status')); } catch { /* ignore */ }
+  },
+  /** Resolve a peer ID to a display label: node name → "local" → truncated hash. */
+  resolve(id) {
+    if (!id) return 'Unknown';
+    if (id === _localPeerID) return _localNodeName || 'local';
+    return _nameMap.get(id) || id.slice(0, 12) + '…';
+  },
+  /** Check if the given id is the local node. */
+  isLocal(id) { return id && id === _localPeerID; },
+  /** Return the local peer ID. */
+  localID() { return _localPeerID; },
+  /** Return the local node name. */
+  localName() { return _localNodeName; },
+};
+
 export const api = {
   search(q, page = 1, size = 10) {
     return fetchJSON(`/api/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`);

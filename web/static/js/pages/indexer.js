@@ -1,12 +1,66 @@
 // Doogle v2 — Indexer Dashboard (enhanced with document browser + detail modals)
-import { api } from '../api.js';
-import { showModal, scoreBar, renderBarChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
+import { api, peerNames } from '../api.js';
+import { showModal, scoreBar, cardSkeleton, escapeHtml } from '../components.js';
+import { formatNum } from '../spotlight.js';
 
 let activeTab = 'overview';
 let docOffset = 0;
 const DOC_PAGE_SIZE = 20;
 let currentPeerID = '';
 let docPeerFilter = ''; // '' = all, 'local' = my docs, 'peers' = from peers
+
+// ── Dashboard Helpers ──
+
+const PEER_COLORS = [
+  'var(--green)',   // local
+  'var(--blue)',    // peer 1
+  'var(--purple)',  // peer 2
+  'var(--amber)',   // peer 3
+  'var(--accent)',  // peer 4
+  'var(--red)',     // peer 5
+];
+
+function healthDot(color) {
+  return `<span class="sl-health sl-health--${color}"></span>`;
+}
+
+function cssRing(value, max, color, label, size = 64) {
+  const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
+  return `
+    <div class="sl-ring-group">
+      <div class="sl-ring" style="--value:${pct};--color:${color};--size:${size}px">
+        <span class="sl-ring-value">${pct}%</span>
+      </div>
+      <div class="sl-ring-meta">
+        <span class="sl-ring-pct">${pct}%</span>
+        <span class="sl-ring-label">${escapeHtml(label)}</span>
+      </div>
+    </div>`;
+}
+
+function cardWrap(title, health, content, extra = '') {
+  const hc = health === 'amber' ? 'sl-card--warning' : health === 'red' ? 'sl-card--critical' : '';
+  return `
+    <div class="sl-card ${extra} ${hc}">
+      <div class="sl-card-header">
+        ${healthDot(health)}
+        <span class="sl-card-title">${escapeHtml(title)}</span>
+      </div>
+      ${content}
+    </div>`;
+}
+
+function parseUptimeMinutes(uptime) {
+  if (!uptime) return 1;
+  let total = 0;
+  const h = uptime.match(/(\d+)h/);
+  const m = uptime.match(/(\d+)m/);
+  const s = uptime.match(/(\d+)s/);
+  if (h) total += parseInt(h[1]) * 60;
+  if (m) total += parseInt(m[1]);
+  if (s) total += parseInt(s[1]) / 60;
+  return Math.max(1, total);
+}
 
 export function renderIndexer(container) {
   container.innerHTML = `
@@ -48,62 +102,215 @@ async function renderTab() {
 
 async function renderOverview(el) {
   try {
-    const [status, indexer] = await Promise.all([
+    const [status, indexer, leaderboard, domains] = await Promise.all([
       api.status(),
       api.indexerStats().catch(() => null),
+      api.leaderboard().catch(() => null),
+      api.domainOwnership().catch(() => null),
     ]);
 
+    peerNames.update(status);
+
+    // ── Derived values ──
+    const indexedDocs = status.indexed_docs || 0;
+    const localDocs = status.local_docs || 0;
+    const peerDocs = status.peer_docs || 0;
     const totalIndexed = indexer?.total_indexed || 0;
-    const avgQuality = indexer?.avg_quality;
-    const avgSpam = indexer?.avg_spam;
+    const avgQuality = indexer?.avg_quality || 0;
+    const avgSpam = indexer?.avg_spam || 0;
     const rejected = indexer?.spam_rejected || 0;
     const duplicates = indexer?.duplicates_skipped || 0;
     const emptySkipped = indexer?.empty_skipped || 0;
+    const totalFiltered = rejected + duplicates + emptySkipped;
+    const acceptanceDenom = totalIndexed + totalFiltered;
+    const acceptanceRate = acceptanceDenom > 0 ? totalIndexed / acceptanceDenom : 1;
+    const upMins = parseUptimeMinutes(status.uptime);
+    const docsPerMin = upMins > 0 ? (indexedDocs / upMins).toFixed(1) : '0';
+    const localPct = indexedDocs > 0 ? localDocs / indexedDocs : 0;
 
-    el.innerHTML = `
-      <div class="card-grid">
-        <div class="card">
-          <div class="card-label">Indexed Documents</div>
-          <div class="card-value">${status.indexed_docs.toLocaleString()}</div>
-          <div class="card-sub">in Bleve store</div>
+    // Quality grade
+    const qualGrade = avgQuality >= 0.8 ? 'A' : avgQuality >= 0.6 ? 'B' : avgQuality >= 0.4 ? 'C' : avgQuality >= 0.2 ? 'D' : 'F';
+
+    // Domain data
+    const totalDomains = domains?.total_domains || 0;
+    const ownedDomains = domains?.owned_domains || 0;
+    const ownershipPct = totalDomains > 0 ? ownedDomains / totalDomains : 0;
+
+    // Network data
+    const forwarded = status.forwarded_tasks || 0;
+    const received = status.received_tasks || 0;
+    const connectedPeers = status.connected_peers || 0;
+    const totalTasks = forwarded + received;
+
+    // ── Card 1: Index Overview (wide, span 2) ──
+    const overviewHealth = indexedDocs > 0 ? 'green' : 'amber';
+    const card1 = cardWrap('Index Overview', overviewHealth, `
+      <div class="sl-body-row">
+        <div>
+          <div class="sl-big-num">${formatNum(indexedDocs)}</div>
+          <div class="sl-big-label">indexed documents</div>
         </div>
-        <div class="card">
-          <div class="card-label">Processed Total</div>
-          <div class="card-value">${totalIndexed.toLocaleString()}</div>
-          <div class="card-sub">passed through pipeline</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Avg Quality Score</div>
-          <div class="card-value">${typeof avgQuality === 'number' && avgQuality > 0 ? avgQuality.toFixed(3) : 'N/A'}</div>
-          ${typeof avgQuality === 'number' && avgQuality > 0 ? qualityBar(avgQuality, 'green') : ''}
-        </div>
-        <div class="card">
-          <div class="card-label">Avg Spam Score</div>
-          <div class="card-value">${typeof avgSpam === 'number' && avgSpam > 0 ? avgSpam.toFixed(3) : 'N/A'}</div>
-          ${typeof avgSpam === 'number' && avgSpam > 0 ? qualityBar(avgSpam, 'red') : ''}
-        </div>
-        <div class="card">
-          <div class="card-label">Spam Rejected</div>
-          <div class="card-value">${rejected.toLocaleString()}</div>
-          <div class="card-sub">spam score > 0.7</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Duplicates Skipped</div>
-          <div class="card-value">${duplicates.toLocaleString()}</div>
-          <div class="card-sub">near-duplicate content</div>
-        </div>
-        <div class="card">
-          <div class="card-label">Empty Skipped</div>
-          <div class="card-value">${emptySkipped.toLocaleString()}</div>
-          <div class="card-sub">no content/title</div>
+        ${cssRing(localPct, 1, 'var(--green)', 'local content')}
+      </div>
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalIndexed)}</span><span class="sl-stat-label">Processed</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(localDocs)}</span><span class="sl-stat-label">Local Docs</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerDocs)}</span><span class="sl-stat-label">Peer Docs</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${docsPerMin}</span><span class="sl-stat-label">Docs/min</span></div>
+      </div>
+    `, 'sl-card--wide');
+
+    // ── Card 2: Document Quality ──
+    const qualHealth = avgQuality >= 0.6 ? 'green' : avgQuality >= 0.3 ? 'amber' : 'red';
+    const qualPct = Math.round(avgQuality * 100);
+    const card2 = cardWrap('Document Quality', qualHealth, `
+      <div class="sl-body-row">
+        ${cssRing(avgQuality, 1, qualHealth === 'green' ? 'var(--green)' : qualHealth === 'amber' ? 'var(--amber)' : 'var(--red)', 'avg quality')}
+        <div>
+          <div class="sl-big-num">${qualPct}%</div>
+          <div class="sl-big-label">quality score</div>
         </div>
       </div>
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${avgSpam > 0 ? avgSpam.toFixed(2) : '—'}</span><span class="sl-stat-label">Avg Spam</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">Grade ${qualGrade}</span><span class="sl-stat-label">Quality</span></div>
+      </div>
+    `);
 
-      <div class="section">
-        <h3>Pipeline Throughput</h3>
-        <div class="chart-container">
-          <canvas id="indexer-throughput-chart"></canvas>
+    // ── Card 3: Content Sources (wide, span 2) — KEY CARD ──
+    const explorers = leaderboard?.explorers || [];
+    const hasLeaderboard = explorers.length > 0;
+    const hasBothSources = localDocs > 0 && peerDocs > 0;
+    const sourcesHealth = hasBothSources ? 'green' : (localDocs > 0 || peerDocs > 0) ? 'amber' : 'red';
+    const totalSourceDocs = localDocs + peerDocs;
+
+    let stackedBarHTML = '';
+    let legendHTML = '';
+    let contributorsCount = 0;
+
+    if (hasLeaderboard && totalSourceDocs > 0) {
+      // Build segments from leaderboard data
+      const segments = [];
+      // Local segment
+      if (localDocs > 0) {
+        segments.push({ label: 'Local', count: localDocs, color: PEER_COLORS[0] });
+      }
+      // Top 5 peers from leaderboard
+      const peerExplorers = explorers.filter(e => e.peer_id !== status.peer_id).slice(0, 5);
+      contributorsCount = peerExplorers.length + (localDocs > 0 ? 1 : 0);
+      let accountedPeerDocs = 0;
+      peerExplorers.forEach((exp, i) => {
+        const count = exp.documents || exp.docs_contributed || 0;
+        accountedPeerDocs += count;
+        segments.push({
+          label: peerNames.resolve(exp.peer_id),
+          count,
+          color: PEER_COLORS[(i + 1) % PEER_COLORS.length],
+        });
+      });
+      // "Others" segment for unaccounted peer docs
+      const otherDocs = Math.max(0, peerDocs - accountedPeerDocs);
+      if (otherDocs > 0) {
+        segments.push({ label: 'Others', count: otherDocs, color: 'var(--text-muted)' });
+      }
+
+      const barSegments = segments.map(s => {
+        const pct = totalSourceDocs > 0 ? (s.count / totalSourceDocs * 100) : 0;
+        return `<div class="sl-stacked-segment" style="width:${Math.max(pct, 1)}%;background:${s.color}" title="${escapeHtml(s.label)}: ${formatNum(s.count)}"></div>`;
+      }).join('');
+
+      const legendItems = segments.map(s =>
+        `<span class="sl-stacked-legend-item"><span class="sl-stacked-dot" style="background:${s.color}"></span>${escapeHtml(s.label)} (${formatNum(s.count)})</span>`
+      ).join('');
+
+      stackedBarHTML = `<div class="sl-stacked-bar">${barSegments}</div>`;
+      legendHTML = `<div class="sl-stacked-legend">${legendItems}</div>`;
+    } else if (totalSourceDocs > 0) {
+      // Fallback: simple 2-segment bar
+      contributorsCount = (localDocs > 0 ? 1 : 0) + (peerDocs > 0 ? 1 : 0);
+      const localPctBar = totalSourceDocs > 0 ? (localDocs / totalSourceDocs * 100) : 0;
+      const peerPctBar = 100 - localPctBar;
+      stackedBarHTML = `
+        <div class="sl-stacked-bar">
+          ${localDocs > 0 ? `<div class="sl-stacked-segment" style="width:${Math.max(localPctBar, 1)}%;background:var(--green)" title="Local: ${formatNum(localDocs)}"></div>` : ''}
+          ${peerDocs > 0 ? `<div class="sl-stacked-segment" style="width:${Math.max(peerPctBar, 1)}%;background:var(--blue)" title="Peers: ${formatNum(peerDocs)}"></div>` : ''}
+        </div>`;
+      legendHTML = `
+        <div class="sl-stacked-legend">
+          <span class="sl-stacked-legend-item"><span class="sl-stacked-dot" style="background:var(--green)"></span>Local (${formatNum(localDocs)})</span>
+          <span class="sl-stacked-legend-item"><span class="sl-stacked-dot" style="background:var(--blue)"></span>Peers (${formatNum(peerDocs)})</span>
+        </div>`;
+    }
+
+    const card3 = cardWrap('Content Sources', sourcesHealth, `
+      <div class="sl-big-num">${formatNum(totalSourceDocs)}</div>
+      <div class="sl-big-label">total documents</div>
+      ${stackedBarHTML}
+      ${legendHTML}
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(localDocs)}</span><span class="sl-stat-label">Local</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerDocs)}</span><span class="sl-stat-label">From Peers</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${contributorsCount}</span><span class="sl-stat-label">Contributors</span></div>
+      </div>
+    `, 'sl-card--wide');
+
+    // ── Card 4: Pipeline Health ──
+    const acceptPct = Math.round(acceptanceRate * 100);
+    const pipeHealth = acceptPct >= 70 ? 'green' : acceptPct >= 40 ? 'amber' : 'red';
+    const card4 = cardWrap('Pipeline Health', pipeHealth, `
+      <div class="sl-body-row">
+        ${cssRing(acceptanceRate, 1, pipeHealth === 'green' ? 'var(--green)' : pipeHealth === 'amber' ? 'var(--amber)' : 'var(--red)', 'acceptance rate')}
+        <div>
+          <div class="sl-big-num">${formatNum(totalFiltered)}</div>
+          <div class="sl-big-label">filtered out</div>
         </div>
+      </div>
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(rejected)}</span><span class="sl-stat-label">Spam</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(duplicates)}</span><span class="sl-stat-label">Duplicates</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(emptySkipped)}</span><span class="sl-stat-label">Empty</span></div>
+      </div>
+    `);
+
+    // ── Card 5: Domain Coverage ──
+    const domainHealth = ownedDomains > 0 ? 'green' : totalDomains > 0 ? 'amber' : 'amber';
+    const card5 = cardWrap('Domain Coverage', domainHealth, `
+      <div class="sl-body-row">
+        ${cssRing(ownershipPct, 1, 'var(--accent)', 'ownership')}
+        <div>
+          <div class="sl-big-num">${formatNum(ownedDomains)}</div>
+          <div class="sl-big-label">owned domains</div>
+        </div>
+      </div>
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalDomains)}</span><span class="sl-stat-label">Total Domains</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${Math.round(ownershipPct * 100)}%</span><span class="sl-stat-label">Ownership</span></div>
+      </div>
+    `);
+
+    // ── Card 6: Network Contribution ──
+    const hasActivity = totalTasks > 0;
+    const netHealth = connectedPeers > 0 && hasActivity ? 'green' : connectedPeers > 0 ? 'amber' : 'red';
+    const card6 = cardWrap('Network Contribution', netHealth, `
+      <div class="sl-body-row" style="gap:24px">
+        <div style="text-align:center">
+          <div class="sl-big-num">${formatNum(forwarded)}</div>
+          <div class="sl-big-label">forwarded</div>
+        </div>
+        <div style="text-align:center">
+          <div class="sl-big-num">${formatNum(received)}</div>
+          <div class="sl-big-label">received</div>
+        </div>
+      </div>
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(connectedPeers)}</span><span class="sl-stat-label">Connected Peers</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalTasks)}</span><span class="sl-stat-label">Total Tasks</span></div>
+      </div>
+    `);
+
+    el.innerHTML = `
+      <div class="sl-dashboard">
+        ${card1}${card2}${card3}${card4}${card5}${card6}
       </div>
 
       <div class="section">
@@ -123,14 +330,6 @@ async function renderOverview(el) {
         </div>
       </div>
     `;
-
-    // Throughput bar chart
-    renderBarChart('indexer-throughput-chart', [
-      { label: 'Indexed', value: totalIndexed, color: getCSS('--green') },
-      { label: 'Spam Rejected', value: rejected, color: getCSS('--red') },
-      { label: 'Duplicates', value: duplicates, color: getCSS('--amber') },
-      { label: 'Empty', value: emptySkipped, color: getCSS('--border-light') },
-    ], { height: 200 });
   } catch (err) {
     el.innerHTML = `<div class="empty-state"><p>Failed to load indexer stats: ${err.message}</p></div>`;
   }
@@ -224,7 +423,7 @@ async function loadDocuments() {
               const isLocal = !d.origin_peer_id || d.origin_peer_id === currentPeerID;
               const originBadge = isLocal
                 ? '<span class="badge badge-green">local</span>'
-                : `<span class="badge badge-blue" title="${escapeHtml(d.origin_peer_id || '')}">${escapeHtml((d.origin_peer_id || '').slice(0, 12))}...</span>`;
+                : `<span class="badge badge-blue" title="${escapeHtml(d.origin_peer_id || '')}">${escapeHtml(peerNames.resolve(d.origin_peer_id))}</span>`;
               return `
               <tr>
                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -435,7 +634,7 @@ function showSearchResultDetail(r) {
       <span class="detail-value">${r.score.toFixed(4)}</span>
       ${r.peer_id ? `
         <span class="detail-label">Source Peer</span>
-        <span class="detail-value" style="font-family:monospace;font-size:0.85em">${escapeHtml(r.peer_id)}</span>
+        <span class="detail-value">${escapeHtml(peerNames.resolve(r.peer_id))} <span style="font-family:monospace;font-size:0.8em;color:var(--text-muted)">${escapeHtml(r.peer_id.slice(0, 16))}…</span></span>
       ` : ''}
     </div>
 

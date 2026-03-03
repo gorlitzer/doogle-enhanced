@@ -1,6 +1,6 @@
 // Doogle v2 — Fleet Management Dashboard
 import { escapeHtml, cardSkeleton, timeAgo } from '../components.js';
-import { api } from '../api.js';
+import { api, peerNames } from '../api.js';
 
 let fleetToken = '';
 
@@ -73,7 +73,7 @@ async function loadFleetData(container) {
         </div>
         <div class="card">
           <div class="card-label">Coordinator</div>
-          <div class="card-value" style="font-size:0.75em;word-break:break-all">${escapeHtml(coordID.slice(0, 16))}...</div>
+          <div class="card-value" style="font-size:0.75em;word-break:break-all">${escapeHtml(peerNames.resolve(coordID))}</div>
         </div>
       </div>
 

@@ -450,7 +450,7 @@ async function updateStatusBar() {
     if (!searchPeerID && s.peer_id) searchPeerID = s.peer_id;
     const nodeEl = document.getElementById('status-node');
     const peerEl = document.getElementById('status-peers');
-    if (nodeEl) nodeEl.textContent = `Node: ${s.peer_id.slice(0, 12)}... | Indexed: ${s.indexed_docs} docs | Crawled: ${s.crawled_urls} URLs | Queue: ${s.urls_in_queue}`;
+    if (nodeEl) nodeEl.textContent = `Node: ${s.node_name || s.peer_id.slice(0, 12) + '...'} | Indexed: ${s.indexed_docs} docs | Crawled: ${s.crawled_urls} URLs | Queue: ${s.urls_in_queue}`;
     if (peerEl) peerEl.textContent = `${s.connected_peers} peers | Uptime: ${s.uptime}`;
   } catch {
     const el = document.getElementById('status-node');
