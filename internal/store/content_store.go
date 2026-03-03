@@ -72,6 +72,38 @@ func (cs *ContentStore) HasChanged(url, newHash string) bool {
 	return rec.ContentHash != newHash
 }
 
+// PruneStale deletes content records whose ScoredAt is older than maxAge.
+func (cs *ContentStore) PruneStale(maxAge time.Duration) (int, error) {
+	cutoff := time.Now().Add(-maxAge)
+	pruned := 0
+	err := cs.db.Update(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(contentPrefix)
+		opts.PrefetchValues = true
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			val, err := item.ValueCopy(nil)
+			if err != nil {
+				continue
+			}
+			var rec ContentRecord
+			if json.Unmarshal(val, &rec) != nil {
+				continue
+			}
+			if rec.ScoredAt.Before(cutoff) {
+				if err := txn.Delete(item.KeyCopy(nil)); err != nil {
+					return err
+				}
+				pruned++
+			}
+		}
+		return nil
+	})
+	return pruned, err
+}
+
 func (cs *ContentStore) contentKey(url string) []byte {
 	h := sha256.Sum256([]byte(url))
 	return []byte(contentPrefix + hex.EncodeToString(h[:]))

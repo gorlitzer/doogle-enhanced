@@ -78,8 +78,11 @@ type IndexConfig struct {
 }
 
 type StorageConfig struct {
-	DataDir   string `yaml:"data_dir"`
-	BadgerDir string `yaml:"badger_dir"`
+	DataDir       string        `yaml:"data_dir"`
+	BadgerDir     string        `yaml:"badger_dir"`
+	GCInterval    time.Duration `yaml:"gc_interval"`
+	SeenTTL       time.Duration `yaml:"seen_ttl"`
+	ContentMaxAge time.Duration `yaml:"content_max_age"`
 }
 
 type SearchConfig struct {
@@ -128,8 +131,11 @@ func DefaultConfig() *Config {
 			AntiEntropyInterval: 2 * time.Minute,
 		},
 		Storage: StorageConfig{
-			DataDir:   "./data/doogle",
-			BadgerDir: "badger",
+			DataDir:       "./data/doogle",
+			BadgerDir:     "badger",
+			GCInterval:    5 * time.Minute,
+			SeenTTL:       7 * 24 * time.Hour,
+			ContentMaxAge: 30 * 24 * time.Hour,
 		},
 		Search: SearchConfig{
 			MaxResults:      50,

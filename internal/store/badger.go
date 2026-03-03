@@ -16,7 +16,14 @@ type BadgerStore struct {
 func NewBadgerStore(path string) (*BadgerStore, error) {
 	opts := badger.DefaultOptions(path).
 		WithLogger(nil). // suppress badger's verbose logging
-		WithValueLogFileSize(64 << 20)
+		WithValueLogFileSize(64 << 20).
+		WithNumMemtables(2).
+		WithNumLevelZeroTables(2).
+		WithNumLevelZeroTablesStall(4).
+		WithBlockCacheSize(32 << 20).
+		WithIndexCacheSize(16 << 20).
+		WithNumCompactors(1).
+		WithCompactL0OnClose(true)
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -69,6 +76,11 @@ func (s *BadgerStore) Delete(key []byte) error {
 // DB returns the underlying BadgerDB instance.
 func (s *BadgerStore) DB() *badger.DB {
 	return s.db
+}
+
+// RunGC triggers a BadgerDB value log garbage collection pass.
+func (s *BadgerStore) RunGC() error {
+	return s.db.RunValueLogGC(0.5)
 }
 
 // Close closes the database.

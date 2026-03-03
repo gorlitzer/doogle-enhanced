@@ -3,6 +3,7 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 )
@@ -12,12 +13,13 @@ const seenPrefix = "seen:"
 // DedupStore provides persistent URL deduplication backed by BadgerDB.
 // Replaces the in-memory seen map that was lost on restart.
 type DedupStore struct {
-	db *badger.DB
+	db      *badger.DB
+	SeenTTL time.Duration
 }
 
 // NewDedupStore creates a DedupStore sharing the given BadgerStore's DB.
 func NewDedupStore(bs *BadgerStore) *DedupStore {
-	return &DedupStore{db: bs.db}
+	return &DedupStore{db: bs.db, SeenTTL: 7 * 24 * time.Hour}
 }
 
 // HasSeen returns true if the URL has already been marked as seen.
@@ -30,11 +32,12 @@ func (ds *DedupStore) HasSeen(url string) bool {
 	return err == nil
 }
 
-// MarkSeen persists a URL as seen.
+// MarkSeen persists a URL as seen with a TTL so entries auto-expire.
 func (ds *DedupStore) MarkSeen(url string) error {
 	key := ds.seenKey(url)
 	return ds.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, []byte{1})
+		e := badger.NewEntry(key, []byte{1}).WithTTL(ds.SeenTTL)
+		return txn.SetEntry(e)
 	})
 }
 
@@ -54,6 +57,12 @@ func (ds *DedupStore) SeenCount() int {
 		return nil
 	})
 	return count
+}
+
+// PruneExpired returns the current seen count for logging purposes.
+// BadgerDB handles TTL expiry automatically during GC.
+func (ds *DedupStore) PruneExpired() (int, error) {
+	return ds.SeenCount(), nil
 }
 
 func (ds *DedupStore) seenKey(url string) []byte {
