@@ -1,5 +1,6 @@
 # Binaries
 bin/
+doogle
 *.exe
 *.dll
 *.so
@@ -33,6 +34,10 @@ node_modules/
 # Test
 coverage.out
 *.test
+
+# Runtime
+doogle.log
+.doogle.pid
 
 # Build
 dist/
