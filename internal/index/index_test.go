@@ -176,6 +176,72 @@ func TestBleveStore_GetNotFound(t *testing.T) {
 	}
 }
 
+// ---- BleveStore.Delete tests ----
+
+func TestBleveStore_Delete(t *testing.T) {
+	bs := newTestBleve(t)
+
+	doc := testDoc("del1", "https://example.com/del", "Delete Me", "Content to be deleted")
+	if err := bs.Index(doc); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify it exists
+	count, _ := bs.DocCount()
+	if count != 1 {
+		t.Fatalf("expected DocCount=1, got %d", count)
+	}
+
+	// Delete it
+	if err := bs.Delete("del1"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	// Verify it's gone
+	count, _ = bs.DocCount()
+	if count != 0 {
+		t.Fatalf("expected DocCount=0 after delete, got %d", count)
+	}
+
+	// Get should fail
+	_, err := bs.Get("del1")
+	if err == nil {
+		t.Fatal("expected error for deleted doc")
+	}
+}
+
+func TestBleveStore_DeleteNonexistent(t *testing.T) {
+	bs := newTestBleve(t)
+
+	// Deleting a non-existent doc should not error (Bleve is idempotent)
+	if err := bs.Delete("nonexistent"); err != nil {
+		t.Fatalf("expected no error deleting nonexistent doc, got: %v", err)
+	}
+}
+
+func TestBleveStore_DeleteThenReindex(t *testing.T) {
+	bs := newTestBleve(t)
+
+	doc := testDoc("reindex1", "https://example.com/reindex", "Original", "Original content")
+	bs.Index(doc)
+
+	bs.Delete("reindex1")
+
+	// Re-index with new content
+	doc2 := testDoc("reindex1", "https://example.com/reindex", "Updated", "Updated content")
+	if err := bs.Index(doc2); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := bs.Get("reindex1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "Updated" {
+		t.Fatalf("expected title='Updated', got %q", got.Title)
+	}
+}
+
 // ---- BatchIndexer tests ----
 
 func TestBatchIndexer_FlushOnFull(t *testing.T) {
