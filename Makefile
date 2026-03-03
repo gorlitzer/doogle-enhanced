@@ -1,4 +1,4 @@
-.PHONY: help setup build run upgrade test dev stop clean nuke release checksums tag
+.PHONY: help setup build run upgrade test dev stop clean nuke release checksums patch minor major
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -28,7 +28,9 @@ help:
 	@echo "    make nuke               Full reset: clean + delete crawl data + Go runtime"
 	@echo "    make release            Cross-compile binaries for all platforms to dist/"
 	@echo "    make checksums          Generate SHA-256 checksums for dist/ binaries"
-	@echo "    make tag TAG=vX.Y.Z     Create + push annotated git tag"
+	@echo "    make patch              Tag + release: v0.1.0 → v0.1.1"
+	@echo "    make minor              Tag + release: v0.1.0 → v0.2.0"
+	@echo "    make major              Tag + release: v0.1.0 → v1.0.0"
 	@echo ""
 
 setup:
@@ -142,9 +144,28 @@ checksums:
 	@echo "==> Checksums:"
 	@cat $(DIST_DIR)/checksums.txt
 
-tag:
-ifndef TAG
-	$(error TAG is required — usage: make tag TAG=v1.0.0)
-endif
-	git tag -a $(TAG) -m "Release $(TAG)"
-	git push origin $(TAG)
+define bump_version
+	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	MAJOR=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f1); \
+	MINOR=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f2); \
+	PATCH=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f3); \
+	case $(1) in \
+		patch) PATCH=$$((PATCH + 1)) ;; \
+		minor) MINOR=$$((MINOR + 1)); PATCH=0 ;; \
+		major) MAJOR=$$((MAJOR + 1)); MINOR=0; PATCH=0 ;; \
+	esac; \
+	NEXT="v$$MAJOR.$$MINOR.$$PATCH"; \
+	echo "$$CURRENT → $$NEXT"; \
+	git tag -a $$NEXT -m "Release $$NEXT" && \
+	git push origin $$NEXT && \
+	echo "Tagged and pushed $$NEXT — release workflow started."
+endef
+
+patch:
+	$(call bump_version,patch)
+
+minor:
+	$(call bump_version,minor)
+
+major:
+	$(call bump_version,major)

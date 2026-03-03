@@ -342,7 +342,9 @@ make clean                      # remove build artifacts (bin/, dist/, logs, pid
 make nuke                       # full reset: clean + delete crawl data + Go runtime
 make release                    # cross-compile for all platforms to dist/
 make checksums                  # generate SHA-256 checksums
-make tag TAG=v1.0.0             # create + push annotated git tag
+make patch                      # tag + release: v0.1.0 → v0.1.1
+make minor                      # tag + release: v0.1.0 → v0.2.0
+make major                      # tag + release: v0.1.0 → v1.0.0
 ```
 
 ### Examples
