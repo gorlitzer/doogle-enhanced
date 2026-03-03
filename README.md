@@ -338,8 +338,8 @@ make restart                    # alias for 'make run' (rebuild + restart)
 make stop                       # gracefully stop running node (SIGTERM, 15s timeout)
 make test                       # run all tests
 make dev                        # Docker foreground on :7002 (Ctrl+C to stop)
-make clean                      # stop node + delete crawl data in data/
-make nuke                       # full reset: clean + remove in-repo Go runtime
+make clean                      # remove build artifacts (bin/, dist/, logs, pid)
+make nuke                       # full reset: clean + delete crawl data + Go runtime
 make release                    # cross-compile for all platforms to dist/
 make checksums                  # generate SHA-256 checksums
 make tag TAG=v1.0.0             # create + push annotated git tag
