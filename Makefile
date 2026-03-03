@@ -24,8 +24,8 @@ help:
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make test               Run all tests"
-	@echo "    make clean              Stop node + delete crawl data in data/"
-	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
+	@echo "    make clean              Remove build artifacts (bin/, dist/, logs, pid)"
+	@echo "    make nuke               Full reset: clean + delete crawl data + Go runtime"
 	@echo "    make release            Cross-compile binaries for all platforms to dist/"
 	@echo "    make checksums          Generate SHA-256 checksums for dist/ binaries"
 	@echo "    make tag TAG=vX.Y.Z     Create + push annotated git tag"
@@ -115,13 +115,13 @@ stop:
 	@echo "Stopped."
 
 clean: stop
-	@echo "WARNING: This will DELETE all crawl data in data/"
-	@echo "Press Ctrl+C within 5 seconds to abort."
-	@sleep 5
-	rm -rf data/ doogle.log
+	rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log
 
 nuke: clean
-	rm -rf .go/ $(DIST_DIR)/
+	@echo "WARNING: This will DELETE all crawl data and the local Go runtime."
+	@echo "Press Ctrl+C within 5 seconds to abort."
+	@sleep 5
+	rm -rf data/ .go/
 
 release:
 	@echo "==> Cross-compiling $(VERSION) for all platforms..."
