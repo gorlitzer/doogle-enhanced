@@ -18,70 +18,32 @@
 
 ---
 
-Google indexes 5% of the web and decides what you see. Doogle's mission is to index the other 95%. Surface web, `.onion` hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to. Doogle is not a product. It is infrastructure for information freedom: censorship-resistant by design, privacy-preserving by default, and community-owned forever. Your searches never leave your machine. Your node, your index, your rules.
-
-Ships as a **single Go binary**. Run it, connect to peers, and you become part of a distributed search network. Nodes discover URLs via GossipSub, crawl web pages with a built-in crawler, index content locally using Bleve full-text search, and answer queries by fanning out to connected peers and merging results. No PostgreSQL. No Redis. No Elasticsearch. Everything is embedded.
-
----
-
-## Vision
-
-> Google indexes 5% of the web and decides what you see. Doogle's mission is to index the other 95%. Surface web, .onion hidden services, I2P eepsites, academic archives, government datasets — every corner of the internet that people need access to.
->
-> Doogle is not a product. It is infrastructure for information freedom: censorship-resistant by design, privacy-preserving by default, and community-owned forever. Your searches never leave your machine. Your node, your index, your rules.
-
----
-
-## Your Role
-
-Doogle works because different people care about different things. No sign-up, no commitment — you contribute just by being yourself.
-
-**The Explorer** — Pick the topics that interest you in the setup wizard. Your node crawls and indexes those corners of the web. You build a specialized index just by following your curiosity.
-
-**The Guardian** — When you spot spam, phishing, or junk in search results, flag it. Reports propagate across the network and bad actors get quarantined. The more people who flag, the cleaner the index for everyone.
-
-**The Connector** — Keep your node running. The longer it stays online, the more peers it serves. Just leave it on and the network gets stronger.
-
-**The Specialist** — Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Stale nodes get replaced by fresh ones — people who care about a topic keep that corner alive.
-
-**The Curator** — Your browsing patterns, flags, and topic choices train the network's quality signals. Good pages rise, junk fades. You shape relevance without writing a single rule.
-
-**The Amplifier** — You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics and new corners of the web to the collective index.
-
-**The Archivist** — You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your node becomes a time capsule — preserving knowledge that would otherwise be lost.
-
-**The Builder** — You see what's missing and build it. A better crawler, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.
-
-These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point.
+Single Go binary. Run it, connect to peers, become part of a distributed search network. Nodes discover URLs via GossipSub, crawl pages, index locally with Bleve, and answer queries by fanning out to peers and merging results. No external databases — everything is embedded.
 
 ---
 
 ## Quick Start
 
-### 1. Clone & Setup
+### Install (binary)
+
+```bash
+GITHUB_TOKEN=ghp_... sh install.sh
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for token setup and detailed instructions.
+
+### Build from source
 
 ```bash
 git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
 make setup                      # checks/installs Go, Docker, all prereqs
-```
-
-`make setup` auto-installs Go locally if not found — no root required. On Windows, use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/) or Docker.
-
-### 2. Build & Run
-
-```bash
 make run                        # build + launch node
 ```
 
-Open [http://localhost:7002](http://localhost:7002) — the setup wizard guides you through seeding and configuration. The default bind is `0.0.0.0`, so other devices on your LAN can also reach the UI at `http://<your-ip>:7002`.
+Open [http://localhost:7002](http://localhost:7002) — the setup wizard guides you through seeding and configuration.
 
-**No `make`?** Run directly with Go:
-```bash
-go build -o bin/doogle ./cmd/doogle && ./bin/doogle
-```
-
-### 3. Connect a Second Node
+### Connect a second node
 
 Nodes find each other **automatically** via the IPFS public DHT — no manual bootstrap needed:
 
@@ -112,14 +74,6 @@ docker compose up -d
 ```
 
 Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
-
-### Build from Source (manual)
-
-```bash
-make setup                      # installs Go if needed
-make build
-./bin/doogle --seed "https://example.com"
-```
 
 ---
 
@@ -202,15 +156,6 @@ make build
 - 5-layer security: HMAC-SHA256 fleet secret, derived API bearer token, libp2p Noise encryption, peer ID verification, localhost binding
 - Heartbeat monitoring with automatic staleness detection (online → stale → offline)
 - Fleet dashboard in admin UI with token-gated access
-
-**Coming Soon**
-- `.onion` crawling via Tor SOCKS5 proxy
-- I2P eepsite support via SAM bridge
-- Privacy-preserving P2P (libp2p-over-Tor transport)
-- Encrypted search queries (end-to-end encrypted peer queries)
-- Semantic search (sentence embeddings, hybrid BM25 + vector scoring)
-- Knowledge graph with entity cards
-- Browser extension, mobile client
 
 ---
 
@@ -359,6 +304,15 @@ Flags:
   --size N             Results per page (default: 10)
 ```
 
+### Version & Update
+
+```
+doogle version              # show version, commit, build date, go, os/arch
+doogle version --json       # JSON output
+doogle update               # self-update to latest release
+doogle update --check       # check without installing
+```
+
 ### Backup & Restore
 
 ```
@@ -386,6 +340,9 @@ make test                       # run all tests
 make dev                        # Docker foreground on :7002 (Ctrl+C to stop)
 make clean                      # stop node + delete crawl data in data/
 make nuke                       # full reset: clean + remove in-repo Go runtime
+make release                    # cross-compile for all platforms to dist/
+make checksums                  # generate SHA-256 checksums
+make tag TAG=v1.0.0             # create + push annotated git tag
 ```
 
 ### Examples
@@ -540,19 +497,6 @@ fleet:
   heartbeat_interval: 15s
   node_timeout: 60s
 ```
-
----
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Architecture](docs/architecture.md) | System design, data flow, P2P protocols |
-| [Running a Node](docs/running-a-node.md) | Installation, configuration, deployment |
-| [API Reference](docs/api-reference.md) | HTTP endpoints, request/response formats |
-| [Developer Guide](docs/developer-guide.md) | Code structure, building, testing |
-
-The admin dashboard at `http://localhost:7002` also has built-in docs covering configuration, troubleshooting, VPN/NAT behavior, and shutdown/recovery semantics.
 
 ---
 
