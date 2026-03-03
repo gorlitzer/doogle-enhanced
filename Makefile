@@ -1,10 +1,16 @@
-.PHONY: help setup build run restart test dev stop clean nuke
+.PHONY: help setup build run restart test dev stop clean nuke release checksums tag
 
 BINARY     = doogle
 BIN_DIR    = bin
+DIST_DIR   = dist
 GO_VERSION = 1.22.5
 LOCAL_GO   = .go/go/bin/go
 GO         = $(shell command -v go 2>/dev/null || echo $(LOCAL_GO))
+
+VERSION = $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT  = $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+DATE    = $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS = -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
 help:
 	@echo ""
@@ -20,6 +26,9 @@ help:
 	@echo "    make test               Run all tests"
 	@echo "    make clean              Stop node + delete crawl data in data/"
 	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
+	@echo "    make release            Cross-compile binaries for all platforms to dist/"
+	@echo "    make checksums          Generate SHA-256 checksums for dist/ binaries"
+	@echo "    make tag TAG=vX.Y.Z     Create + push annotated git tag"
 	@echo ""
 
 setup:
@@ -73,7 +82,7 @@ build:
 	  printf 'package web\n\nconst embedHash = "%s"\n' "$$HASH" > web/embed_hash.go.tmp; \
 	  cmp -s web/embed_hash.go.tmp web/embed_hash.go 2>/dev/null || mv web/embed_hash.go.tmp web/embed_hash.go; \
 	  rm -f web/embed_hash.go.tmp
-	$(GO) build -ldflags "-s -w" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
+	$(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
 
 run: build stop
 	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
@@ -112,4 +121,26 @@ clean: stop
 	rm -rf data/ doogle.log
 
 nuke: clean
-	rm -rf .go/
+	rm -rf .go/ $(DIST_DIR)/
+
+release:
+	@echo "==> Cross-compiling $(VERSION) for all platforms..."
+	@mkdir -p $(DIST_DIR)
+	GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-darwin-amd64  ./cmd/doogle
+	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-darwin-arm64  ./cmd/doogle
+	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-linux-amd64   ./cmd/doogle
+	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-linux-arm64   ./cmd/doogle
+	@echo "==> Binaries:"
+	@ls -lh $(DIST_DIR)/
+
+checksums:
+	@cd $(DIST_DIR) && shasum -a 256 $(BINARY)-* > checksums.txt
+	@echo "==> Checksums:"
+	@cat $(DIST_DIR)/checksums.txt
+
+tag:
+ifndef TAG
+	$(error TAG is required — usage: make tag TAG=v1.0.0)
+endif
+	git tag -a $(TAG) -m "Release $(TAG)"
+	git push origin $(TAG)

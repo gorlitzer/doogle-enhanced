@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: github.actor == 'gorlitzer'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Extract version info
+        id: vars
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Cross-compile
+        run: |
+          LDFLAGS="-s -w -X main.version=${{ steps.vars.outputs.VERSION }} -X main.commit=${{ steps.vars.outputs.COMMIT }} -X main.date=${{ steps.vars.outputs.DATE }}"
+          mkdir -p dist
+
+          GOOS=darwin  GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -trimpath -o dist/doogle-darwin-amd64  ./cmd/doogle
+          GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -trimpath -o dist/doogle-darwin-arm64  ./cmd/doogle
+          GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -trimpath -o dist/doogle-linux-amd64   ./cmd/doogle
+          GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -trimpath -o dist/doogle-linux-arm64   ./cmd/doogle
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum doogle-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/doogle-*
+            dist/checksums.txt

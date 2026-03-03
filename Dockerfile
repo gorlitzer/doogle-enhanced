@@ -1,6 +1,10 @@
 # ---- Build stage ----
 FROM golang:1.22-alpine AS builder
 
+ARG VERSION=dev
+ARG COMMIT=none
+ARG DATE=unknown
+
 RUN apk add --no-cache git gcc musl-dev
 
 WORKDIR /src
@@ -8,7 +12,9 @@ COPY go.mod ./
 RUN go mod download || true
 
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/doogle ./cmd/doogle
+RUN go mod tidy && CGO_ENABLED=0 go build \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+    -o /bin/doogle ./cmd/doogle
 
 # ---- Runtime stage ----
 FROM alpine:3.20
