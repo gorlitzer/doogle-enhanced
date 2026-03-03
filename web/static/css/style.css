@@ -5136,6 +5136,18 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   .sl-affinity-bar-label { width: 64px; font-size: 0.72em; }
 }
 
+/* Pipeline strip — compact badge flow with CSS arrows */
+.sl-pipeline-strip {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  margin-top: 12px; font-size: 0.82em;
+}
+.sl-pipeline-strip .badge { position: relative; margin-right: 20px; }
+.sl-pipeline-strip .badge:not(:last-child)::after {
+  content: '→'; position: absolute; right: -16px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); font-size: 0.9em; pointer-events: none;
+}
+.sl-pipeline-strip .badge:last-child { margin-right: 0; }
+
 /* Mobile cards */
 .mobile-cards-grid  { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
                        margin-bottom: 16px; }
