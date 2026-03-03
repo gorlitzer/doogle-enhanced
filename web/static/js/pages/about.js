@@ -340,53 +340,79 @@ function renderOverview(el) {
     </section>
 
     <section class="about-section about-reveal" id="about-your-role">
-      <h2 class="about-section-title">Your Role</h2>
-      <p class="about-section-desc">Doogle works because different people care about different things. Your interests shape the network — no commitment needed, just be yourself.</p>
+      <h2 class="about-section-title">Your Mastery</h2>
+      <p class="about-section-desc">You are the master of your node. Every search you run, every seed you plant, every spam report you file shapes your corner of the web. These are the facets of your mastery — they emerge naturally from how you use your node.</p>
       <div class="about-vision-grid">
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
-          <h3>The Explorer</h3>
+          <h3>Explorer Mastery</h3>
+          <div class="about-role-affinity" data-role="Explorer"></div>
           <p>You pick topics in the wizard that interest you — cooking, science, gaming, whatever. Your node crawls those corners of the web and shares what it finds. You're building a specialized index just by browsing what you love.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
-          <h3>The Guardian</h3>
+          <h3>Guardian Mastery</h3>
+          <div class="about-role-affinity" data-role="Guardian"></div>
           <p>You flag spam, phishing, and garbage when you see it. Reports spread across the network and bad actors get quarantined. The more people who flag, the cleaner the index gets for everyone.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--blue)">${icon('network', 28)}</div>
-          <h3>The Connector</h3>
+          <h3>Connector Mastery</h3>
+          <div class="about-role-affinity" data-role="Connector"></div>
           <p>You keep your node running and connected. The longer your node is online, the more peers it serves, the more resilient the network becomes. Just leave it on — that's the whole contribution.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--purple)">${icon('search', 28)}</div>
-          <h3>The Specialist</h3>
+          <h3>Specialist Mastery</h3>
+          <div class="about-role-affinity" data-role="Specialist"></div>
           <p>Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Nodes naturally specialize — some cover science, others cover local news, others cover niche hobbies.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--amber)">${icon('eye', 28)}</div>
-          <h3>The Curator</h3>
+          <h3>Curator Mastery</h3>
+          <div class="about-role-affinity" data-role="Curator"></div>
           <p>You notice what's good and what's noise. Your browsing patterns, flags, and topic choices train the network's quality signals. The pages you keep coming back to rise; the junk you skip fades. You shape relevance without writing a single rule.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--red, #ef4444)">${icon('megaphone', 28)}</div>
-          <h3>The Amplifier</h3>
+          <h3>Amplifier Mastery</h3>
+          <div class="about-role-affinity" data-role="Amplifier"></div>
           <p>You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics, new perspectives, and new corners of the web to the collective index.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--green)">${icon('trendingUp', 28)}</div>
-          <h3>The Archivist</h3>
+          <h3>Archivist Mastery</h3>
+          <div class="about-role-affinity" data-role="Archivist"></div>
           <p>You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your long-running node becomes a time capsule — preserving knowledge that would otherwise be lost.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--accent)">${icon('code', 28)}</div>
-          <h3>The Builder</h3>
+          <h3>Builder Mastery</h3>
+          <div class="about-role-affinity" data-role="Builder"></div>
           <p>You see what's missing and build it. A better crawler for a specific content type, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.</p>
         </div>
       </div>
-      <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point: a system that adapts to the people who use it, not the other way around.</p>
+      <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These facets aren't assigned — they emerge. The more you use your node, the clearer your mastery profile becomes. <a href="#/admin/profile">Visit your Master Profile</a> to see how your behavior shapes your identity.</p>
     </section>
   `;
+
+  // Async: inject affinity badges from profile data
+  api.profile().then(profile => {
+    const affinities = profile.role_affinities || {};
+    document.querySelectorAll('.about-role-affinity[data-role]').forEach(el => {
+      const role = el.dataset.role;
+      const val = affinities[role] || 0;
+      if (val > 0) {
+        const pct = Math.round(val * 100);
+        el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 8px">
+          <div style="flex:1;height:5px;border-radius:3px;background:var(--border);overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px"></div>
+          </div>
+          <span style="font-size:0.75em;color:var(--text-muted);font-weight:600">${pct}%</span>
+        </div>`;
+      }
+    });
+  }).catch(() => {}); // non-critical
 }
 
 // ─── Tab: How It Works ────────────────────────────────

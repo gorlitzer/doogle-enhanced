@@ -2524,6 +2524,12 @@ async function renderLaunch(el) {
     }
   }
 
+  // Record selected interests in master profile
+  const selectedIds = Array.from(selectedSubs);
+  if (selectedIds.length > 0) {
+    try { await api.recordInterests(selectedIds); } catch { /* non-critical */ }
+  }
+
   const statusEl = document.getElementById('wizard-launch-status');
   if (statusEl) statusEl.textContent = 'Crawling...';
 

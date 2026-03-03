@@ -59,6 +59,10 @@ type Node struct {
 	trustStore   *store.TrustStore
 	trustManager *TrustManager
 
+	// Master profile
+	profileStore    *store.ProfileStore
+	profileComputer *ProfileComputer
+
 	// Fleet management
 	fleetStore    *store.FleetStore
 	coordinator   *fleet.Coordinator
@@ -184,6 +188,9 @@ func (n *Node) init() error {
 	n.trustStore = store.NewTrustStore(bs)
 	n.trustManager = NewTrustManager(n.trustStore, peerID.String())
 
+	// 5c. Profile store
+	n.profileStore = store.NewProfileStore(bs)
+
 	// 6. Bleve index
 	blevePath := filepath.Join(dataDir, n.cfg.Index.BleveDir)
 	bleveIdx, err := index.NewBleveStore(blevePath)
@@ -220,6 +227,19 @@ func (n *Node) init() error {
 	// 9. Indexer + PageRank
 	n.indexer = indexer.New(bleveIdx, n.batchIndexer, n.genStore, n.badger)
 	n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
+
+	// 9b. Profile computer
+	n.profileComputer = NewProfileComputer(n.profileStore, bleveIdx, n.shards)
+	n.profileComputer.UptimeHoursFn = func() float64 {
+		return time.Since(n.startedAt).Hours()
+	}
+	n.profileComputer.ConnectedPeersFn = func() int {
+		return n.shards.NodeCount() - 1 // exclude self
+	}
+	n.profileComputer.IndexedDocsFn = func() int {
+		c, _ := bleveIdx.DocCount()
+		return int(c)
+	}
 
 	// 10. Incremental indexer
 	n.incremental = indexer.NewIncrementalIndexer(
@@ -309,6 +329,17 @@ func (n *Node) init() error {
 		StorageFn:          n.StorageInfo,
 		LeaderboardFn:      n.Leaderboard,
 		DomainOwnershipFn:  n.DomainOwnership,
+		ProfileFn: func() *models.MasterProfile {
+			p, _ := n.profileStore.Get()
+			return p
+		},
+		RecordInterestsFn: n.profileStore.RecordInterests,
+		RecordSearchFn: func(query string) {
+			cat := ClassifyQuery(query)
+			if cat != "" {
+				_ = n.profileStore.RecordSearchTopic(cat)
+			}
+		},
 	}
 	deps.VersionInfo.Version = n.cfg.Version
 	deps.VersionInfo.Commit = n.cfg.Commit
@@ -340,6 +371,9 @@ func (n *Node) Run() error {
 
 	// Start incremental re-scoring
 	n.incremental.Start(n.ctx)
+
+	// Start profile computer
+	n.profileComputer.Start(n.ctx)
 
 	// Start gossip listeners
 	go n.gossipLoop()
@@ -1064,6 +1098,9 @@ func (n *Node) ReportURL(rawURL, reason, detail string) error {
 	if !isNew {
 		return nil // duplicate, don't broadcast
 	}
+
+	// Record in master profile
+	_ = n.profileStore.RecordReport()
 
 	// Broadcast to peers
 	if err := n.gossip.PublishSpamReport(n.ctx, report); err != nil {
