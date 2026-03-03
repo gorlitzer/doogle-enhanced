@@ -313,21 +313,13 @@ async function renderOverview(el) {
         ${card1}${card2}${card3}${card4}${card5}${card6}
       </div>
 
-      <div class="section">
-        <h3>Indexing Pipeline</h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.9em">
-          <span class="badge badge-blue">Crawl</span>
-          <span style="color:var(--text-muted)">&rarr;</span>
-          <span class="badge badge-default">Dedup Check</span>
-          <span style="color:var(--text-muted)">&rarr;</span>
-          <span class="badge badge-purple">NLP Enrich</span>
-          <span style="color:var(--text-muted)">&rarr;</span>
-          <span class="badge badge-amber">Score</span>
-          <span style="color:var(--text-muted)">&rarr;</span>
-          <span class="badge badge-red">Spam Filter</span>
-          <span style="color:var(--text-muted)">&rarr;</span>
-          <span class="badge badge-green">Bleve Index</span>
-        </div>
+      <div class="sl-pipeline-strip">
+        <span class="badge badge-blue">Crawl</span>
+        <span class="badge badge-default">Dedup</span>
+        <span class="badge badge-purple">NLP</span>
+        <span class="badge badge-amber">Score</span>
+        <span class="badge badge-red">Spam</span>
+        <span class="badge badge-green">Index</span>
       </div>
     `;
   } catch (err) {
