@@ -22,10 +22,23 @@ import (
 	"github.com/lmittmann/tint"
 )
 
+// Set via ldflags at build time.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	// Check for subcommands before flag.Parse()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "version", "--version", "-v":
+			runVersion()
+			return
+		case "update":
+			runUpdate(os.Args[2:])
+			return
 		case "search":
 			runSearch(os.Args[2:])
 			return
@@ -60,7 +73,7 @@ func main() {
 	})
 	slog.SetDefault(slog.New(handler))
 
-	slog.Info("Doogle v2 — P2P Decentralized Search Engine")
+	slog.Info(fmt.Sprintf("Doogle %s — P2P Decentralized Search Engine", version))
 	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "workers", cfg.Crawler.Workers, "replication", cfg.Index.ReplicationFactor, "log_level", cfg.LogLevel)
 
 	// Create and initialize the node
