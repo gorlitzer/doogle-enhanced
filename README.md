@@ -150,6 +150,7 @@ make build
 
 **Crawling**
 - Concurrent worker pool with per-domain rate limiting
+- Domain-aware crawl coordination: shard ring assigns each domain to an owner node — non-owners forward tasks automatically via `/doogle/crawl/1.0.0`, with fallback to local crawl if the owner is offline
 - `robots.txt` compliance with 24h TTL cache
 - Rich content extraction: title, meta, headings, OG tags, canonical URLs
 - Headless browser fallback for JavaScript-heavy pages (via `go-rod`)
@@ -160,9 +161,9 @@ make build
 - Kademlia DHT for internet-wide peer routing
 - Automatic peer discovery via IPFS public DHT — zero config, no manual bootstrap needed
 - mDNS for zero-config LAN discovery
-- GossipSub for URL frontier broadcast
+- GossipSub for URL frontier broadcast — peers check domain ownership before crawling, forwarding non-owned URLs to the responsible node
 - NAT traversal via UPnP/NAT-PMP and hole punching
-- Custom protocols: `/doogle/search/1.0.0`, `/doogle/crawl/1.0.0`, `/doogle/index/1.0.0`, `/doogle/fleet/heartbeat/1.0.0`, `/doogle/fleet/proxy/1.0.0`
+- Custom protocols: `/doogle/search/1.0.0`, `/doogle/crawl/1.0.0`, `/doogle/index/1.0.0`, `/doogle/replicate/1.0.0`, `/doogle/antientropy/1.0.0`, `/doogle/fleet/heartbeat/1.0.0`, `/doogle/fleet/proxy/1.0.0`
 
 **Indexer Pipeline**
 - Quality scoring (12 weighted signals), spam detection, duplicate filtering
@@ -316,7 +317,7 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               └──────────────────────────────────────┘
 ```
 
-**Data flow:** Seed URLs → GossipSub broadcast → crawl → Readability content extraction → quality scoring (12 signals) → domain authority → URL quality → detect duplicates → index in Bleve (title 5x, URL 3x, headings 2x, desc 1.5x) → search queries: parse → classify intent → expand synonyms → BM25 match → fan out to peers → merge → intent-aware re-rank → domain diversity → spelling suggestion → return results.
+**Data flow:** Seed URLs → domain ownership check (shard ring) → own domain? crawl locally / not owned? forward to owner via `/doogle/crawl/1.0.0` → GossipSub broadcast discovered URLs → Readability content extraction → quality scoring (12 signals) → domain authority → URL quality → detect duplicates → index in Bleve (title 5x, URL 3x, headings 2x, desc 1.5x) → replicate to shard owners → search queries: parse → classify intent → expand synonyms → BM25 match → fan out to peers → merge → intent-aware re-rank → domain diversity → spelling suggestion → return results.
 
 ---
 
@@ -376,13 +377,14 @@ Dump and restore are **standalone** — they operate on raw data directories and
 
 ```bash
 make setup                      # install Go, Docker checks, all prerequisites
-make run                        # build + launch node (API on :7002)
-make run ARGS='--port 7003'     # pass extra flags
+make build                      # compile binary to bin/
+make run                        # build + stop old process + launch node detached
+make run ARGS='--seed ...'      # pass extra flags
+make restart                    # alias for 'make run' (rebuild + restart)
+make stop                       # gracefully stop running node (SIGTERM, 15s timeout)
 make test                       # run all tests
-make dev                        # Docker detached on :7002
-make stop                       # stop running node + Docker
-make build                      # compile binary without running
-make clean                      # remove build artifacts
+make dev                        # Docker foreground on :7002 (Ctrl+C to stop)
+make clean                      # stop node + delete crawl data in data/
 make nuke                       # full reset: clean + remove in-repo Go runtime
 ```
 
@@ -435,6 +437,9 @@ make nuke                       # full reset: clean + remove in-repo Go runtime
 | `GET` | `/api/admin/documents?offset=&limit=` | Recently indexed documents |
 | `GET` | `/api/admin/documents/{id}` | Document detail by ID |
 | `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
+| `GET` | `/api/admin/storage` | Disk usage stats (Bleve, BadgerDB, free space) |
+| `GET` | `/api/admin/leaderboard` | Peer contribution rankings |
+| `GET` | `/api/admin/domains` | Domain ownership map (shard assignments, local vs remote) |
 | `GET` | `/api/fleet/nodes` | Fleet summary and worker list (bearer token required) |
 | `GET` | `/api/fleet/nodes/{peerID}` | Single worker detail |
 | `ANY` | `/api/fleet/nodes/{peerID}/proxy/*` | Proxy request to worker's local API |
@@ -572,6 +577,7 @@ The admin dashboard at `http://localhost:7002` also has built-in docs covering c
 - [x] Backup & restore (`doogle dump`/`doogle restore`, Makefile targets)
 - [x] Production build target (`make build` with stripped binary, `make run`)
 - [x] Fleet management (coordinator/worker, secure proxy tunnel, HMAC auth, fleet dashboard)
+- [x] Domain-aware crawl coordination (shard ring gates crawl decisions, auto-forwarding to owners, fallback to local)
 - [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
 - [ ] Hash ring rebalancing on peer join/leave
 - [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)
