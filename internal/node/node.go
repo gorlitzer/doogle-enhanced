@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -144,6 +145,8 @@ func (n *Node) init() error {
 			n.shards.AddNode(pidStr)
 			h.ConnManager().Protect(pid, "doogle")
 			slog.Debug("shard ring: added Doogle peer", "peer", pidStr[:12], "total", n.shards.NodeCount())
+			// Send our catalog directly so the peer learns our name immediately.
+			go n.sendCatalogToPeer(pid)
 		},
 	})
 	if err != nil {
@@ -202,8 +205,43 @@ func (n *Node) init() error {
 	// 7. Shard manager — add self (ring was pre-created before discovery)
 	n.shards.AddNode(peerID.String())
 
-	// 7a. Register network notifiee for peer disconnect cleanup
+	// 7a. Register network notifiee for peer connect/disconnect handling.
+	// ConnectedF catches inbound connections from Doogle peers that this
+	// node didn't initiate (e.g. the remote peer found us via mDNS/DHT
+	// before our own discovery round ran). Without this, the shard ring
+	// on the receiving side would miss the peer until the next DHT poll.
 	h.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(_ network.Network, conn network.Conn) {
+			remotePeer := conn.RemotePeer()
+			pid := remotePeer.String()
+			if n.shards.HasNode(pid) {
+				return // already known
+			}
+			// The identify protocol runs asynchronously after the
+			// connection is established. Wait briefly, then check
+			// whether the remote peer speaks any /doogle/* protocol.
+			go func() {
+				select {
+				case <-time.After(3 * time.Second):
+				case <-n.ctx.Done():
+					return
+				}
+				protos, err := h.Peerstore().GetProtocols(remotePeer)
+				if err != nil {
+					return
+				}
+				for _, proto := range protos {
+					if strings.HasPrefix(string(proto), "/doogle/") {
+						n.shards.AddNode(pid)
+						h.ConnManager().Protect(remotePeer, "doogle")
+						slog.Debug("shard ring: added Doogle peer (inbound)", "peer", pid[:12], "total", n.shards.NodeCount())
+						// Send our catalog so the peer learns our name immediately.
+						n.sendCatalogToPeer(remotePeer)
+						return
+					}
+				}
+			}()
+		},
 		DisconnectedF: func(_ network.Network, conn network.Conn) {
 			remotePeer := conn.RemotePeer()
 			pid := remotePeer.String()
@@ -741,6 +779,27 @@ func (n *Node) loadPeerNames() {
 		}
 		return nil
 	})
+}
+
+// sendCatalogToPeer sends our shard catalog (including node name) directly
+// to a peer via the /doogle/shard/1.0.0 stream protocol. This bypasses
+// GossipSub so the remote peer learns our name immediately on connection.
+func (n *Node) sendCatalogToPeer(pid peer.ID) {
+	if n.bleveIdx == nil || n.genStore == nil {
+		return // init not yet complete
+	}
+	docCount, _ := n.bleveIdx.DocCount()
+	catalog := &p2p.ShardCatalog{
+		PeerID:     n.peerID.String(),
+		NodeName:   n.cfg.NodeName,
+		DocCount:   docCount,
+		Generation: n.genStore.Current(),
+	}
+	if err := p2p.SendShardCatalog(n.ctx, n.host, pid, catalog, 10*time.Second); err != nil {
+		slog.Debug("shard catalog: direct send failed", "peer", pid.String()[:12], "err", err)
+	} else {
+		slog.Debug("shard catalog: sent to new peer", "peer", pid.String()[:12], "name", n.cfg.NodeName)
+	}
 }
 
 // onDocumentCrawled is called by the crawler when a page is fetched.
