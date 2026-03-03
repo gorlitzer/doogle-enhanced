@@ -21,6 +21,7 @@ import (
 	"github.com/doogle/doogle-v2/internal/fleet"
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/internal/updater"
 	"github.com/doogle/doogle-v2/internal/p2p"
 	"github.com/doogle/doogle-v2/internal/search"
 )
@@ -42,6 +43,9 @@ type Deps struct {
 	StorageFn      func() (*models.StorageInfo, error)
 	LeaderboardFn      func() (*models.LeaderboardResponse, error)
 	DomainOwnershipFn  func() (*models.DomainOwnership, error)
+
+	// Build version info (for update endpoints)
+	VersionInfo struct{ Version, Commit, BuildDate string }
 
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
@@ -650,6 +654,70 @@ func DomainOwnershipHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, ownership)
+	}
+}
+
+// UpdateCheckHandler handles GET /api/admin/update-check (localhost-only).
+func UpdateCheckHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopback(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "update check is only available from localhost"})
+			return
+		}
+
+		current := deps.VersionInfo.Version
+
+		token, err := updater.ResolveToken()
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"current":          current,
+				"update_available": false,
+				"error":            err.Error(),
+			})
+			return
+		}
+
+		release, err := updater.FetchLatestRelease(token)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{
+				"current":          current,
+				"update_available": false,
+				"error":            err.Error(),
+			})
+			return
+		}
+
+		available := release.TagName != current && current != "dev"
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"current":          current,
+			"latest":           release.TagName,
+			"update_available": available,
+		})
+	}
+}
+
+// UpdateApplyHandler handles POST /api/admin/update (localhost-only).
+func UpdateApplyHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopback(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "update is only available from localhost"})
+			return
+		}
+
+		current := deps.VersionInfo.Version
+
+		newVersion, err := updater.ApplyUpdate(current)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status":      "updated",
+			"old_version": current,
+			"new_version": newVersion,
+			"message":     "Restart the node to use the new version.",
+		})
 	}
 }
 

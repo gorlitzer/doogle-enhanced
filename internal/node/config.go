@@ -24,6 +24,11 @@ type Config struct {
 
 	// Seed URLs provided via CLI
 	SeedURLs []string `yaml:"-"`
+
+	// Build info (set by main, not persisted)
+	Version   string `yaml:"-"`
+	Commit    string `yaml:"-"`
+	BuildDate string `yaml:"-"`
 }
 
 type FleetConfig struct {

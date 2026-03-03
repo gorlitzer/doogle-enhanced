@@ -102,6 +102,7 @@ export function renderNode(container) {
   window.addEventListener('resize', _mobileResizeHandler);
   syncMobileView();
   loadAllData();
+  checkForUpdate();
   window._pageInterval = setInterval(loadAllData, 5000);
   window._pageCleanup = () => {
     if (diagram) { diagram.destroy(); diagram = null; }
@@ -411,4 +412,57 @@ function renderSummaryStrip(status, crawler, indexer) {
     </div>
     ` : ''}
   `;
+}
+
+async function checkForUpdate() {
+  try {
+    const data = await api.checkUpdate();
+    if (!data.update_available) return;
+
+    // Remove any existing banner
+    const existing = document.getElementById('update-banner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.className = 'update-banner';
+    banner.innerHTML = `
+      <span class="update-banner-text">
+        ${icon('arrowUp', 16)} New version available: <strong>${escapeHtml(data.current)}</strong> &rarr; <strong>${escapeHtml(data.latest)}</strong>
+      </span>
+      <button class="update-btn" id="update-now-btn">Update Now</button>
+    `;
+
+    const header = document.querySelector('.page-header');
+    if (header) {
+      header.parentNode.insertBefore(banner, header.nextSibling);
+    }
+
+    document.getElementById('update-now-btn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Updating...';
+      banner.classList.remove('update-banner--error');
+
+      try {
+        const result = await api.applyUpdate();
+        banner.className = 'update-banner update-banner--success';
+        banner.innerHTML = `
+          <span class="update-banner-text">
+            ${icon('arrowUp', 16)} Updated to <strong>${escapeHtml(result.new_version)}</strong> &mdash; restart node to apply
+          </span>
+        `;
+      } catch (err) {
+        banner.className = 'update-banner update-banner--error';
+        banner.innerHTML = `
+          <span class="update-banner-text">
+            ${icon('alertTriangle', 16)} Update failed: ${escapeHtml(err.message)}
+          </span>
+          <button class="update-btn" id="update-now-btn" onclick="location.reload()">Retry</button>
+        `;
+      }
+    });
+  } catch {
+    // Silently ignore update check failures
+  }
 }

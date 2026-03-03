@@ -86,6 +86,9 @@ type SearchResult struct {
 type NodeStatus struct {
 	PeerID         string    `json:"peer_id"`
 	NodeName       string    `json:"node_name,omitempty"`
+	Version        string    `json:"version,omitempty"`
+	Commit         string    `json:"commit,omitempty"`
+	BuildDate      string    `json:"build_date,omitempty"`
 	Addrs          []string  `json:"addrs"`
 	ConnectedPeers int       `json:"connected_peers"`
 	PeerList       []string  `json:"peer_list,omitempty"`

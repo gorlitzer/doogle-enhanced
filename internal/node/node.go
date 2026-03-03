@@ -307,6 +307,9 @@ func (n *Node) init() error {
 		LeaderboardFn:      n.Leaderboard,
 		DomainOwnershipFn:  n.DomainOwnership,
 	}
+	deps.VersionInfo.Version = n.cfg.Version
+	deps.VersionInfo.Commit = n.cfg.Commit
+	deps.VersionInfo.BuildDate = n.cfg.BuildDate
 
 	// Wire fleet deps if coordinator.
 	if n.coordinator != nil {
@@ -433,6 +436,9 @@ func (n *Node) Status() *models.NodeStatus {
 	status := &models.NodeStatus{
 		PeerID:         n.peerID.String(),
 		NodeName:       n.cfg.NodeName,
+		Version:        n.cfg.Version,
+		Commit:         n.cfg.Commit,
+		BuildDate:      n.cfg.BuildDate,
 		Addrs:          multiaddrsToStrings(n.host),
 		ConnectedPeers: len(peerList),
 		PeerList:       peerList,

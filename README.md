@@ -142,6 +142,7 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - Indexer stats, document browser
 - Keyboard shortcuts: `/` and `Ctrl+K` to focus search from anywhere
 - 6 themes: Dracula, CRT Terminal, Modern, Light, Pride, Storm — each with animated logos and backgrounds
+- Update notification banner on Node Overview with "Update Now" button (auto-checks GitHub releases, localhost-only)
 - Comprehensive docs, troubleshooting, and FAQ built in
 
 **Storage**
@@ -336,6 +337,7 @@ make run                        # build + stop old process + launch node detache
 make run ARGS='--seed ...'      # pass extra flags
 make upgrade                    # pull latest + rebuild + restart
 make stop                       # gracefully stop running node (SIGTERM, 15s timeout)
+make status                     # check if the node is running
 make test                       # run all tests
 make dev                        # Docker foreground on :7002 (Ctrl+C to stop)
 make clean                      # remove build artifacts (bin/, dist/, logs, pid)
@@ -399,6 +401,8 @@ make major                      # tag + release: v0.1.0 → v1.0.0
 | `GET` | `/api/admin/storage` | Disk usage stats (Bleve, BadgerDB, free space) |
 | `GET` | `/api/admin/leaderboard` | Peer contribution rankings |
 | `GET` | `/api/admin/domains` | Domain ownership map (shard assignments, local vs remote) |
+| `GET` | `/api/admin/update-check` | Check for new release (localhost-only) |
+| `POST` | `/api/admin/update` | Download and apply update (localhost-only) |
 | `GET` | `/api/fleet/nodes` | Fleet summary and worker list (bearer token required) |
 | `GET` | `/api/fleet/nodes/{peerID}` | Single worker detail |
 | `ANY` | `/api/fleet/nodes/{peerID}/proxy/*` | Proxy request to worker's local API |
@@ -419,6 +423,7 @@ doogle-v2/
 │   ├── search/                    Local + distributed search, ranking, intent, spelling, diversity, snippets
 │   ├── fleet/                     Coordinator, worker, HMAC auth, fleet models
 │   ├── api/                       HTTP server, handlers, middleware
+│   ├── updater/                   Shared GitHub release/update logic
 │   ├── store/                     BadgerDB wrapper, URL queue, link store, fleet store
 │   └── models/                    Document, CrawlTask, SearchResult, CrawlEvent
 ├── pkg/

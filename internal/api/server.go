@@ -65,6 +65,8 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Get("/dump", DumpHandler(deps))
 			r.Post("/restore", RestoreHandler(deps))
 			r.Delete("/data", DeleteDataHandler(deps))
+			r.Get("/update-check", UpdateCheckHandler(deps))
+			r.Post("/update", UpdateApplyHandler(deps))
 		})
 
 		// Fleet endpoints (only if coordinator)
