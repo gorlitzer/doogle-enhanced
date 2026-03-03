@@ -80,6 +80,24 @@ func (s *Scheduler) TryNext() *models.CrawlTask {
 	return nil
 }
 
+// Drain flushes all in-memory pending tasks to the BadgerDB overflow queue.
+// Call during shutdown to avoid losing queued crawl tasks.
+func (s *Scheduler) Drain() {
+	drained := 0
+	for {
+		select {
+		case task := <-s.pending:
+			_ = s.urlStore.Enqueue(task)
+			drained++
+		default:
+			if drained > 0 {
+				log.Printf("scheduler: drained %d tasks to persistent queue", drained)
+			}
+			return
+		}
+	}
+}
+
 // Pending returns the approximate queue size.
 func (s *Scheduler) Pending() int {
 	return len(s.pending) + s.urlStore.QueueSize()

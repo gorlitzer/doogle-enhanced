@@ -9,13 +9,14 @@ const pipelineSteps = [
   {
     icon: 'globe', title: 'Seed URL', color: 'var(--accent)',
     eli5: 'You give Doogle a website address, like telling a puppy "go fetch!"',
-    detail: 'A URL is added to the frontier via seed, peer gossip, or discovery. The scheduler deduplicates and prioritizes by domain.',
+    detail: 'A URL is added to the frontier via seed, peer gossip, or discovery. Domain ownership is checked — the URL is routed to the shard owner or crawled locally.',
     modal: `<p>URLs enter the system from three sources:</p>
       <ul>
-        <li><strong>Seed URLs</strong> — manually provided via CLI flag or API</li>
+        <li><strong>Seed URLs</strong> — manually provided via CLI flag, API, or wizard</li>
         <li><strong>Peer Gossip</strong> — discovered URLs broadcast via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a></li>
         <li><strong>Link Discovery</strong> — extracted from crawled pages</li>
       </ul>
+      <p>Before scheduling, each URL goes through a <strong>domain ownership check</strong>: if this node owns the domain in the shard ring, it schedules locally; otherwise, the task is forwarded to the owner via <code>/doogle/crawl/1.0.0</code>. If the owner is offline, the node falls back to crawling locally.</p>
       <p>The frontier scheduler uses persistent URL deduplication (SHA-256 keyed, backed by <a href="https://dgraph.io/badger" target="_blank">BadgerDB</a>) to avoid re-crawling. URLs are prioritized by domain freshness and crawl depth.</p>`,
   },
   {
@@ -125,6 +126,15 @@ const pipelineSteps = [
 const capabilities = [
   { icon: 'download', title: 'Distributed Crawling', desc: 'Multi-worker crawl engine with per-domain rate limiting, robots.txt respect, and configurable depth.',
     modal: `<p>The crawler uses a goroutine worker pool (default 4) with per-domain rate limiting. Each domain gets its own crawl queue with configurable max depth. Respects robots.txt exclusion rules and supports custom User-Agent strings.</p><p>Reference: Go's <code>net/http</code> + <a href="https://github.com/PuerkitoBio/goquery" target="_blank">goquery</a> for HTML parsing.</p>` },
+  { icon: 'globe', title: 'Domain-Aware Crawl Routing', desc: 'The shard ring assigns each domain to a specific node. Before crawling, ownership is checked — non-owners forward tasks to the responsible peer automatically.',
+    modal: `<p>Every URL is routed through domain ownership checks before crawling:</p>
+      <ul>
+        <li><strong>Own domain?</strong> Schedule locally in the crawl pipeline</li>
+        <li><strong>Not owned?</strong> Forward the CrawlTask to the shard owner via <code>/doogle/crawl/1.0.0</code></li>
+        <li><strong>Owner offline?</strong> Fall back to local crawl (graceful degradation)</li>
+      </ul>
+      <p>This prevents two nodes from crawling the same domain even if they both select the same seed categories. The consistent hash ring handles domain assignment with 64 virtual nodes per peer for even distribution.</p>
+      <p>Monitoring: the admin dashboard shows forwarded/received task counts per node, owned domains, and a full domain ownership map at <code>/api/admin/domains</code>.</p>` },
   { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered search with intent classification, synonym expansion, spelling correction, boolean operators, search dorks, 15 language stemmers, domain diversity, and passage snippets.',
     modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. The pipeline: parse query → classify intent (navigational/informational/transactional/local) → expand synonyms (100+ pairs) → build Bleve query tree → match → intent-aware re-rank → domain diversity (max 2 per domain in top 10) → passage-based snippets with highlights → spelling suggestion ("Did you mean?").</p><p>Field boosts: title (5x), URL text (3x), headings (2x), description (1.5x), content (1x). Boolean operators, search dorks, phrase matching, fuzzy matching, <code>site:</code> and <code>lang:</code> filters (15 language stemmers).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
   { icon: 'star', title: 'Quality Scoring (12 Signals)', desc: '12 weighted scoring signals: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
@@ -137,8 +147,8 @@ const capabilities = [
     modal: `<p>When a page has 3+ <code>&lt;script&gt;</code> tags, the crawler falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a>. This renders React, Vue, Angular, and Next.js SPAs that would otherwise return empty HTML. Chromium is downloaded automatically on first use (~300MB).</p>` },
   { icon: 'network', title: 'P2P Network (Kademlia)', desc: 'libp2p-based peer discovery via Kademlia DHT, IPFS public DHT auto-discovery, and mDNS. Zero config — every node is equal.',
     modal: `<p>Peer discovery uses three mechanisms: (1) <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a> for internet-wide routing, (2) <strong>IPFS public DHT routing discovery</strong> for automatic zero-config peer finding — nodes connect to IPFS bootstrap peers and advertise under the rendezvous namespace <code>doogle/network/v2</code>, discovering each other within 30–60 seconds with no manual bootstrap needed, and (3) mDNS for local LAN discovery. Every node is a full peer — no central coordinators. Built on <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
-  { icon: 'megaphone', title: 'GossipSub Frontier', desc: 'Discovered URLs are broadcast to peers via pub/sub, creating a shared crawl frontier across the network.',
-    modal: `<p>Newly discovered URLs are broadcast to all connected peers via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a> pub/sub. Nodes check if a URL falls in their shard range before scheduling a crawl, preventing duplicate work.</p>` },
+  { icon: 'megaphone', title: 'GossipSub Frontier', desc: 'Discovered URLs are broadcast to peers via pub/sub. Each peer checks domain ownership before crawling — non-owners forward tasks to the responsible node.',
+    modal: `<p>Newly discovered URLs are broadcast to all connected peers via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a> pub/sub. On receipt, each peer checks domain ownership via the shard ring — only the assigned owner crawls the URL. Non-owners forward the task to the owner via <code>/doogle/crawl/1.0.0</code>, preventing duplicate crawl work across the network.</p>` },
   { icon: 'trendingUp', title: 'PageRank Authority', desc: 'Graph-based link analysis computes authority scores. Cross-domain links get 1.5x weight. Updated every 5 minutes.',
     modal: `<p>PageRank computes page authority from the link graph using iterative power method (damping factor = 0.85, 15 iterations). Cross-domain links receive 1.5x weight. Recomputed every 5 minutes. Reference: <a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">PageRank (Wikipedia)</a></p>` },
   { icon: 'link', title: 'Anchor Text Signals', desc: 'Inbound anchor text is aggregated and indexed, boosting pages for terms used to link to them.',
@@ -570,7 +580,8 @@ function renderRoadmap(el) {
       progress: 56,
       items: [
         '<strong>Done:</strong> boolean operators, multi-language search, search result caching, CLI search tool, spam reporting, domain flagging, backup & restore, production builds, fleet management',
-        '<strong>Remaining:</strong> horizontal sharding, hash ring rebalancing, persistent dedup improvements, structured data extraction, PDF/doc indexing, content verification, image search',
+        '<strong>Done:</strong> domain-aware crawl coordination (shard ring gates crawl decisions, auto-forwarding to owners)',
+        '<strong>Remaining:</strong> hash ring rebalancing, persistent dedup improvements, structured data extraction, PDF/doc indexing, content verification, image search',
       ],
     },
     {
@@ -1218,7 +1229,7 @@ function setupArchDiagram() {
     { id: 'streams', label: 'Streams',         sub: 'req/reply',            x: 0.50, y: 0.40, color: blue, layer: 'p2p',
       desc: '/doogle/search, /doogle/crawl, /doogle/index — request-reply protocols over libp2p streams.' },
     { id: 'shard',   label: 'Sharding',        sub: 'Consistent hash',     x: 0.70, y: 0.40, color: blue, layer: 'p2p',
-      desc: 'Domain-based consistent hashing assigns URLs to shard owners. Catalog exchange every 60s.' },
+      desc: 'Domain-based consistent hashing assigns URLs to shard owners for both storage and crawl coordination. Non-owners forward crawl tasks to the responsible peer.' },
     { id: 'replica',  label: 'Replication',     sub: 'N=3 replicas',        x: 0.90, y: 0.40, color: blue, layer: 'p2p',
       desc: 'Documents replicated to N closest peers. Anti-entropy via Merkle root reconciliation.' },
 

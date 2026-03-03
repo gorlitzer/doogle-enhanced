@@ -1,4 +1,4 @@
-.PHONY: help setup build run test dev stop clean nuke
+.PHONY: help setup build run restart test dev stop clean nuke
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -12,12 +12,13 @@ help:
 	@echo ""
 	@echo "    make setup              Install Go, Docker, and all prerequisites"
 	@echo "    make build              Compile binary to bin/"
-	@echo "    make run                Build + launch node detached (fleet-ready on 0.0.0.0:7002)"
+	@echo "    make run                Build + stop old process + launch node detached"
 	@echo "    make run ARGS='...'     Pass extra flags (run ./bin/doogle --help for all flags)"
+	@echo "    make restart            Alias for 'make run' (rebuild + restart)"
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
-	@echo "    make stop               Stop docker containers"
+	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make test               Run all tests"
-	@echo "    make clean              Remove binary and node data"
+	@echo "    make clean              Stop node + delete crawl data in data/"
 	@echo "    make nuke               Full reset: clean + remove in-repo Go runtime"
 	@echo ""
 
@@ -74,8 +75,7 @@ build:
 	  rm -f web/embed_hash.go.tmp
 	$(GO) build -ldflags "-s -w" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
 
-run: build
-	@-pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null; sleep 0.2
+run: build stop
 	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
 	@echo ""
 	@echo "  Doogle is running! (PID $$(cat .doogle.pid))"
@@ -85,6 +85,8 @@ run: build
 	@echo "    Stop:   make stop"
 	@echo ""
 
+restart: run
+
 test:
 	$(GO) test ./...
 
@@ -92,14 +94,22 @@ dev:
 	docker compose up --build
 
 stop:
-	@if [ -f .doogle.pid ]; then kill $$(cat .doogle.pid) 2>/dev/null; rm -f .doogle.pid; fi
+	@if [ -f .doogle.pid ]; then \
+	  PID=$$(cat .doogle.pid); \
+	  if kill -0 "$$PID" 2>/dev/null; then \
+	    echo "Stopping PID $$PID..."; kill "$$PID"; \
+	    i=0; while kill -0 "$$PID" 2>/dev/null && [ $$i -lt 15 ]; do sleep 1; i=$$((i+1)); done; \
+	    if kill -0 "$$PID" 2>/dev/null; then echo "Forcing kill"; kill -9 "$$PID"; fi; \
+	  fi; rm -f .doogle.pid; fi
 	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
 	@docker compose down 2>/dev/null || true
 	@echo "Stopped."
 
 clean: stop
-	@-docker compose down -v 2>/dev/null
-	rm -rf $(BIN_DIR) data/ doogle.log .doogle.pid
+	@echo "WARNING: This will DELETE all crawl data in data/"
+	@echo "Press Ctrl+C within 5 seconds to abort."
+	@sleep 5
+	rm -rf data/ doogle.log
 
 nuke: clean
 	rm -rf .go/

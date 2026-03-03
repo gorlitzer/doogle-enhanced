@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"encoding/binary"
 	"log"
 	"net/url"
 	"strings"
@@ -19,6 +20,7 @@ type Indexer struct {
 	store       index.Store
 	batch       *index.BatchIndexer
 	genStore    *store.GenerationStore
+	bs          *store.BadgerStore
 	scorer      *Scorer
 	dedup       *DuplicateDetector
 	analyzer    *Analyzer
@@ -34,20 +36,53 @@ type Indexer struct {
 	spamSum           atomic.Int64 // scaled by 10000 for precision
 }
 
+const indexerTotalKey = "meta:indexer:total_indexed"
+
 // New creates a new indexer with all analysis subsystems.
 // If batch is nil, documents are written one at a time (backward compatible).
 // If genStore is nil, generation tracking is disabled.
-func New(store index.Store, batch *index.BatchIndexer, genStore *store.GenerationStore) *Indexer {
-	return &Indexer{
+// If bs is nil, stats persistence is disabled.
+func New(store index.Store, batch *index.BatchIndexer, genStore *store.GenerationStore, bs *store.BadgerStore) *Indexer {
+	ix := &Indexer{
 		store:       store,
 		batch:       batch,
 		genStore:    genStore,
+		bs:          bs,
 		scorer:      NewScorer(),
 		dedup:       NewDuplicateDetector(),
 		analyzer:    NewAnalyzer(),
 		readability: NewReadabilityAnalyzer(),
 		freshness:   NewFreshnessAnalyzer(),
 	}
+	ix.loadStats()
+	return ix
+}
+
+func (ix *Indexer) loadStats() {
+	if ix.bs == nil {
+		return
+	}
+	val, err := ix.bs.Get([]byte(indexerTotalKey))
+	if err != nil || len(val) < 8 {
+		return
+	}
+	n := int64(binary.BigEndian.Uint64(val))
+	ix.totalIndexed.Store(n)
+	log.Printf("indexer: restored totalIndexed: %d", n)
+}
+
+func (ix *Indexer) persistTotalIndexed(val int64) {
+	if ix.bs == nil {
+		return
+	}
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(val))
+	_ = ix.bs.Set([]byte(indexerTotalKey), buf)
+}
+
+// FlushStats unconditionally persists indexer stats to BadgerDB.
+func (ix *Indexer) FlushStats() {
+	ix.persistTotalIndexed(ix.totalIndexed.Load())
 }
 
 // Stats returns current indexer statistics.
@@ -137,9 +172,12 @@ func (ix *Indexer) Index(doc *models.Document) error {
 	}
 
 	// 10. Track stats
-	ix.totalIndexed.Add(1)
+	total := ix.totalIndexed.Add(1)
 	ix.qualitySum.Add(int64(scores.Quality * 10000))
 	ix.spamSum.Add(int64(scores.Spam * 10000))
+	if total%100 == 0 {
+		ix.persistTotalIndexed(total)
+	}
 
 	log.Printf("indexer: indexed %s [eeat=%.2f quality=%.2f spam=%.2f seo=%.2f static=%.2f]",
 		doc.URL, scores.EEAT, scores.Quality, scores.Spam, scores.SEO, idxDoc.StaticScore)

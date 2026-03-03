@@ -82,14 +82,18 @@ The node orchestrator creates subsystems in this exact order:
 ### Shutdown (`node.Shutdown()`)
 
 ```
-1. cancel context           → signals all goroutines to stop
-2. apiServer.Shutdown()     → drains HTTP connections (10s timeout)
-3. crawler.Stop()           → waits for workers to finish
-4. gossip.Close()           → unsubscribe from topic
-5. discovery.Close()        → close DHT + mDNS
-6. host.Close()             → close all libp2p connections
-7. bleveIdx.Close()         → flush and close index
-8. badger.Close()           → flush and close database
+1.  cancel context           → signals all goroutines to stop
+2.  apiServer.Shutdown()     → drains HTTP connections (10s timeout)
+3.  scheduler.Drain()        → save queued crawl tasks to BadgerDB
+4.  urlStore.FlushCrawledCount() → persist crawled count
+5.  crawler.Stop()           → waits for workers to finish
+6.  batchIndexer.Stop()      → final Bleve batch flush
+7.  indexer.FlushStats()     → persist indexer stats
+8.  gossip.Close()           → unsubscribe from topic
+9.  discovery.Close()        → close DHT + mDNS
+10. host.Close()             → close all libp2p connections
+11. bleveIdx.Close()         → flush and close index
+12. badger.Close()           → flush and close database (last, all stores depend on it)
 ```
 
 ---
@@ -211,22 +215,24 @@ When a node crawls a page and discovers new URLs, it publishes a `URLAnnouncemen
 }
 ```
 
-All subscribed peers receive this and schedule the URLs for crawling (if not already seen). This is how the crawl frontier propagates across the network.
+All subscribed peers receive this and check domain ownership via the shard ring. Each peer only crawls URLs for domains it owns. URLs for other domains are forwarded to the responsible peer via `/doogle/crawl/1.0.0`. This is how the crawl frontier propagates across the network without duplicating work.
 
 ---
 
 ## Crawl Pipeline
 
 ```
-Seed URL → Scheduler → Worker → Fetch → Extract → Callback
-                ▲                                      │
-                │         ┌────────────────────────────┘
-                │         ▼
-                │    Index document locally
-                │    Schedule discovered URLs ──────────▶ Scheduler
-                │    Broadcast via GossipSub ──────────▶ Peers
-                │
-           Gossip loop receives URLs from peers ───────┘
+Seed URL → Domain check ─── owned? ─── Scheduler → Worker → Fetch → Extract → Callback
+               │                            ▲                                      │
+               │ not owned?                 │         ┌────────────────────────────┘
+               │                            │         ▼
+               ▼                            │    Index document locally
+          Forward to owner                  │    Replicate to shard owners
+          via /doogle/crawl/1.0.0           │    Schedule discovered URLs ──▶ Domain check
+                                            │    Broadcast via GossipSub ──▶ Peers
+                                            │
+                                       Gossip loop receives URLs from peers ─┘
+                                       (also routed through domain check)
 ```
 
 ### Scheduler
@@ -475,9 +481,9 @@ Failed peer connections are logged but don't block the response.
 
 ---
 
-## Shard Assignment (Phase 2)
+## Shard Assignment & Crawl Coordination
 
-The consistent hash ring maps domains to nodes:
+The consistent hash ring maps domains to nodes for both **storage** and **crawl coordination**:
 
 ```
 Hash ring:  [0 ────────── Node A ─── Node B ─── Node C ─── 2^32]
@@ -491,7 +497,30 @@ Domain hash lands here ─────┘            │            │
 
 Each node has 64 virtual nodes on the ring for even distribution. `ShardManager.Owners(domain, 2)` returns the primary and one replica node.
 
-In Phase 2, when a node crawls a page for a domain it doesn't own, it will forward the document to the owner via `/doogle/index/1.0.0`.
+### Domain-Aware Crawl Routing
+
+When a URL is about to be crawled (from gossip, discovered links, API seeds, or wizard), the node checks:
+
+1. `shards.IsOwner(myPeerID, domain, replicationFactor)` — am I responsible?
+2. **Yes** → schedule locally (existing crawl pipeline)
+3. **No** → forward the `CrawlTask` to the primary owner via `/doogle/crawl/1.0.0`
+4. **Fallback** — if the owner is not connected, crawl locally
+
+This prevents two nodes from crawling the same domain even if they both seed the same category.
+
+```
+Seed URL → Domain check:
+             owned? ──yes──▶ Scheduler → Worker → Fetch → Callback
+             not owned? ──▶ Forward to owner via /doogle/crawl/1.0.0
+```
+
+### Categories vs. Shard Assignment
+
+The wizard categories (Technology, Science, News, etc.) are **seed suggestions** — they help new nodes discover starting URLs. The shard ring handles actual domain assignment automatically. Two nodes picking the same category will discover the same seed URLs, but the shard ring ensures each domain is crawled by only its assigned owner(s).
+
+### Replication
+
+When a node crawls a page for a domain it owns, it replicates the resulting document to the other shard owners via `/doogle/replicate/1.0.0`.
 
 ---
 

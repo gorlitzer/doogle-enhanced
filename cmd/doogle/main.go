@@ -70,12 +70,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Graceful shutdown on SIGINT/SIGTERM
-	sigCh := make(chan os.Signal, 1)
+	// Graceful shutdown on SIGINT/SIGTERM — second signal or 20s timeout forces exit
+	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
 		slog.Info("received signal, shutting down", "signal", sig)
+		go func() {
+			select {
+			case <-time.After(20 * time.Second):
+				slog.Error("shutdown timed out — forcing exit")
+			case sig2 := <-sigCh:
+				slog.Warn("second signal — forcing exit", "signal", sig2)
+			}
+			os.Exit(1)
+		}()
 		n.Shutdown()
 		os.Exit(0)
 	}()

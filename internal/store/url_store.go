@@ -1,8 +1,10 @@
 package store
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync/atomic"
 	"time"
 
@@ -20,10 +22,12 @@ type URLStore struct {
 
 // NewURLStore creates a URL store backed by BadgerDB with persistent dedup.
 func NewURLStore(bs *BadgerStore, dedup *DedupStore) *URLStore {
-	return &URLStore{
+	u := &URLStore{
 		db:    bs.db,
 		dedup: dedup,
 	}
+	u.loadCrawledCount()
+	return u
 }
 
 // HasSeen returns true if the URL has already been queued.
@@ -41,9 +45,69 @@ func (u *URLStore) CrawledCount() int64 {
 	return u.counter.Load()
 }
 
-// IncrementCrawled increments the crawl counter.
+// IncrementCrawled increments the crawl counter and periodically persists it.
 func (u *URLStore) IncrementCrawled() {
-	u.counter.Add(1)
+	val := u.counter.Add(1)
+	if val%100 == 0 {
+		u.writeInt64Key("meta:crawled_count", val)
+	}
+}
+
+// FlushCrawledCount unconditionally persists the crawled counter to BadgerDB.
+func (u *URLStore) FlushCrawledCount() error {
+	return u.writeInt64Key("meta:crawled_count", u.counter.Load())
+}
+
+func (u *URLStore) loadCrawledCount() {
+	val := u.readInt64Key("meta:crawled_count")
+	if val > 0 {
+		u.counter.Store(val)
+		log.Printf("url_store: restored crawled count: %d", val)
+	}
+}
+
+// GetCrawlerStats reads persisted crawler stats from BadgerDB.
+func (u *URLStore) GetCrawlerStats() (crawled, failed, jsRendered int64) {
+	crawled = u.readInt64Key("meta:crawler:crawled")
+	failed = u.readInt64Key("meta:crawler:failed")
+	jsRendered = u.readInt64Key("meta:crawler:jsrendered")
+	return
+}
+
+// SetCrawlerStats persists crawler stats to BadgerDB.
+func (u *URLStore) SetCrawlerStats(crawled, failed, jsRendered int64) error {
+	if err := u.writeInt64Key("meta:crawler:crawled", crawled); err != nil {
+		return err
+	}
+	if err := u.writeInt64Key("meta:crawler:failed", failed); err != nil {
+		return err
+	}
+	return u.writeInt64Key("meta:crawler:jsrendered", jsRendered)
+}
+
+func (u *URLStore) readInt64Key(key string) int64 {
+	var val int64
+	_ = u.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(key))
+		if err != nil {
+			return err
+		}
+		return item.Value(func(b []byte) error {
+			if len(b) >= 8 {
+				val = int64(binary.BigEndian.Uint64(b))
+			}
+			return nil
+		})
+	})
+	return val
+}
+
+func (u *URLStore) writeInt64Key(key string, val int64) error {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(val))
+	return u.db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte(key), buf)
+	})
 }
 
 const queuePrefix = "queue:"
