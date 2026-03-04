@@ -507,11 +507,6 @@ a:hover { text-decoration: underline; }
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  cursor: pointer;
-}
-.result-card-snippet--expanded {
-  -webkit-line-clamp: unset;
-  overflow: visible;
 }
 .result-card-snippet mark { background: var(--accent-dim); color: var(--accent); padding: 0 2px; border-radius: 2px; }
 
@@ -571,6 +566,8 @@ a:hover { text-decoration: underline; }
   transition: border-color 0.15s, color 0.15s;
 }
 .result-detail-btn:hover { border-color: var(--accent); color: var(--accent); }
+.result-detail-btn--accent { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.result-detail-btn--accent:hover { background: var(--accent); color: var(--bg-primary); }
 .result-report-btn { padding: 4px 6px; }
 .result-report-btn:hover { border-color: var(--red); color: var(--red); }
 
@@ -982,6 +979,8 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   .detail-overview-right { flex-direction: row; gap: 8px; align-items: center; }
   .detail-prov-row { flex-direction: column; gap: 2px; }
   .detail-prov-label { min-width: unset; }
+  .detail-tabs { gap: 0; }
+  .detail-tab { padding: 8px 12px; font-size: 0.82em; }
 
   /* Result card responsive */
   .action-label { display: none; }
@@ -1400,6 +1399,70 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 }
 .modal-body .detail-label { color: var(--text-muted); }
 .modal-body .detail-value { color: var(--text-secondary); word-break: break-all; }
+
+/* ---- Detail modal: Tabs ---- */
+.detail-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.detail-tab {
+  padding: 8px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.88em;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.detail-tab:hover { color: var(--text-primary); }
+.detail-tab--active { color: var(--accent); border-bottom-color: var(--accent); }
+.detail-tab-content { display: none; }
+.detail-tab-content--active { display: block; }
+
+/* ---- Detail modal: Score rows with hints ---- */
+.detail-score-row {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+.detail-score-row:hover { background: var(--bg-hover); }
+.detail-hint { font-size: 0.75em; color: var(--text-muted); font-style: italic; margin-top: 2px; }
+
+/* ---- Detail modal: Action buttons ---- */
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.detail-actions .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.78em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+.detail-actions .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- Ghost skeleton cards ---- */
+.result-card-skeleton {
+  pointer-events: none;
+}
+.result-card-skeleton:hover { transform: none; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
 /* ---- Canvas chart container ---- */
 .chart-container {

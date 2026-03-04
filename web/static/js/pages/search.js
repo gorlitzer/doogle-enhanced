@@ -1,6 +1,6 @@
 // Doogle v2 — Search Page (enhanced with detail modal + content warnings)
 import { api } from '../api.js';
-import { showModal, closeModal, scoreBar, escapeHtml, skeleton, icon, timeAgo } from '../components.js';
+import { showModal, closeModal, escapeHtml, icon, timeAgo } from '../components.js';
 
 let currentPage = 1;
 let currentQuery = '';
@@ -116,7 +116,22 @@ async function doSearch(keepPage = false) {
   const results = document.getElementById('search-results');
   const meta = document.getElementById('search-meta');
 
-  results.innerHTML = `<div style="padding:20px">${skeleton(6)}</div>`;
+  results.innerHTML = Array.from({ length: 3 }, () => `
+    <div class="result-card result-card-skeleton">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div class="skeleton" style="width:16px;height:16px;border-radius:50%"></div>
+        <div class="skeleton" style="width:100px;height:12px"></div>
+      </div>
+      <div class="skeleton" style="width:70%;height:16px;margin-bottom:8px"></div>
+      <div class="skeleton" style="width:50%;height:11px;margin-bottom:10px"></div>
+      <div class="skeleton" style="width:100%;height:12px;margin-bottom:6px"></div>
+      <div class="skeleton" style="width:85%;height:12px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:6px">
+        <div class="skeleton" style="width:60px;height:18px;border-radius:10px"></div>
+        <div class="skeleton" style="width:50px;height:18px;border-radius:10px"></div>
+      </div>
+    </div>
+  `).join('');
   meta.textContent = '';
 
   try {
@@ -172,13 +187,6 @@ async function doSearch(keepPage = false) {
           btn.classList.add('result-copy-url--copied');
           setTimeout(() => btn.classList.remove('result-copy-url--copied'), 1200);
         });
-      });
-    });
-
-    // Bind snippet expand/collapse
-    results.querySelectorAll('.result-card-snippet').forEach(el => {
-      el.addEventListener('click', () => {
-        el.classList.toggle('result-card-snippet--expanded');
       });
     });
 
@@ -289,7 +297,7 @@ function renderResult(r, index) {
         <span class="result-card-url">${escapeHtml(truncateUrl(r.url))}</span>
         <button class="result-copy-url" data-url="${escapeHtml(r.url)}" title="Copy URL">${icon('copy', 12)}</button>
       </div>
-      <div class="result-card-snippet" data-index="${index}">${desc}</div>
+      <div class="result-card-snippet">${desc}</div>
       ${spamWarning}
       <div class="result-card-footer">
         <div class="result-card-footer-left">
@@ -297,7 +305,7 @@ function renderResult(r, index) {
           ${tags.length ? `<div class="result-card-tags">${tags.map(t => `<span class="result-tag result-tag--${t.color}">${t.label}</span>`).join('')}</div>` : ''}
         </div>
         <div class="result-actions">
-          <button class="result-detail-btn" data-index="${index}">${icon('eye', 14)} <span class="action-label">Details</span></button>
+          <button class="result-detail-btn result-detail-btn--accent" data-index="${index}">${icon('eye', 14)} <span class="action-label">Details</span></button>
           <button class="result-report-btn" data-url="${escapeHtml(r.url)}">${icon('flag', 14)}</button>
         </div>
       </div>
@@ -332,9 +340,24 @@ function scoreRing(value, color, size = 80) {
   `;
 }
 
+function detailScoreRow(label, value, color, hint) {
+  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
+  return `
+    <div class="detail-score-row">
+      <div class="score-bar">
+        <span style="font-size:0.8em;color:var(--text-muted);min-width:100px">${label}</span>
+        <div class="score-bar-fill">
+          <div class="fill" style="width:${pct}%;background:var(--${color})"></div>
+        </div>
+        <span class="score-bar-label">${value.toFixed(2)}</span>
+      </div>
+      <div class="detail-hint">${hint}</div>
+    </div>`;
+}
+
 function showResultDetail(r) {
   const trust = trustLevel(r);
-  const trustVal = (r.quality_score + r.eeat_score + (1 - (r.spam_score || 0))) / 3;
+  const trustVal = ((r.quality_score || 0) + (r.eeat_score || 0) + (1 - (r.spam_score || 0))) / 3;
   const crawledAt = r.crawled_at ? new Date(r.crawled_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown';
   const lang = r.language ? r.language.toUpperCase() : '';
 
@@ -351,84 +374,134 @@ function showResultDetail(r) {
   if (r.spam_score > 0.5) flags.push('<span class="badge badge-red">' + icon('alertTriangle', 12) + ' High Spam Risk</span>');
   if (r.eeat_score > 0.5) flags.push('<span class="badge badge-purple">' + icon('shield', 12) + ' Expert Content</span>');
 
-  // Score groups
+  // Score definitions with hints
   const relevanceScores = [
-    ['BM25 Score', r.score, 'accent'],
-    ['Relevance', r.relevance_score, 'accent'],
-    ['Freshness', r.freshness_score, 'amber'],
+    ['BM25 Score', r.score, 'accent', 'How well this page matches your query terms'],
+    ['Relevance', r.relevance_score, 'accent', 'Overall match strength for your search'],
+    ['Freshness', r.freshness_score, 'amber', 'How recently this page was updated'],
   ].filter(([, v]) => v != null && v !== undefined);
 
   const qualityScores = [
-    ['Quality', r.quality_score, 'green'],
-    ['E-E-A-T', r.eeat_score, 'purple'],
-    ['Readability', r.readability_score, 'blue'],
+    ['Quality', r.quality_score, 'green', 'Content depth, structure, and originality'],
+    ['E-E-A-T', r.eeat_score, 'purple', 'Experience, Expertise, Authority, Trust signals'],
+    ['Readability', r.readability_score, 'blue', 'How easy the text is to read'],
   ].filter(([, v]) => v != null && v !== undefined);
 
   const trustScores = [
-    ['Spam Risk', r.spam_score, 'red'],
-    ['Link Score', r.link_score, 'blue'],
-    ['SEO Score', r.seo_score, 'amber'],
-    ['Citations', r.citation_score, 'purple'],
-    ['Author Credibility', r.author_credibility, 'purple'],
+    ['Spam Risk', r.spam_score, 'red', 'Likelihood of spam or manipulative content'],
+    ['Link Score', r.link_score, 'blue', 'Inbound link quality from other pages'],
+    ['SEO Score', r.seo_score, 'amber', 'Technical SEO signals (meta tags, structure)'],
+    ['Citations', r.citation_score, 'purple', 'How often other pages reference this one'],
+    ['Author Credibility', r.author_credibility, 'purple', 'Author reputation signals'],
   ].filter(([, v]) => v != null && v !== undefined);
 
   const html = `
-    <div class="detail-overview">
-      <div class="detail-overview-left">
-        <div class="detail-overview-title">${escapeHtml(r.title || 'Untitled')}</div>
-        <a class="detail-overview-url" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>
-        <div class="detail-overview-meta">
-          <span class="result-dot result-dot--${trust.color}"></span>
-          <span>${escapeHtml(r.domain || '')}</span>
-          <span class="detail-sep">·</span>
-          <span>${crawledAt}</span>
-          ${lang ? `<span class="detail-sep">·</span><span>${lang}</span>` : ''}
-        </div>
-      </div>
-      <div class="detail-overview-right">
-        ${scoreRing(trustVal, trust.color, 80)}
-        <span class="detail-trust-label" style="color:var(--${trust.color})">${trust.label}</span>
-      </div>
+    <div class="detail-tabs">
+      <button class="detail-tab detail-tab--active" data-tab="overview">Overview</button>
+      <button class="detail-tab" data-tab="scores">Scores</button>
+      <button class="detail-tab" data-tab="provenance">Provenance</button>
     </div>
 
-    <div class="detail-provenance">
-      <div class="detail-prov-row">
-        <span class="detail-prov-label">Origin Node</span>
-        <span class="detail-prov-value">${escapeHtml(originLabel)}</span>
+    <div class="detail-tab-content detail-tab-content--active" data-tab-content="overview">
+      <div class="detail-overview">
+        <div class="detail-overview-left">
+          <div class="detail-overview-title">${escapeHtml(r.title || 'Untitled')}</div>
+          <div class="detail-actions">
+            <button class="btn btn-sm detail-copy-url" data-url="${escapeHtml(r.url)}">${icon('copy', 12)} Copy URL</button>
+            <a class="btn btn-sm" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${icon('externalLink', 12)} Open</a>
+          </div>
+          <div class="detail-overview-meta">
+            <span class="result-dot result-dot--${trust.color}"></span>
+            <span>${escapeHtml(r.domain || '')}</span>
+            <span class="detail-sep">·</span>
+            <span>${crawledAt}</span>
+            ${lang ? `<span class="detail-sep">·</span><span>${lang}</span>` : ''}
+          </div>
+        </div>
+        <div class="detail-overview-right">
+          ${scoreRing(trustVal, trust.color, 80)}
+          <span class="detail-trust-label" style="color:var(--${trust.color})">${trust.label}</span>
+        </div>
       </div>
-      ${servedBy ? `
-      <div class="detail-prov-row">
-        <span class="detail-prov-label">Served By</span>
-        <span class="detail-prov-value" style="font-family:var(--font-mono);font-size:0.85em">${escapeHtml(servedBy)}</span>
+
+      ${flags.length ? `
+      <div class="detail-flags">
+        <span class="detail-flags-label">Content Flags</span>
+        <div class="detail-flags-list">${flags.join('')}</div>
       </div>` : ''}
     </div>
 
-    ${flags.length ? `
-    <div class="detail-flags">
-      <span class="detail-flags-label">Content Flags</span>
-      <div class="detail-flags-list">${flags.join('')}</div>
-    </div>` : ''}
+    <div class="detail-tab-content" data-tab-content="scores">
+      ${relevanceScores.length ? `
+      <div class="detail-section">
+        <h4>Relevance</h4>
+        ${relevanceScores.map(([label, val, color, hint]) => detailScoreRow(label, val || 0, color, hint)).join('')}
+      </div>` : ''}
 
-    ${relevanceScores.length ? `
-    <div class="detail-section">
-      <h4>Relevance</h4>
-      ${relevanceScores.map(([label, val, color]) => scoreBar(val || 0, color, label)).join('')}
-    </div>` : ''}
+      ${qualityScores.length ? `
+      <div class="detail-section">
+        <h4>Content Quality</h4>
+        ${qualityScores.map(([label, val, color, hint]) => detailScoreRow(label, val || 0, color, hint)).join('')}
+      </div>` : ''}
 
-    ${qualityScores.length ? `
-    <div class="detail-section">
-      <h4>Content Quality</h4>
-      ${qualityScores.map(([label, val, color]) => scoreBar(val || 0, color, label)).join('')}
-    </div>` : ''}
+      ${trustScores.length ? `
+      <div class="detail-section">
+        <h4>Trust &amp; Authority</h4>
+        ${trustScores.map(([label, val, color, hint]) => detailScoreRow(label, val || 0, color, hint)).join('')}
+      </div>` : ''}
+    </div>
 
-    ${trustScores.length ? `
-    <div class="detail-section">
-      <h4>Trust &amp; Authority</h4>
-      ${trustScores.map(([label, val, color]) => scoreBar(val || 0, color, label)).join('')}
-    </div>` : ''}
+    <div class="detail-tab-content" data-tab-content="provenance">
+      <div class="detail-provenance">
+        <div class="detail-prov-row">
+          <span class="detail-prov-label">Origin Node</span>
+          <span class="detail-prov-value">${escapeHtml(originLabel)}</span>
+        </div>
+        ${servedBy ? `
+        <div class="detail-prov-row">
+          <span class="detail-prov-label">Served By</span>
+          <span class="detail-prov-value" style="font-family:var(--font-mono);font-size:0.85em">${escapeHtml(servedBy)}</span>
+        </div>` : ''}
+        ${r.origin_peer_id ? `
+        <div class="detail-prov-row">
+          <span class="detail-prov-label">Origin Peer ID</span>
+          <span class="detail-prov-value" style="font-family:var(--font-mono);font-size:0.8em">${escapeHtml(r.origin_peer_id)}</span>
+        </div>` : ''}
+        ${r.peer_id ? `
+        <div class="detail-prov-row">
+          <span class="detail-prov-label">Served Peer ID</span>
+          <span class="detail-prov-value" style="font-family:var(--font-mono);font-size:0.8em">${escapeHtml(r.peer_id)}</span>
+        </div>` : ''}
+      </div>
+    </div>
   `;
 
   showModal('Document Details', html, { width: '700px' });
+
+  // Tab switching
+  const modal = document.querySelector('.modal-body');
+  if (modal) {
+    modal.querySelectorAll('.detail-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        modal.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('detail-tab--active'));
+        modal.querySelectorAll('.detail-tab-content').forEach(c => c.classList.remove('detail-tab-content--active'));
+        tab.classList.add('detail-tab--active');
+        const target = modal.querySelector(`[data-tab-content="${tab.dataset.tab}"]`);
+        if (target) target.classList.add('detail-tab-content--active');
+      });
+    });
+
+    // Copy URL button in overview tab
+    const copyBtn = modal.querySelector('.detail-copy-url');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(copyBtn.dataset.url).then(() => {
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.innerHTML = `${icon('copy', 12)} Copy URL`; }, 1200);
+        });
+      });
+    }
+  }
 }
 
 function showReportModal(url) {
