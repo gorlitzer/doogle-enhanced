@@ -140,7 +140,7 @@ func DefaultConfig() *Config {
 		Search: SearchConfig{
 			MaxResults:      50,
 			DefaultPageSize: 10,
-			PeerTimeout:     5 * time.Second,
+			PeerTimeout:     2 * time.Second,
 			MaxPeers:        10,
 			CacheSize:       1000,
 			CacheTTL:        5 * time.Minute,

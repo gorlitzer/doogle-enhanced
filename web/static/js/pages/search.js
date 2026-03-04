@@ -163,6 +163,25 @@ async function doSearch(keepPage = false) {
       });
     });
 
+    // Bind copy URL handlers
+    results.querySelectorAll('.result-copy-url').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard.writeText(btn.dataset.url).then(() => {
+          btn.classList.add('result-copy-url--copied');
+          setTimeout(() => btn.classList.remove('result-copy-url--copied'), 1200);
+        });
+      });
+    });
+
+    // Bind snippet expand/collapse
+    results.querySelectorAll('.result-card-snippet').forEach(el => {
+      el.addEventListener('click', () => {
+        el.classList.toggle('result-card-snippet--expanded');
+      });
+    });
+
     // Bind pagination handlers
     const prevBtn = results.querySelector('#pagination-prev');
     const nextBtn = results.querySelector('#pagination-next');
@@ -173,17 +192,25 @@ async function doSearch(keepPage = false) {
   }
 }
 
-function miniGauge(value, color, label) {
-  if (value == null || value === undefined) return '';
-  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
-  return `
-    <div class="mini-gauge" title="${label}: ${value.toFixed(2)}">
-      <div class="mini-gauge-bar">
-        <div class="mini-gauge-fill" style="width:${pct}%;background:var(--${color})"></div>
-      </div>
-      <span class="mini-gauge-label">${label}</span>
-    </div>
-  `;
+function faviconUrl(domain) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=16`;
+}
+
+function trustRingSVG(value, color, size = 24) {
+  const r = (size - 4) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - Math.min(1, Math.max(0, value)));
+  return `<svg class="result-trust-ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--${color})" stroke-width="2.5"
+      stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+      stroke-linecap="round" transform="rotate(-90 ${size/2} ${size/2})"/>
+  </svg>`;
+}
+
+function scoreChip(value, label, color) {
+  if (value == null || value === undefined || value <= 0) return '';
+  return `<span class="result-score-chip result-score-chip--${color}" title="${label}: ${value.toFixed(2)}">${label} ${value.toFixed(2)}</span>`;
 }
 
 function truncateUrl(url, maxLen = 70) {
@@ -215,46 +242,59 @@ function renderResult(r, index) {
     ? `<span class="result-prov result-prov--${provColor}" title="${escapeHtml(r.origin_peer_id || '')}">${provLabel}</span>`
     : '';
 
-  // Score-level border class
-  const borderClass = r.score > 1.0 ? 'result-item--high' : r.score > 0.5 ? 'result-item--mid' : '';
+  // Trust
+  const trust = trustLevel(r);
+  const trustVal = ((r.quality_score || 0) + (r.eeat_score || 0) + (1 - (r.spam_score || 0))) / 3;
 
   // Spam warning
   const spamWarning = r.spam_score > 0.3
     ? `<div class="content-warning">${icon('alertTriangle', 14)} Low trust — content may be unreliable</div>`
     : '';
 
-  // Mini gauges
-  const gauges = [];
-  if (r.quality_score > 0) gauges.push(miniGauge(r.quality_score, 'green', 'Quality'));
-  if (r.eeat_score > 0) gauges.push(miniGauge(r.eeat_score, 'purple', 'E-E-A-T'));
-  const trust = trustLevel(r);
-  if (r.quality_score > 0 || r.eeat_score > 0) gauges.push(miniGauge((r.quality_score + r.eeat_score + (1 - (r.spam_score || 0))) / 3, trust.color, 'Trust'));
+  // Score chips
+  const chips = [
+    scoreChip(r.quality_score, 'Quality', 'green'),
+    scoreChip(r.eeat_score, 'E-E-A-T', 'purple'),
+    scoreChip(r.spam_score, 'Spam', 'red'),
+  ].filter(Boolean);
 
   // Tags
   const tags = [];
-  if (r.is_evergreen) tags.push('evergreen');
-  if (r.citation_score > 0.3) tags.push('cited');
-  if (r.readability_score > 0.6) tags.push('readable');
-  if (r.is_time_sensitive) tags.push('time-sensitive');
+  if (r.is_evergreen) tags.push({ label: 'evergreen', color: 'green' });
+  if (r.readability_score > 0.6) tags.push({ label: 'readable', color: 'blue' });
+  if (r.citation_score > 0.3) tags.push({ label: 'cited', color: 'purple' });
+  if (r.is_time_sensitive) tags.push({ label: 'time-sensitive', color: 'amber' });
+
+  // Favicon: Google S2 with colored-initial fallback via onerror
+  const initial = domain ? domain.charAt(0).toUpperCase() : '?';
+  const faviconHtml = domain
+    ? `<img class="result-favicon" src="${faviconUrl(domain)}" alt="" width="16" height="16" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="result-favicon-fallback" style="display:none">${initial}</span>`
+    : `<span class="result-favicon-fallback">${initial}</span>`;
 
   return `
-    <div class="result-item ${borderClass}">
-      <div class="result-header">
-        <div class="result-header-left">
-          <span class="result-dot result-dot--${provColor}"></span>
+    <div class="result-card result-card--${trust.color}">
+      <div class="result-card-header">
+        <div class="result-card-header-left">
+          ${faviconHtml}
           <span class="result-domain">${domain}</span>
           ${crawlTime ? `<span class="result-time">${crawlTime}</span>` : ''}
         </div>
-        ${provPill}
+        <div class="result-card-header-right">
+          ${trustRingSVG(trustVal, trust.color, 24)}
+          ${provPill}
+        </div>
       </div>
-      <a class="result-title" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${title}</a>
-      <div class="result-url">${escapeHtml(truncateUrl(r.url))}</div>
-      <div class="result-desc">${desc}</div>
+      <a class="result-card-title" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${title}</a>
+      <div class="result-card-url-row">
+        <span class="result-card-url">${escapeHtml(truncateUrl(r.url))}</span>
+        <button class="result-copy-url" data-url="${escapeHtml(r.url)}" title="Copy URL">${icon('copy', 12)}</button>
+      </div>
+      <div class="result-card-snippet" data-index="${index}">${desc}</div>
       ${spamWarning}
-      <div class="result-footer">
-        <div class="result-footer-left">
-          ${gauges.length ? `<div class="result-gauges">${gauges.join('')}</div>` : ''}
-          ${tags.length ? `<div class="result-tags">${tags.map(t => `<span class="result-tag">${t}</span>`).join('')}</div>` : ''}
+      <div class="result-card-footer">
+        <div class="result-card-footer-left">
+          ${chips.length ? `<div class="result-card-scores">${chips.join('')}</div>` : ''}
+          ${tags.length ? `<div class="result-card-tags">${tags.map(t => `<span class="result-tag result-tag--${t.color}">${t.label}</span>`).join('')}</div>` : ''}
         </div>
         <div class="result-actions">
           <button class="result-detail-btn" data-index="${index}">${icon('eye', 14)} <span class="action-label">Details</span></button>
