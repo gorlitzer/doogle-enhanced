@@ -667,6 +667,7 @@ async function renderAnalytics(el) {
       <div class="section"><h3>Crawl Activity (live)</h3><div class="chart-container"><canvas id="crawl-activity-chart"></canvas></div></div>
       <div class="section"><h3>Crawled vs Indexed</h3><div class="chart-container"><canvas id="crawl-vs-indexed-chart"></canvas></div></div>
       <div class="section"><h3>Queue Depth Over Time</h3><div class="chart-container"><canvas id="queue-depth-chart"></canvas></div></div>
+      <div class="section"><h3>Cumulative Crawl Progress</h3><div class="chart-container"><canvas id="crawl-cumulative-chart"></canvas></div></div>
     `;
 
     if (crawlHistory.length > 1) {
@@ -690,6 +691,14 @@ async function renderAnalytics(el) {
       renderLineChart('queue-depth-chart', [{ label: 'Queue depth', color: getCSS('--amber'), data: queueData }], { height: 200 });
     } else {
       renderLineChart('queue-depth-chart', [], { height: 200 });
+    }
+
+    // Cumulative crawl progress chart
+    if (crawlHistory.length > 1) {
+      const cumulativeData = crawlHistory.map(h => ({ label: formatTime(h.time), value: h.crawled }));
+      renderLineChart('crawl-cumulative-chart', [{ label: 'Total crawled', color: getCSS('--green'), data: cumulativeData }], { height: 200 });
+    } else {
+      renderLineChart('crawl-cumulative-chart', [], { height: 200 });
     }
   } catch (err) {
     el.innerHTML = `<div class="empty-state"><p>Failed to load analytics: ${err.message}</p></div>`;

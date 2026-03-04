@@ -142,9 +142,9 @@ async function renderOverview(el) {
     const connectedPeers = status.connected_peers || 0;
     const totalTasks = forwarded + received;
 
-    // ── Card 1: Index Overview (wide, span 2) ──
-    const overviewHealth = indexedDocs > 0 ? 'green' : 'amber';
-    const card1 = cardWrap('Index Overview', overviewHealth, `
+    // ── Card 1a: Indexed Documents ──
+    const indexedHealth = indexedDocs > 0 ? 'green' : 'amber';
+    const card1a = cardWrap('Indexed Documents', indexedHealth, `
       <div class="sl-body-row">
         <div>
           <div class="sl-big-num">${formatNum(indexedDocs)}</div>
@@ -153,12 +153,26 @@ async function renderOverview(el) {
         ${cssRing(localPct, 1, 'var(--green)', 'local content')}
       </div>
       <div class="sl-stat-row">
-        <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalIndexed)}</span><span class="sl-stat-label">Processed</span></div>
         <div class="sl-stat"><span class="sl-stat-value">${formatNum(localDocs)}</span><span class="sl-stat-label">Local Docs</span></div>
         <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerDocs)}</span><span class="sl-stat-label">Peer Docs</span></div>
-        <div class="sl-stat"><span class="sl-stat-value">${docsPerMin}</span><span class="sl-stat-label">Docs/min</span></div>
       </div>
-    `, 'sl-card--wide');
+    `);
+
+    // ── Card 1b: Throughput ──
+    const throughputHealth = totalIndexed > 0 ? 'green' : 'amber';
+    const card1b = cardWrap('Throughput', throughputHealth, `
+      <div class="sl-body-row">
+        ${cssRing(acceptanceRate, 1, acceptanceDenom > 0 && acceptanceRate >= 0.7 ? 'var(--green)' : acceptanceRate >= 0.4 ? 'var(--amber)' : 'var(--red)', 'acceptance rate')}
+        <div>
+          <div class="sl-big-num">${formatNum(totalIndexed)}</div>
+          <div class="sl-big-label">processed</div>
+        </div>
+      </div>
+      <div class="sl-stat-row">
+        <div class="sl-stat"><span class="sl-stat-value">${docsPerMin}</span><span class="sl-stat-label">Docs/min</span></div>
+        <div class="sl-stat"><span class="sl-stat-value">${Math.round(acceptanceRate * 100)}%</span><span class="sl-stat-label">Accepted</span></div>
+      </div>
+    `);
 
     // ── Card 2: Document Quality ──
     const qualHealth = avgQuality >= 0.6 ? 'green' : avgQuality >= 0.3 ? 'amber' : 'red';
@@ -310,7 +324,7 @@ async function renderOverview(el) {
 
     el.innerHTML = `
       <div class="sl-dashboard">
-        ${card1}${card2}${card3}${card4}${card5}${card6}
+        ${card1a}${card1b}${card2}${card3}${card4}${card5}${card6}
       </div>
 
       <div class="sl-pipeline-strip">

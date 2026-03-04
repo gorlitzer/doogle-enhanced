@@ -1,7 +1,7 @@
 // Doogle v2 — Node Spotlight: Dual-View Monitoring Dashboard
 // Toggle between Spotlight gauge columns and Architecture flow diagram
 import { api } from '../api.js';
-import { icon, getCSS, escapeHtml } from '../components.js';
+import { icon, getCSS, escapeHtml, renderLineChart } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
 // ── Spotlight Grid Config (gauge columns) ──
@@ -58,6 +58,7 @@ let currentView = localStorage.getItem('doogle-node-view') || 'flow';
 let lastData = { status: null, crawler: null, indexer: null, profile: null, storage: null };
 let mobileBoxData = new Map();
 const MOBILE_BP = 700;
+let nodeHistory = [];
 let _mobileResizeHandler = null;
 
 export function renderNode(container) {
@@ -198,6 +199,12 @@ function applyData(status, crawler, indexer, profile, storage) {
   const cr = crawler || {};
   const ix = indexer || {};
 
+  // Track history for crawl activity chart
+  const totalCrawledH = cr.total_crawled || s.crawled_urls || 0;
+  const totalIndexedH = ix.total_indexed || s.indexed_docs || 0;
+  nodeHistory.push({ time: new Date(), crawled: totalCrawledH, indexed: totalIndexedH });
+  if (nodeHistory.length > 60) nodeHistory.shift();
+
   if (diagram) diagram.setData({ status, crawler, indexer });
 
   const isGrid = currentView === 'grid';
@@ -265,10 +272,11 @@ function applyData(status, crawler, indexer, profile, storage) {
     setBox('indexer', {
       health: indexerHealth,
       gauges: [
+        { type: 'counter', value: totalIndexed, label: 'indexed', color: getCSS('--accent') },
         { type: 'ring', value: avgQ, max: 1, label: 'quality', color: getCSS('--green') },
         { type: 'ring', value: avgSpam, max: 1, label: 'spam score', color: getCSS('--red') },
       ],
-      metrics: [`Indexed: ${formatNum(ix.total_indexed || s.indexed_docs || 0)}`],
+      metrics: [],
     });
     setBox('search', {
       health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
@@ -311,8 +319,11 @@ function applyData(status, crawler, indexer, profile, storage) {
     });
     setBox('indexer', {
       health: indexerHealth,
-      gauges: [{ type: 'ring', value: avgQ, max: 1, label: 'quality', color: getCSS('--green') }],
-      metrics: [`Indexed: ${formatNum(ix.total_indexed || s.indexed_docs || 0)}`],
+      gauges: [
+        { type: 'counter', value: totalIndexed, label: 'indexed', color: getCSS('--accent') },
+        { type: 'ring', value: avgQ, max: 1, label: 'quality', color: getCSS('--green') },
+      ],
+      metrics: [],
     });
     setBox('storage', {
       health: 'green',
@@ -332,17 +343,6 @@ function applyData(status, crawler, indexer, profile, storage) {
 }
 
 // ── Dashboard Helpers ──
-
-const ROLE_META = {
-  Explorer:   { icon: '\u{1F9ED}', color: 'var(--accent)' },
-  Curator:    { icon: '\u{1F3A8}', color: 'var(--purple)' },
-  Sentinel:   { icon: '\u{1F6E1}', color: 'var(--red)' },
-  Specialist: { icon: '\u{1F3AF}', color: 'var(--amber)' },
-  Seeder:     { icon: '\u{1F331}', color: 'var(--green)' },
-  Connector:  { icon: '\u{1F517}', color: 'var(--blue)' },
-  Archivist:  { icon: '\u{1F4DA}', color: 'var(--amber)' },
-  Builder:    { icon: '\u{1F6E0}', color: 'var(--text-muted)' },
-};
 
 function formatBytes(bytes) {
   if (bytes == null || bytes < 0) return 'N/A';
@@ -383,13 +383,28 @@ function cardWrap(title, health, content, extra = '') {
     </div>`;
 }
 
+function parseUptimeMinutes(uptime) {
+  if (!uptime) return 1;
+  let total = 0;
+  const h = uptime.match(/(\d+)h/);
+  const m = uptime.match(/(\d+)m/);
+  const s = uptime.match(/(\d+)s/);
+  if (h) total += parseInt(h[1]) * 60;
+  if (m) total += parseInt(m[1]);
+  if (s) total += parseInt(s[1]) / 60;
+  return Math.max(1, total);
+}
+
+function formatTime(d) {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 function renderDashboard(status, crawler, indexer, profile, storage) {
   const el = document.getElementById('spotlight-summary');
   if (!el) return;
   const s = status || {};
   const cr = crawler || {};
   const ix = indexer || {};
-  const prof = profile || {};
   const stor = storage || {};
 
   // ── Card 1: Node Identity (wide) ──
@@ -417,6 +432,7 @@ function renderDashboard(status, crawler, indexer, profile, storage) {
   const peers = s.connected_peers || 0;
   const peerMax = Math.max(10, peers);
   const netHealth = peers >= 3 ? 'green' : peers >= 1 ? 'amber' : 'red';
+  const addrsCount = (s.addrs || []).length;
 
   const card2 = cardWrap('Network Health', netHealth, `
     <div class="sl-body-row">
@@ -429,7 +445,7 @@ function renderDashboard(status, crawler, indexer, profile, storage) {
     <div class="sl-stat-row">
       <div class="sl-stat"><span class="sl-stat-value">${formatNum(s.forwarded_tasks || 0)}</span><span class="sl-stat-label">Forwarded</span></div>
       <div class="sl-stat"><span class="sl-stat-value">${formatNum(s.received_tasks || 0)}</span><span class="sl-stat-label">Received</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(s.owned_domains || 0)}</span><span class="sl-stat-label">Domains</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${addrsCount}</span><span class="sl-stat-label">Addrs</span></div>
     </div>
   `);
 
@@ -453,27 +469,49 @@ function renderDashboard(status, crawler, indexer, profile, storage) {
     </div>
   `);
 
-  // ── Card 4: Index Quality ──
+  // ── Card 4: Indexed Documents (NEW) ──
+  const totalIndexed = ix.total_indexed || s.indexed_docs || 0;
+  const localDocs = s.local_docs || 0;
+  const peerDocs = s.peer_docs || 0;
+  const localPct = totalIndexed > 0 ? localDocs / totalIndexed : 0;
+  const upMins = parseUptimeMinutes(s.uptime);
+  const docsPerMin = upMins > 0 ? (totalIndexed / upMins).toFixed(1) : '0';
+  const indexedHealth = totalIndexed > 0 ? 'green' : 'amber';
+
+  const card4 = cardWrap('Indexed Documents', indexedHealth, `
+    <div class="sl-body-row">
+      <div>
+        <div class="sl-big-num">${formatNum(totalIndexed)}</div>
+        <div class="sl-big-label">total indexed</div>
+      </div>
+      ${cssRing(localPct, 1, 'var(--green)', 'local content')}
+    </div>
+    <div class="sl-stat-row">
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(localDocs)}</span><span class="sl-stat-label">Local Docs</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerDocs)}</span><span class="sl-stat-label">Peer Docs</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${docsPerMin}</span><span class="sl-stat-label">Docs/min</span></div>
+    </div>
+  `);
+
+  // ── Card 5: Content Quality (renamed from Index Quality) ──
   const avgQ = ix.avg_quality || 0;
   const avgSpam = ix.avg_spam || 0;
-  const totalIndexed = ix.total_indexed || s.indexed_docs || 0;
   const indexerIdle = totalIndexed === 0 && avgQ === 0;
-  const indexHealth = indexerIdle ? 'amber' : avgQ > 0.5 ? 'green' : avgQ > 0.3 ? 'amber' : 'red';
+  const qualHealth = indexerIdle ? 'amber' : avgQ > 0.5 ? 'green' : avgQ > 0.3 ? 'amber' : 'red';
 
-  const card4 = cardWrap('Index Quality', indexHealth, `
+  const card5 = cardWrap('Content Quality', qualHealth, `
     <div class="sl-ring-row">
       ${cssRing(avgQ, 1, 'var(--green)', 'quality')}
       ${cssRing(avgSpam, 1, 'var(--red)', 'spam score')}
     </div>
     <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalIndexed)}</span><span class="sl-stat-label">Indexed</span></div>
       <div class="sl-stat"><span class="sl-stat-value">${formatNum(ix.spam_rejected || 0)}</span><span class="sl-stat-label">Spam Rejected</span></div>
       <div class="sl-stat"><span class="sl-stat-value">${formatNum(ix.duplicates_skipped || 0)}</span><span class="sl-stat-label">Dupes Skipped</span></div>
       <div class="sl-stat"><span class="sl-stat-value">${formatNum(ix.empty_skipped || 0)}</span><span class="sl-stat-label">Empty Skipped</span></div>
     </div>
   `);
 
-  // ── Card 5: Storage ──
+  // ── Card 6: Storage (improved with disk usage ring) ──
   const totalBytes = stor.total_bytes || 0;
   const bleveBytes = stor.bleve_bytes || 0;
   const badgerBytes = stor.badger_bytes || 0;
@@ -486,10 +524,18 @@ function renderDashboard(status, crawler, indexer, profile, storage) {
   const freeGB = freeBytes != null && freeBytes >= 0 ? freeBytes / (1024 * 1024 * 1024) : -1;
   const storHealth = freeGB < 0 ? 'green' : freeGB > 5 ? 'green' : freeGB > 1 ? 'amber' : 'red';
   const freeLabel = freeGB < 0 ? 'N/A' : formatBytes(freeBytes);
+  const usedBytes = totalBytes;
+  const diskTotal = freeBytes != null && freeBytes >= 0 ? usedBytes + freeBytes : 0;
+  const diskUsagePct = diskTotal > 0 ? usedBytes / diskTotal : 0;
 
-  const card5 = cardWrap('Storage', storHealth, `
-    <div class="sl-big-num">${formatBytes(totalBytes)}</div>
-    <div class="sl-big-label">total data</div>
+  const card6 = cardWrap('Storage', storHealth, `
+    <div class="sl-body-row">
+      ${diskTotal > 0 ? cssRing(diskUsagePct, 1, storHealth === 'green' ? 'var(--green)' : storHealth === 'amber' ? 'var(--amber)' : 'var(--red)', 'disk usage') : ''}
+      <div>
+        <div class="sl-big-num">${formatBytes(totalBytes)}</div>
+        <div class="sl-big-label">total data</div>
+      </div>
+    </div>
     <div class="sl-stacked-bar">
       <span style="width:${blevePct}%;background:var(--green)" title="Bleve: ${formatBytes(bleveBytes)}"></span>
       <span style="width:${badgerPct}%;background:var(--blue)" title="Badger: ${formatBytes(badgerBytes)}"></span>
@@ -502,63 +548,42 @@ function renderDashboard(status, crawler, indexer, profile, storage) {
     </div>
     <div class="sl-stat-row">
       <div class="sl-stat"><span class="sl-stat-value">${freeLabel}</span><span class="sl-stat-label">Free Space</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(s.local_docs || 0)}</span><span class="sl-stat-label">Local Docs</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(s.peer_docs || 0)}</span><span class="sl-stat-label">Peer Docs</span></div>
+      <div class="sl-stat"><span class="sl-stat-value">${formatBytes(totalBytes)}</span><span class="sl-stat-label">Total Data</span></div>
     </div>
   `);
 
-  // ── Card 6: Master Profile ──
-  const affinities = prof.role_affinities || {};
-  const sortedRoles = Object.entries(affinities).sort((a, b) => b[1] - a[1]);
-  const topRole = sortedRoles.length > 0 && sortedRoles[0][1] > 0 ? sortedRoles[0] : null;
-  const interestCount = Object.keys(prof.interests || {}).length;
-  const searchCount = Object.keys(prof.search_topics || {}).length;
-  const reportsMade = prof.reports_made || 0;
-  const hasData = topRole || interestCount > 0;
-  const profileHealth = topRole ? 'green' : hasData ? 'amber' : 'red';
-
-  let profileBody;
-  if (!hasData) {
-    profileBody = `<div class="sl-empty-state">Complete the Setup Wizard to start building your profile</div>`;
-  } else {
-    const rm = topRole ? ROLE_META[topRole[0]] || { icon: '\u{2B50}', color: 'var(--accent)' } : null;
-    const topRoleHtml = topRole ? `
-      <div class="sl-top-role">
-        <span class="sl-top-role-icon">${rm.icon}</span>
-        <span class="sl-top-role-name">${escapeHtml(topRole[0])}</span>
-        <span class="sl-top-role-pct">${Math.round(topRole[1] * 100)}%</span>
-      </div>` : '';
-
-    const top4 = sortedRoles.slice(0, 4);
-    const barsHtml = top4.map(([role, val]) => {
-      const meta = ROLE_META[role] || { icon: '\u{2B50}', color: 'var(--accent)' };
-      const pct = Math.round(val * 100);
-      return `
-        <div class="sl-affinity-bar">
-          <span class="sl-affinity-bar-label">${escapeHtml(role)}</span>
-          <div class="sl-affinity-bar-track">
-            <div class="sl-affinity-bar-fill" style="width:${pct}%;background:${meta.color}"></div>
-          </div>
-          <span class="sl-affinity-bar-pct">${pct}%</span>
-        </div>`;
-    }).join('');
-
-    profileBody = `
-      ${topRoleHtml}
-      <div class="sl-affinity-list">${barsHtml}</div>
-      <div class="sl-stat-row">
-        <div class="sl-stat"><span class="sl-stat-value">${interestCount}</span><span class="sl-stat-label">Interests</span></div>
-        <div class="sl-stat"><span class="sl-stat-value">${searchCount}</span><span class="sl-stat-label">Topics</span></div>
-        <div class="sl-stat"><span class="sl-stat-value">${reportsMade}</span><span class="sl-stat-label">Reports</span></div>
-      </div>`;
-  }
-  profileBody += `<a href="#/admin/profile" class="sl-profile-link">View full profile &rarr;</a>`;
-
-  const card6 = cardWrap('Master Profile', profileHealth, profileBody);
+  // ── Card 7: Crawl Activity (wide, replaces Master Profile) ──
+  const card7 = cardWrap('Crawl Activity', totalCrawled > 0 ? 'green' : 'amber', `
+    <div class="chart-container"><canvas id="node-crawl-chart"></canvas></div>
+  `, 'sl-card--wide');
 
   // Assemble dashboard
   el.className = 'sl-dashboard';
-  el.innerHTML = card1 + card2 + card3 + card4 + card5 + card6;
+  el.innerHTML = card1 + card2 + card3 + card4 + card5 + card6 + card7;
+
+  // Render crawl activity line chart
+  if (nodeHistory.length > 1) {
+    const deltas = [];
+    for (let i = 1; i < nodeHistory.length; i++) {
+      deltas.push({
+        label: formatTime(nodeHistory[i].time),
+        value: nodeHistory[i].crawled - nodeHistory[i - 1].crawled,
+      });
+    }
+    const indexDeltas = [];
+    for (let i = 1; i < nodeHistory.length; i++) {
+      indexDeltas.push({
+        label: formatTime(nodeHistory[i].time),
+        value: nodeHistory[i].indexed - nodeHistory[i - 1].indexed,
+      });
+    }
+    renderLineChart('node-crawl-chart', [
+      { label: 'Crawled/interval', color: getCSS('--accent'), data: deltas },
+      { label: 'Indexed/interval', color: getCSS('--green'), data: indexDeltas },
+    ], { height: 180 });
+  } else {
+    renderLineChart('node-crawl-chart', [], { height: 180 });
+  }
 }
 
 async function checkForUpdate() {
