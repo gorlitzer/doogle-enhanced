@@ -189,14 +189,14 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 // For site: queries, only shard owners are queried.
 // For general queries, the covering set of the hash ring is used.
 func (ds *DistributedSearch) selectTargetPeers(req *models.SearchRequest) []peer.ID {
-	connectedPeers := ds.host.Network().Peers()
-	if len(connectedPeers) == 0 {
+	// Early exit: no other Doogle peers in the ring → local-only search
+	if ds.shards == nil || ds.shards.NodeCount() <= 1 {
 		return nil
 	}
 
-	// If no shard manager, fall back to querying all connected peers
-	if ds.shards == nil || ds.shards.NodeCount() <= 1 {
-		return ds.limitPeers(connectedPeers)
+	connectedPeers := ds.host.Network().Peers()
+	if len(connectedPeers) == 0 {
+		return nil
 	}
 
 	// Parse query for site: filter
