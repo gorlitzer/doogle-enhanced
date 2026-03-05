@@ -6,13 +6,22 @@ import (
 
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/internal/store"
 )
 
 // Engine performs local searches against the Bleve index.
 type Engine struct {
 	store              index.Store
 	spellChecker       *SpellChecker
+	hybridSearcher     *index.HybridSearcher
+	entityStore        *store.EntityStore
+	clusterComputer    ClusterProvider
 	QuarantinedPeersFn func() []string
+}
+
+// ClusterProvider provides related topic labels for search results.
+type ClusterProvider interface {
+	RelatedTopics(docIDs []string, limit int) []string
 }
 
 // NewEngine creates a local search engine.
@@ -23,6 +32,21 @@ func NewEngine(store index.Store) *Engine {
 // SetSpellChecker attaches a spell checker to the engine.
 func (e *Engine) SetSpellChecker(sc *SpellChecker) {
 	e.spellChecker = sc
+}
+
+// SetHybridSearcher enables hybrid BM25+vector search.
+func (e *Engine) SetHybridSearcher(hs *index.HybridSearcher) {
+	e.hybridSearcher = hs
+}
+
+// SetEntityStore enables entity card detection.
+func (e *Engine) SetEntityStore(es *store.EntityStore) {
+	e.entityStore = es
+}
+
+// SetClusterComputer enables related topic suggestions.
+func (e *Engine) SetClusterComputer(cc ClusterProvider) {
+	e.clusterComputer = cc
 }
 
 // Search performs a local search and returns results.
@@ -62,7 +86,18 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 	}
 	offset := (page - 1) * pageSize
 
-	hits, total, err := e.store.SearchAdvanced(pq, 0, fetchSize)
+	// Choose search backend: hybrid (BM25+vector) or BM25-only
+	searchMode := "bm25"
+	var hits []index.SearchHit
+	var total int
+	var err error
+
+	if e.hybridSearcher != nil && e.hybridSearcher.Available() {
+		hits, total, err = e.hybridSearcher.Search(pq, 0, fetchSize)
+		searchMode = "hybrid"
+	} else {
+		hits, total, err = e.store.SearchAdvanced(pq, 0, fetchSize)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
@@ -74,6 +109,9 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 		desc := snippet.Text
 		if desc == "" {
 			desc = truncate(hit.Doc.Description, 280)
+		}
+		if desc == "" && hit.Doc.Summary != "" {
+			desc = truncate(hit.Doc.Summary, 280)
 		}
 		if desc == "" {
 			desc = truncate(hit.Doc.Content, 280)
@@ -121,18 +159,39 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 	}
 
 	resp := &models.SearchResponse{
-		Query:    req.Query,
-		Results:  results,
-		Total:    total,
-		Page:     page,
-		PageSize: pageSize,
-		Intent:   intent.Type.String(),
+		Query:      req.Query,
+		Results:    results,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		Intent:     intent.Type.String(),
+		SearchMode: searchMode,
 	}
 
 	// Spelling suggestion
 	if e.spellChecker != nil {
 		if suggestion, ok := e.spellChecker.Suggest(req.Query); ok {
 			resp.Suggestion = suggestion
+		}
+	}
+
+	// Entity card detection
+	if e.entityStore != nil {
+		if card := DetectEntityCard(req.Query, e.entityStore); card != nil {
+			resp.EntityCard = card
+		}
+	}
+
+	// Related topics from clustering
+	if e.clusterComputer != nil && len(results) > 0 {
+		docIDs := make([]string, 0, len(results))
+		for _, r := range results {
+			if id := models.DocumentID(r.URL); id != "" {
+				docIDs = append(docIDs, id)
+			}
+		}
+		if topics := e.clusterComputer.RelatedTopics(docIDs, 5); len(topics) > 0 {
+			resp.RelatedTopics = topics
 		}
 	}
 

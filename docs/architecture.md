@@ -16,30 +16,36 @@ This document describes the internal architecture of Doogle v2 — how each subs
 ## System Overview
 
 ```
-┌─────────────────── Node ───────────────────────────────────┐
-│                                                            │
-│  ┌──────────┐     ┌──────────┐     ┌──────────────────┐   │
-│  │ CLI/API  │────▶│ Crawler  │────▶│     Indexer      │   │
-│  │  seeds   │     │ workers  │     │ score → dedup →  │   │
-│  └──────────┘     └─────┬────┘     │ Bleve write      │   │
-│                         │          └──────────────────┘   │
-│                         ▼                                  │
-│                   ┌───────────┐                            │
-│                   │ GossipSub │◀──────── Peer nodes        │
-│                   │  publish  │                            │
-│                   └───────────┘                            │
-│                                                            │
-│  ┌──────────┐     ┌───────────────────────────────────┐   │
-│  │ HTTP API │────▶│       Distributed Search          │   │
-│  │ /search  │     │  local Bleve + fan-out to peers   │   │
-│  └──────────┘     └───────────────────────────────────┘   │
-│                                                            │
-│  ┌────────────────────────────────────────────────────┐   │
-│  │                  Local Storage                      │   │
-│  │   BadgerDB (URL queue, seen set, metadata)         │   │
-│  │   Bleve     (full-text index, BM25)                │   │
-│  └────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────┘
+┌─────────────────── Node ───────────────────────────────────────────┐
+│                                                                     │
+│  ┌──────────┐     ┌──────────┐     ┌──────────────────┐            │
+│  │ CLI/API  │────▶│ Crawler  │────▶│     Indexer      │            │
+│  │  seeds   │     │ workers  │     │ score → dedup →  │            │
+│  └──────────┘     └─────┬────┘     │ entity → embed → │            │
+│                         │          │ Bleve write      │            │
+│                         ▼          └──────────────────┘            │
+│                   ┌───────────┐                                     │
+│                   │ GossipSub │◀──────── Peer nodes                 │
+│                   │  publish  │                                     │
+│                   └───────────┘                                     │
+│                                                                     │
+│  ┌──────────┐     ┌───────────────────────────────────┐            │
+│  │ HTTP API │────▶│       Distributed Search          │            │
+│  │ /search  │     │  hybrid (BM25 + vector) + peers   │            │
+│  └──────────┘     └───────────────────────────────────┘            │
+│                                                                     │
+│  ┌─────────────────── Intelligence ──────────────────────────────┐ │
+│  │  Entity Store (knowledge graph)  │  Trend Detection (spikes)  │ │
+│  │  Hybrid Search (BM25 + cosine)   │  Click Tracking (L2R)     │ │
+│  │  TF-IDF Embedder (384-dim)       │  Topic Clusters           │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                       Local Storage                           │ │
+│  │   BadgerDB (URL queue, seen set, metadata, entities, vectors) │ │
+│  │   Bleve     (full-text index, BM25)                           │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -56,12 +62,20 @@ The node orchestrator creates subsystems in this exact order:
 3.  p2p.NewDiscovery()         Kademlia DHT + IPFS DHT routing discovery + optional mDNS
 4.  p2p.NewGossip()            GossipSub → join "doogle/url-frontier"
 5.  store.NewBadgerStore()     Open BadgerDB at data_dir/badger/
+    5a. store.NewTrendStore()      Hourly-bucketed trend counters (on same BadgerDB)
+    5b. store.NewEntityStore()     Knowledge graph entity persistence (on same BadgerDB)
+    5c. store.NewClickStore()      Click tracking for learn-to-rank (on same BadgerDB)
+    5d. store.NewClusterStore()    Topic cluster persistence (on same BadgerDB)
 6.  index.NewBleveStore()      Open/create Bleve index at data_dir/bleve/
+    6a. index.NewEmbedder()        384-dim TF-IDF feature-hashing embedder
+    6b. index.NewVectorStore()     BadgerDB-backed embedding storage + cosine search
+    6c. index.NewHybridSearcher()  BM25 + vector RRF fusion (wraps Bleve + VectorStore)
 7.  index.NewShardManager()    Consistent hash ring (self as first node)
-8.  indexer.New()              Scoring + dedup pipeline
+8.  indexer.New()              Scoring + dedup + entity extraction + embedding pipeline
 9.  crawler.NewScheduler()     URL frontier (10K in-memory + BadgerDB overflow)
 10. crawler.New()              Worker pool with onCrawled callback
-11. search.NewEngine()         Local BM25 search
+11. search.NewEngine()         Hybrid search (BM25 + vector via HybridSearcher)
+    11a. search.NewEntityCardDetector()  Entity query detection → knowledge cards
 12. search.NewDistributedSearch()  Fan-out + merge
 13. Register P2P handlers      Search, Crawl, Index stream protocols
 14. initFleet()                Fleet coordinator/worker setup (if fleet role != standalone)
@@ -293,12 +307,19 @@ Per-domain sliding window:
 - Main content (Readability extraction with whitespace collapsed)
 - Headings (H1-H6 with level tracking)
 - All `<a href>` links (resolved to absolute, categorized internal/external, nofollow detection)
-- Images with alt text and title
+- Images with alt text, title, width/height, and surrounding context (figcaption, nearby text)
 - Open Graph tags (`og:title`, `og:description`)
 - Canonical URL
 - Meta keywords
+- Schema.org structured data (JSON-LD `<script>` blocks + microdata `[itemscope]`/`[itemprop]`)
 
-**URL filtering:** Non-crawlable extensions (`.pdf`, `.jpg`, `.css`, `.js`, etc.) are excluded from the discovered URLs list.
+**Non-HTML Document Support:**
+- PDF: binary text extraction from parenthesized string objects and hex-encoded strings
+- Plain text, CSV, markdown, XML: UTF-8 validated, first-line title extraction
+- Content type detected from HTTP `Content-Type` header; non-HTML documents use `DocumentFetcher`
+- 10MB download limit, 100KB content truncation
+
+**URL filtering:** Non-crawlable extensions (`.jpg`, `.css`, `.js`, etc.) are excluded from the discovered URLs list. PDFs and text documents are now crawlable.
 
 ---
 
@@ -311,8 +332,11 @@ Document
 Empty check ──── skip if no title AND no content
   │
   ▼
-Duplicate detection ──── fingerprint match → skip
+Content verification ──── Ed25519 sign (tamper detection)
   │
+  ▼
+Duplicate detection ──── persistent fingerprint match → skip
+  │                       (BadgerDB-backed, survives restarts)
   ▼
 Quality scoring ──── 0.0 to 1.0
   │
@@ -320,7 +344,19 @@ Quality scoring ──── 0.0 to 1.0
 Spam scoring ──── 0.0 to 1.0 (reject if > 0.7)
   │
   ▼
-Bleve index write
+Structured data ──── extract Schema.org type, image text
+  │
+  ▼
+Entity extraction ──── NER → persist to EntityStore → link relationships
+  │
+  ▼
+Extractive summary ──── TextRank sentence ranking → document summary
+  │
+  ▼
+TF-IDF embedding ──── 384-dim feature hash → store in VectorStore
+  │
+  ▼
+Bleve index write ──── routed to correct horizontal shard
 ```
 
 ### Quality Scoring
@@ -366,15 +402,46 @@ Additive scoring (capped at 1.0):
 
 Spam keywords: "buy now", "free money", "click here", "act now", "limited time", "no obligation", "winner", "congratulations", "earn money", "work from home", "make money", "get rich", "casino"
 
+### Content Verification
+
+Ed25519 document signing for tamper detection:
+
+1. Compute SHA-256 hash of `URL + Title + Content`
+2. Sign the hash with the node's Ed25519 private key
+3. Stamp `ContentSig` (base64 signature) and `ContentSigner` (hex public key) on the document
+4. Receiving nodes can verify the signature to detect tampering
+
 ### Duplicate Detection
 
-Content fingerprinting using shingling:
+Content fingerprinting using shingling, with persistent storage:
 
-1. Split content into 5-word shingles (sliding window)
+1. Split content into 4-gram shingles (sliding window)
 2. Sort and take top 20 shingles
-3. SHA-256 hash of the concatenated shingles
-4. Store fingerprint → document ID in memory
-5. If fingerprint already exists for a different document, it's a duplicate
+3. SHA-256 hash of the concatenated shingles → fingerprint
+4. Store fingerprint → document ID in BadgerDB (key: `dedup:fp:{hash}`)
+5. If fingerprint already exists for a different document, compute Jaccard similarity
+6. If similarity > 80%, it's a duplicate → skip
+7. Fingerprints survive restarts (persistent in BadgerDB vs in-memory fallback)
+
+### Horizontal Index Sharding
+
+Local Bleve index is split into N shards by domain:
+
+1. FNV-32a hash of the document's domain
+2. `hash % numShards` selects the target shard
+3. Each shard is an independent Bleve index at `data_dir/bleve/shard-{N}/`
+4. Searches fan out across all local shards and merge results
+5. `TotalDocCount()` aggregates across shards
+
+### Hash Ring Rebalancing
+
+Background loop detects topology changes and transfers documents:
+
+1. Every 30 seconds, compare current hash ring members to last known state
+2. On new node join: identify domains now owned by the new node
+3. Query local shards for documents in those domains
+4. Transfer documents in batches of 50 via `/doogle/replicate/1.0.0`
+5. Delete transferred documents from local index after successful transfer
 
 ### Bleve Index
 
@@ -385,9 +452,9 @@ Unicode tokenizer → lowercase → stop word removal → Snowball stemmer
 
 **Multi-language support:** 15 languages registered via Bleve's built-in analyzers (en, de, fr, es, it, pt, nl, ru, sv, da, fi, hu, ro, tr, no). Language-specific analysis is applied at query time when `lang:xx` is used.
 
-**Indexed fields (analyzed):** title (5x boost), url_text (3x), headings_text (2x), description (1.5x), content (1x), anchor_text, keywords, categories
-**Stored fields (exact):** url, domain, content_hash, language
-**Numeric fields:** content_size, quality_score, spam_score, depth, pagerank_score, domain_authority_score, url_quality_score, and 10+ scoring signals
+**Indexed fields (analyzed):** title (5x boost), url_text (3x), headings_text (2x), description (1.5x), content (1x), anchor_text, keywords, categories, image_text, structured_text
+**Stored fields (exact):** url, domain, content_hash, language, schema_type
+**Numeric fields:** content_size, quality_score, spam_score, depth, pagerank_score, domain_authority_score, url_quality_score, image_count, and 10+ scoring signals
 
 ---
 
@@ -432,11 +499,15 @@ Built from Bleve index term frequencies (top terms by doc frequency). For each q
 3. Classify intent (navigational, informational, transactional, local)
 4. Build Bleve query tree: Must(AND terms) + MustNot(excludes) + Must(OR groups) + Should(fuzzy/synonyms)
 5. Apply language-specific analyzer if `lang:` is set
-6. BM25 relevance scoring with field boosts (title 5x, url_text 3x, headings 2x, desc 1.5x)
+6. **Hybrid search:** BM25 relevance scoring + TF-IDF vector cosine similarity, fused via Reciprocal Rank Fusion (RRF). Falls back to BM25-only if vector store is unavailable.
 7. Extract passage-based snippets with term highlight positions
 8. Re-rank with intent-aware multipliers
-9. Generate spelling suggestion if applicable
-10. Return hits with all stored fields
+9. **Entity card detection:** if query matches a known entity, attach a knowledge card (type, description, relationships) to the response
+10. **Related topics:** retrieve document cluster for top result to suggest related queries
+11. **Trend boost:** queries or domains with active trend spikes receive a velocity-based ranking bonus
+12. Generate spelling suggestion if applicable
+13. Record query terms in trend store (hourly bucket)
+14. Return hits with all stored fields
 
 ### Search Cache
 
@@ -524,6 +595,153 @@ When a node crawls a page for a domain it owns, it replicates the resulting docu
 
 ---
 
+## Intelligence Layer
+
+Phase 4 introduces offline intelligence features that run entirely within the node process — no external ML services or APIs. All data is persisted in the same BadgerDB instance used by the rest of the system.
+
+### Knowledge Graph
+
+**Entity extraction** (`indexer/summarizer.go`, `store/entity_store.go`):
+
+During indexing, named entities (persons, organizations, locations, technologies) are extracted from document content via lightweight NER heuristics (capitalization patterns, context windows, Schema.org type hints). Each entity is stored in BadgerDB under `entity:{type}:{name}` with fields: canonical name, type, description snippet, source URLs, and first/last seen timestamps.
+
+**Entity relationships** are recorded when two entities co-occur within the same document or structured data block. Relationship edges are stored at `entity_rel:{name1}:{name2}` with co-occurrence count and relationship type (if inferable from Schema.org predicates).
+
+**Entity cards** (`search/entity_card.go`):
+
+At search time, the `EntityCardDetector` checks whether the query matches a known entity name. If a match is found, a knowledge card is attached to the search response containing the entity type, description, related entities, and source URLs. This gives users an instant summary without clicking through to a result.
+
+### Trend Detection
+
+**Hourly counters** (`store/trend_store.go`):
+
+Two event streams are tracked:
+
+1. **Crawl domains** — each successful crawl increments `trend:crawl:{domain}:{hour}` (hour = Unix timestamp truncated to 3600)
+2. **Query terms** — each search query increments `trend:query:{term}:{hour}` for every non-stop-word token
+
+**Moving averages** are maintained at `trend:avg:{kind}:{name}` using exponential smoothing over a 7-day window.
+
+**Spike detection** uses velocity-based thresholds: if the current hour's count exceeds 3x the moving average, the entity is flagged as trending. Trending status is ephemeral (not persisted) and recalculated on read. Trending domains and queries can receive a ranking boost during search.
+
+### Click Tracking
+
+**Recording** (`store/click_store.go`):
+
+When a user clicks a search result, the API records a click event containing the query, clicked URL, and result position. Click counts are stored at `click:{query}:{url}` (incremented atomically). Position data is stored at `click_pos:{query}:{url}` for future learn-to-rank model training.
+
+Click data is strictly local — it is not shared with peers. The intended use is offline signal generation: queries with high click-through on position 3+ suggest the ranker is under-scoring that URL for that query.
+
+### Hybrid Search
+
+**TF-IDF embedder** (`index/embedder.go`):
+
+A pure-Go 384-dimensional embedder using feature hashing (FNV-based). Input text is tokenized, lowercased, and stop-word filtered. Each token is hashed to a dimension index; the corresponding bucket accumulates TF-IDF weight. The resulting vector is L2-normalized. No external model files or dependencies.
+
+**Vector store** (`index/vector_store.go`):
+
+Embeddings are persisted in BadgerDB at `vec:{docID}` (raw float32 bytes) with metadata at `vecmeta:{docID}` (domain, indexed timestamp). Search is brute-force cosine similarity over all stored vectors — acceptable for index sizes up to ~100K documents per node.
+
+**Reciprocal Rank Fusion** (`index/hybrid_search.go`):
+
+The `HybridSearcher` executes two parallel retrieval paths:
+
+1. **BM25** — standard Bleve full-text query (existing pipeline)
+2. **Vector** — embed the query text, cosine-scan the vector store, return top-K
+
+Results are merged using RRF: `score(d) = Σ 1/(k + rank_i(d))` where `k=60` (standard constant) and the sum is over retrieval paths that returned document `d`. RRF is rank-based, so it handles the different score scales of BM25 and cosine similarity without normalization. If the vector store is empty or unavailable, the system falls back to BM25-only transparently.
+
+### Topic Clustering
+
+**Cluster store** (`store/cluster_store.go`):
+
+Documents are grouped into topic clusters based on domain and content similarity. Each cluster record (at `cluster:{id}`) contains the cluster label, member document IDs, and centroid keywords. Clusters are used to power "related topics" suggestions in search results.
+
+### Extractive Summarization
+
+**TextRank summarizer** (`indexer/summarizer.go`):
+
+Documents are summarized at index time using a TextRank-inspired algorithm:
+
+1. Split content into sentences
+2. Build a similarity graph (edges weighted by token overlap between sentences)
+3. Run iterative ranking (power iteration, damping 0.85, 30 iterations)
+4. Select top-N sentences by rank, re-ordered by original position
+5. Store the summary on the document for use in search result snippets
+
+The summarizer is invoked after entity extraction and before embedding. Summary length scales with document size (typically 2-5 sentences).
+
+---
+
+## Trust & Safety Layer
+
+### Peer Trust
+
+Each peer has a trust score [0, 1] stored in BadgerDB (`trust:score:{peerID}`):
+
+- **Initial trust:** 0.5 for new peers
+- **Good behavior:** +0.01 per quality document contributed
+- **Bad behavior:** -0.05 per confirmed spam report
+- **Trust decay:** idle peers lose 0.005/hour (configurable)
+- **Quarantine:** peers below 0.15 trust are blocked from search and gossip
+
+### Sybil Resistance
+
+Hashcash proof-of-work on URL announcements:
+
+1. Challenge = SHA-256(peerID + sorted URLs)
+2. Nonce iterated until hash has N leading zero bits
+3. Difficulty scales inversely with trust: high-trust peers (>0.8) need 16 bits, low-trust peers (<0.3) need 24 bits
+4. PoW timestamp must be within 5 minutes to prevent replay
+5. PoW fields (`pow_nonce`, `pow_timestamp`, `pow_difficulty`) are attached to `URLAnnouncement`
+
+### Per-Peer Rate Limiting
+
+Sliding window rate limiter on gossip messages:
+
+- **Window:** 30 seconds (configurable)
+- **Max messages:** 100 per window per peer
+- **Blocking:** offenders are blocked for 5 minutes
+- **Cleanup:** expired entries removed in maintenance loop
+
+### Consensus Domain Blocklist
+
+Multi-peer voting to globally block domains:
+
+1. When a peer reports a URL, the domain receives a vote from that peer
+2. Votes are stored in BadgerDB (`trust:domvotes:{domain}`)
+3. When vote count reaches threshold (default: 3 unique peers), domain is blocked
+4. Blocked domains are checked in gossip loop, crawl routing, and replication handlers
+
+### Report Audit Trail
+
+Tamper-proof log of all spam reports:
+
+1. Each report entry contains: report ID, reporter, URL, reason, timestamp
+2. SHA-256 hash of canonical payload + previous chain hash = entry hash
+3. Entry hash is signed with node's Ed25519 private key
+4. Entries stored in BadgerDB (`audit:chain:{reportID}`)
+5. Chain tip stored at `audit:last_hash` for integrity verification
+
+### URL Filtering
+
+Operator-defined allowlist/denylist per node:
+
+- **Allowed domains:** whitelist (empty = allow all)
+- **Blocked domains:** blacklist specific domains
+- **Blocked prefixes:** blacklist URL prefixes (e.g., `https://malware.example/`)
+- Applied at gossip ingestion, seed routing, and crawl callbacks
+
+### Reputation-Weighted Search
+
+Results from high-trust peers ranked higher:
+
+- Trust score [0, 1] maps to ranking multiplier [0.85, 1.15]
+- Formula: `0.85 + trustScore * 0.30`
+- Applied during distributed search re-ranking via `PeerTrustFn` callback
+
+---
+
 ## Storage Layout
 
 ```
@@ -536,13 +754,32 @@ data_dir/
     └── store/         # Index segments
 ```
 
-**BadgerDB stores:**
-- URL queue (`queue:{timestamp}:{url}` → CrawlTask JSON)
+**BadgerDB key prefixes:**
+- `queue:{timestamp}:{url}` → CrawlTask JSON (URL frontier)
+- `link:{source}:{target}` → backlink graph edges (PageRank)
+- `trust:score:{peerID}` → peer trust scores
+- `trust:report:{reportID}` → spam report records
+- `trust:domvotes:{domain}` → consensus domain vote data
+- `trust:quarantine:{peerID}` → quarantined peer records
+- `dedup:fp:{hash}` → persistent content fingerprints
+- `audit:chain:{reportID}` → audit trail entries
+- `audit:last_hash` → chain tip hash
+- `fleet:node:{peerID}` → fleet node records
+- `entity:{type}:{name}` → named entity records (knowledge graph)
+- `entity_rel:{name1}:{name2}` → entity relationship edges
+- `trend:crawl:{domain}:{hour}` → hourly crawl counters per domain
+- `trend:query:{term}:{hour}` → hourly query counters per term
+- `trend:avg:{kind}:{name}` → moving average baselines for spike detection
+- `click:{query}:{url}` → click-through records (query, URL, count)
+- `click_pos:{query}:{url}` → click position tracking for learn-to-rank
+- `cluster:{id}` → document topic cluster data
+- `vec:{docID}` → TF-IDF embedding vectors (384-dim float32)
+- `vecmeta:{docID}` → embedding metadata (domain, timestamp)
 - General KV operations for metadata
 
 **Bleve stores:**
-- Full-text index with custom English analyzer
-- All indexed document fields
+- Full-text index with custom English analyzer (or horizontal shards at `bleve/shard-{N}/`)
+- All indexed document fields including image_text, structured_text, schema_type
 
 ---
 
@@ -553,21 +790,32 @@ cmd/doogle/main.go
   └─ internal/node
        ├─ internal/p2p
        │    ├─ libp2p (host, dht, pubsub, mdns, routing discovery)
+       │    ├─ pow.go (hashcash proof-of-work)
        │    └─ internal/models
        ├─ internal/crawler
        │    ├─ goquery
+       │    ├─ structured.go (Schema.org JSON-LD + microdata)
+       │    ├─ docfetch.go (PDF, plain text, CSV, markdown, XML)
        │    ├─ internal/store
        │    ├─ internal/models
        │    └─ pkg/urlutil
        ├─ internal/indexer
        │    ├─ internal/index
+       │    ├─ verify.go (Ed25519 content verification)
+       │    ├─ summarizer.go (TextRank extractive summarization)
        │    └─ internal/models
        ├─ internal/index
        │    ├─ bleve/v2
+       │    ├─ horizontal_shard.go (domain-based FNV sharding)
+       │    ├─ rebalancer.go (hash ring topology change detection)
+       │    ├─ embedder.go (384-dim TF-IDF feature-hashing embedder)
+       │    ├─ vector_store.go (BadgerDB-backed embedding storage + cosine search)
+       │    ├─ hybrid_search.go (BM25 + vector RRF fusion)
        │    └─ pkg/consistent
        ├─ internal/search
        │    ├─ internal/index
        │    ├─ internal/p2p
+       │    ├─ entity_card.go (entity query detection → knowledge cards)
        │    └─ internal/models
        ├─ internal/fleet
        │    ├─ internal/p2p
@@ -580,5 +828,10 @@ cmd/doogle/main.go
        │    └─ web (embedded static files)
        └─ internal/store
             ├─ badger/v4
+            ├─ trust_store.go (trust scores, reports, consensus votes)
+            ├─ entity_store.go (knowledge graph entity persistence)
+            ├─ trend_store.go (hourly-bucketed trend counters + spike detection)
+            ├─ click_store.go (click-through tracking for learn-to-rank)
+            ├─ cluster_store.go (topic cluster persistence)
             └─ internal/models
 ```

@@ -7,21 +7,58 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/doogle/doogle-v2/internal/store"
 )
 
 // DuplicateDetector uses content fingerprinting and Jaccard similarity
 // to detect exact and near-duplicate documents.
+// Fingerprints are persisted in BadgerDB and cached in-memory for fast lookups.
 type DuplicateDetector struct {
-	fingerprints map[string]string // fingerprint → document ID
+	fingerprints map[string]string // fingerprint → document ID (in-memory cache)
 	mu           sync.RWMutex
 	shingleSize  int
+	persist      *store.BadgerStore // optional persistent backing store
 }
 
-// NewDuplicateDetector creates a duplicate detector.
+// NewDuplicateDetector creates a duplicate detector with in-memory fingerprints.
 func NewDuplicateDetector() *DuplicateDetector {
 	return &DuplicateDetector{
 		fingerprints: make(map[string]string),
 		shingleSize:  5,
+	}
+}
+
+// NewPersistentDuplicateDetector creates a duplicate detector backed by BadgerDB.
+// Fingerprints survive restarts.
+func NewPersistentDuplicateDetector(bs *store.BadgerStore) *DuplicateDetector {
+	dd := &DuplicateDetector{
+		fingerprints: make(map[string]string),
+		shingleSize:  5,
+		persist:      bs,
+	}
+	// Warm cache from persistent store
+	dd.loadFromStore()
+	return dd
+}
+
+const dedupFPPrefix = "dedup:fp:"
+
+// loadFromStore loads all persisted fingerprints into the in-memory cache.
+func (dd *DuplicateDetector) loadFromStore() {
+	if dd.persist == nil {
+		return
+	}
+	count := 0
+	dd.persist.Scan([]byte(dedupFPPrefix), func(key, val []byte) bool {
+		fp := string(key[len(dedupFPPrefix):])
+		docID := string(val)
+		dd.fingerprints[fp] = docID
+		count++
+		return true
+	})
+	if count > 0 {
+		// Log loaded count at startup
 	}
 }
 
@@ -38,9 +75,27 @@ func (dd *DuplicateDetector) IsDuplicate(docID, content string) (bool, string) {
 		return true, existingID
 	}
 
+	// Check persistent store if not in cache
+	if !exists && dd.persist != nil {
+		if val, err := dd.persist.Get([]byte(dedupFPPrefix + fp)); err == nil && val != nil {
+			storedID := string(val)
+			if storedID != docID {
+				dd.mu.Lock()
+				dd.fingerprints[fp] = storedID
+				dd.mu.Unlock()
+				return true, storedID
+			}
+		}
+	}
+
 	dd.mu.Lock()
 	dd.fingerprints[fp] = docID
 	dd.mu.Unlock()
+
+	// Persist to BadgerDB
+	if dd.persist != nil {
+		dd.persist.Set([]byte(dedupFPPrefix+fp), []byte(docID))
+	}
 
 	return false, ""
 }

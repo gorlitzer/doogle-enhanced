@@ -52,6 +52,10 @@ type Deps struct {
 	RecordInterestsFn func(subcategoryIDs []string) error
 	RecordSearchFn    func(query string)
 
+	// Intelligence (Phase 4)
+	TrendsFn func() *models.TrendsResponse
+	ClickFn  func(query, url string, position int) error
+
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
 	FleetGetNode  func(peerID string) *fleet.FleetNode
@@ -761,6 +765,41 @@ func ProfileInterestsHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "recorded", "count": strconv.Itoa(len(body.SubcategoryIDs))})
+	}
+}
+
+// TrendsHandler handles GET /api/trends
+func TrendsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.TrendsFn == nil {
+			writeJSON(w, http.StatusOK, &models.TrendsResponse{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.TrendsFn())
+	}
+}
+
+// ClickHandler handles POST /api/click
+func ClickHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.ClickFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "click tracking not available"})
+			return
+		}
+		var body struct {
+			Query    string `json:"query"`
+			URL      string `json:"url"`
+			Position int    `json:"position"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url' in request body"})
+			return
+		}
+		if err := deps.ClickFn(body.Query, body.URL, body.Position); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "recorded"})
 	}
 }
 

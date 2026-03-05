@@ -18,4 +18,9 @@ type URLAnnouncement struct {
 	SourceURL string   `json:"source_url"`
 	Depth     int      `json:"depth"`
 	PeerID    string   `json:"peer_id"`
+
+	// Proof-of-work fields (Sybil resistance)
+	PoWNonce      uint64 `json:"pow_nonce,omitempty"`
+	PoWTimestamp  int64  `json:"pow_ts,omitempty"`
+	PoWDifficulty uint8  `json:"pow_diff,omitempty"`
 }

@@ -143,7 +143,7 @@ func ExtractHeadings(doc *goquery.Document) []models.Heading {
 	return headings
 }
 
-// ExtractImages extracts image URLs with alt text.
+// ExtractImages extracts image URLs with alt text, dimensions, and captions.
 func ExtractImages(doc *goquery.Document, baseURL string) []models.Image {
 	var images []models.Image
 	doc.Find("img[src]").Each(func(_ int, s *goquery.Selection) {
@@ -157,16 +157,82 @@ func ExtractImages(doc *goquery.Document, baseURL string) []models.Image {
 		}
 		alt, _ := s.Attr("alt")
 		title, _ := s.Attr("title")
-		images = append(images, models.Image{
-			URL:   absURL,
-			Alt:   alt,
-			Title: title,
-		})
+
+		var width, height int
+		if w, exists := s.Attr("width"); exists {
+			width, _ = strconv.Atoi(w)
+		}
+		if h, exists := s.Attr("height"); exists {
+			height, _ = strconv.Atoi(h)
+		}
+
+		// Try to get caption from figcaption or nearest sibling text
+		caption := ""
+		parent := s.Parent()
+		if goquery.NodeName(parent) == "figure" {
+			caption = strings.TrimSpace(parent.Find("figcaption").Text())
+		}
+
+		img := models.Image{
+			URL:    absURL,
+			Alt:    alt,
+			Title:  title,
+			Width:  width,
+			Height: height,
+		}
+		if caption != "" {
+			img.Context = caption
+		}
+
+		images = append(images, img)
 	})
 	if len(images) > 100 {
 		images = images[:100]
 	}
 	return images
+}
+
+// enrichImageContext adds surrounding text context to images for better search.
+func enrichImageContext(images []models.Image, content string) {
+	if len(content) == 0 || len(images) == 0 {
+		return
+	}
+	words := strings.Fields(content)
+	if len(words) < 10 {
+		return
+	}
+
+	for i := range images {
+		if images[i].Context != "" {
+			continue // already has caption
+		}
+		// Use alt text to find relevant context in content
+		if images[i].Alt == "" {
+			continue
+		}
+		altLower := strings.ToLower(images[i].Alt)
+		contentLower := strings.ToLower(content)
+		idx := strings.Index(contentLower, altLower)
+		if idx < 0 {
+			// Use first few words of alt as search
+			altWords := strings.Fields(altLower)
+			if len(altWords) >= 2 {
+				idx = strings.Index(contentLower, strings.Join(altWords[:2], " "))
+			}
+		}
+		if idx >= 0 {
+			// Extract ~50 chars of context around the match
+			start := idx - 50
+			if start < 0 {
+				start = 0
+			}
+			end := idx + len(images[i].Alt) + 50
+			if end > len(content) {
+				end = len(content)
+			}
+			images[i].Context = strings.TrimSpace(content[start:end])
+		}
+	}
 }
 
 // ExtractLinks discovers all links from the document and categorizes them.

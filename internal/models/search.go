@@ -45,8 +45,11 @@ type SearchResponse struct {
 	PeersAsked int            `json:"peers_asked,omitempty"`
 
 	// Search intelligence
-	Suggestion string `json:"suggestion,omitempty"` // "Did you mean: X?"
-	Intent     string `json:"intent,omitempty"`     // informational, navigational, transactional, local
+	Suggestion    string        `json:"suggestion,omitempty"`     // "Did you mean: X?"
+	Intent        string        `json:"intent,omitempty"`         // informational, navigational, transactional, local
+	SearchMode    string        `json:"search_mode,omitempty"`    // "bm25", "hybrid"
+	EntityCard    *EntityCard   `json:"entity_card,omitempty"`    // knowledge graph card
+	RelatedTopics []string      `json:"related_topics,omitempty"` // topic cluster labels
 }
 
 // SearchResult represents a single search hit.
@@ -80,6 +83,39 @@ type SearchResult struct {
 	IsEvergreen          bool    `json:"is_evergreen,omitempty"`
 	DomainAuthorityScore float64 `json:"domain_authority_score,omitempty"`
 	URLQualityScore      float64 `json:"url_quality_score,omitempty"`
+	VectorSimilarity     float64 `json:"vector_similarity,omitempty"`
+}
+
+// EntityCard represents a knowledge graph card for an entity.
+type EntityCard struct {
+	Name            string            `json:"name"`
+	Type            string            `json:"type"`
+	Description     string            `json:"description"`
+	Properties      map[string]string `json:"properties,omitempty"`
+	RelatedEntities []EntityCardRef   `json:"related_entities,omitempty"`
+	DocCount        int               `json:"doc_count"`
+}
+
+// EntityCardRef is a reference to a related entity.
+type EntityCardRef struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// TrendItem represents a trending item with velocity metrics.
+type TrendItem struct {
+	Name          string  `json:"name"`
+	CurrentRate   float64 `json:"current_rate"`
+	AverageRate   float64 `json:"average_rate"`
+	VelocityRatio float64 `json:"velocity_ratio"`
+	Volume        int64   `json:"volume"`
+}
+
+// TrendsResponse holds trending queries and domains.
+type TrendsResponse struct {
+	TrendingQueries []TrendItem `json:"trending_queries"`
+	TrendingDomains []TrendItem `json:"trending_domains"`
+	ComputedAt      time.Time   `json:"computed_at"`
 }
 
 // NodeStatus represents the current state of a node.

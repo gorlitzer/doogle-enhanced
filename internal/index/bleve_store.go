@@ -123,10 +123,14 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	headingsTextField := bleve.NewTextFieldMapping()
 	headingsTextField.Analyzer = analyzer
 
+	summaryField := bleve.NewTextFieldMapping()
+	summaryField.Analyzer = analyzer
+
 	// --- Primary text fields ---
 	docMapping.AddFieldMappingsAt("title", titleField)
 	docMapping.AddFieldMappingsAt("description", descField)
 	docMapping.AddFieldMappingsAt("content", textField)
+	docMapping.AddFieldMappingsAt("summary", summaryField)
 	docMapping.AddFieldMappingsAt("keywords", textField)
 	docMapping.AddFieldMappingsAt("categories", textField)
 	docMapping.AddFieldMappingsAt("anchor_text", anchorField)
@@ -542,6 +546,7 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.Language = fieldString(fields, "language")
 	doc.Categories = fieldString(fields, "categories")
 	doc.Keywords = fieldString(fields, "keywords")
+	doc.Summary = fieldString(fields, "summary")
 	doc.AnchorText = fieldString(fields, "anchor_text")
 	doc.URLText = fieldString(fields, "url_text")
 	doc.HeadingsText = fieldString(fields, "headings_text")

@@ -1,6 +1,13 @@
 package models
 
-import "time"
+import (
+	"time"
+)
+
+// TimeNowUnix returns the current time as a Unix timestamp.
+func TimeNowUnix() int64 {
+	return time.Now().Unix()
+}
 
 // SpamReport represents a user or peer report about a URL.
 type SpamReport struct {

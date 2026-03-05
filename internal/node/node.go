@@ -55,10 +55,20 @@ type Node struct {
 	genStore      *store.GenerationStore
 	batchIndexer  *index.BatchIndexer
 	incremental   *indexer.IncrementalIndexer
+	rebalancer    *index.Rebalancer
+
+	// Intelligence (Phase 4)
+	trendStore   *store.TrendStore
+	entityStore  *store.EntityStore
+	clickStore   *store.ClickStore
+	clusterStore *store.ClusterStore
 
 	// Trust & safety
-	trustStore   *store.TrustStore
-	trustManager *TrustManager
+	trustStore     *store.TrustStore
+	trustManager   *TrustManager
+	urlFilter      *URLFilter
+	auditTrail     *AuditTrail
+	gossipLimiter  *PeerRateLimiter
 
 	// Master profile
 	profileStore    *store.ProfileStore
@@ -191,8 +201,29 @@ func (n *Node) init() error {
 	n.trustStore = store.NewTrustStore(bs)
 	n.trustManager = NewTrustManager(n.trustStore, peerID.String())
 
+	// 5b2. URL filter (operator-defined allowlist/denylist)
+	n.urlFilter = NewURLFilter(n.cfg.Trust)
+
+	// 5b3. Audit trail (Ed25519 signed, hash-chained reports)
+	if rawKey, err := privKey.Raw(); err == nil {
+		// libp2p Ed25519 raw key is 64 bytes (seed + public)
+		if len(rawKey) == 64 {
+			n.auditTrail = NewAuditTrail(bs, rawKey)
+		}
+	}
+
+	// 5b4. Gossip rate limiter (malicious crawl defense)
+	// Allow 100 messages per 30s window, block offenders for 5 minutes
+	n.gossipLimiter = NewPeerRateLimiter(100, 30*time.Second, 5*time.Minute)
+
 	// 5c. Profile store
 	n.profileStore = store.NewProfileStore(bs)
+
+	// 5d. Intelligence stores (Phase 4)
+	n.trendStore = store.NewTrendStore(bs)
+	n.entityStore = store.NewEntityStore(bs)
+	n.clickStore = store.NewClickStore(bs)
+	n.clusterStore = store.NewClusterStore(bs)
 
 	// 6. Bleve index
 	blevePath := filepath.Join(dataDir, n.cfg.Index.BleveDir)
@@ -266,6 +297,20 @@ func (n *Node) init() error {
 	n.indexer = indexer.New(bleveIdx, n.batchIndexer, n.genStore, n.badger)
 	n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
 
+	// 9a0. Wire intelligence subsystems into indexer
+	n.indexer.SetEntityStore(n.entityStore)
+
+	// 9a0b. TF-IDF embedder + vector store for semantic search
+	embedder := index.NewTFIDFEmbedder()
+	vectorStore := index.NewBadgerVectorStore(n.badger.DB(), 384)
+	n.indexer.SetEmbedder(embedder)
+	n.indexer.SetVectorStore(vectorStore)
+
+	// 9a. Content verification — sign documents with Ed25519
+	if rawKey, err := privKey.Raw(); err == nil && len(rawKey) == 64 {
+		n.indexer.SetContentVerifier(indexer.NewContentVerifier(rawKey))
+	}
+
 	// 9b. Profile computer
 	n.profileComputer = NewProfileComputer(n.profileStore, bleveIdx, n.shards)
 	n.profileComputer.UptimeHoursFn = func() float64 {
@@ -303,6 +348,9 @@ func (n *Node) init() error {
 		StatsStore:        n.urlStore,
 	}, n.scheduler, n.onDocumentCrawled)
 
+	// 11b. Wire reputation-weighted search ranking
+	search.PeerTrustFn = n.trustManager.TrustScore
+
 	// 12. Search engines (shard-aware distributed search)
 	n.localEng = search.NewEngine(bleveIdx)
 	n.localEng.QuarantinedPeersFn = func() []string {
@@ -327,6 +375,50 @@ func (n *Node) init() error {
 	n.search.PeerNameFn = n.PeerName
 	n.search.LocalName = n.cfg.NodeName
 	n.search.LocalID = n.peerID.String()
+
+	// 12a. Wire intelligence into search engine
+	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, embedder, 0.7, 0.3)
+	n.localEng.SetHybridSearcher(hybridSearcher)
+	n.localEng.SetEntityStore(n.entityStore)
+	n.localEng.SetClusterComputer(n.clusterStore)
+
+	// 12b. Hash ring rebalancer — transfers documents when topology changes
+	n.rebalancer = index.NewRebalancer(n.shards, bleveIdx, peerID.String(), n.cfg.Index.ReplicationFactor,
+		func(ctx context.Context, peerIDStr string, docs []*index.IndexDocument) (int, error) {
+			pid, err := peer.Decode(peerIDStr)
+			if err != nil {
+				return 0, err
+			}
+			// Convert IndexDocuments to models.Documents for replication
+			modelDocs := make([]*models.Document, 0, len(docs))
+			for _, d := range docs {
+				modelDocs = append(modelDocs, &models.Document{
+					ID:           d.ID,
+					URL:          d.URL,
+					Domain:       d.Domain,
+					Title:        d.Title,
+					Description:  d.Description,
+					Content:      d.Content,
+					ContentHash:  d.ContentHash,
+					ContentSize:  d.ContentSize,
+					StatusCode:   d.StatusCode,
+					Depth:        d.Depth,
+					WordCount:    d.WordCount,
+					CrawledAt:    d.CrawledAt,
+					OriginPeerID: d.OriginPeerID,
+				})
+			}
+			req := &p2p.ReplicateRequest{
+				Documents:  modelDocs,
+				Generation: n.genStore.Current(),
+			}
+			resp, err := p2p.ReplicateDocuments(ctx, n.host, pid, req, 30*time.Second)
+			if err != nil {
+				return 0, err
+			}
+			return resp.Accepted, nil
+		},
+	)
 
 	// Initialize spell checker from Bleve index dictionary
 	spellChecker := search.NewSpellChecker(bleveIdx.BleveIndex())
@@ -377,8 +469,26 @@ func (n *Node) init() error {
 			if cat != "" {
 				_ = n.profileStore.RecordSearchTopic(cat)
 			}
+			// Track query trends
+			if n.trendStore != nil {
+				terms := strings.Fields(strings.ToLower(query))
+				n.trendStore.IncrementQuery(terms)
+			}
 		},
 	}
+	// Intelligence deps (Phase 4)
+	deps.TrendsFn = func() *models.TrendsResponse {
+		return &models.TrendsResponse{
+			TrendingQueries: toModelTrends(n.trendStore.TrendingQueries(20)),
+			TrendingDomains: toModelTrends(n.trendStore.TrendingDomains(20)),
+			ComputedAt:      time.Now(),
+		}
+	}
+	deps.ClickFn = func(query, url string, position int) error {
+		n.clickStore.RecordClick(query, url, position)
+		return nil
+	}
+
 	deps.VersionInfo.Version = n.cfg.Version
 	deps.VersionInfo.Commit = n.cfg.Commit
 	deps.VersionInfo.BuildDate = n.cfg.BuildDate
@@ -412,6 +522,12 @@ func (n *Node) Run() error {
 
 	// Start profile computer
 	n.profileComputer.Start(n.ctx)
+
+	// Start trust decay (idle peers slowly lose reputation)
+	n.trustManager.StartDecayLoop(n.ctx)
+
+	// Start hash ring rebalancer
+	n.rebalancer.Start(n.ctx)
 
 	// Start gossip listeners
 	go n.gossipLoop()
@@ -826,6 +942,11 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 	// Record link graph edges
 	n.recordLinks(doc)
 
+	// Track trend data
+	if n.trendStore != nil {
+		n.trendStore.IncrementCrawl(doc.Domain)
+	}
+
 	n.urlStore.IncrementCrawled()
 
 	// Replicate to shard owners if we're in a multi-node setup
@@ -834,6 +955,12 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 	// Schedule discovered URLs (route through domain ownership)
 	for _, u := range discoveredURLs {
 		domain := urlutil.ExtractDomain(u)
+
+		// Skip URLs blocked by operator filter
+		if !n.urlFilter.IsEmpty() && !n.urlFilter.IsAllowed(u, domain) {
+			continue
+		}
+
 		task := &models.CrawlTask{
 			URL:       u,
 			Domain:    domain,
@@ -849,7 +976,7 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 		}
 	}
 
-	// Broadcast discovered URLs to peers
+	// Broadcast discovered URLs to peers (with proof-of-work)
 	if len(discoveredURLs) > 0 {
 		ann := &models.URLAnnouncement{
 			URLs:      discoveredURLs,
@@ -857,6 +984,14 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 			Depth:     doc.Depth + 1,
 			PeerID:    n.peerID.String(),
 		}
+
+		// Attach proof-of-work (Sybil resistance)
+		challenge := p2p.PoWChallenge(n.peerID.String(), discoveredURLs)
+		pow := p2p.ComputePoW(challenge, p2p.DefaultPoWDifficulty)
+		ann.PoWNonce = pow.Nonce
+		ann.PoWTimestamp = pow.Timestamp
+		ann.PoWDifficulty = pow.Difficulty
+
 		if err := n.gossip.Publish(n.ctx, ann); err != nil {
 			slog.Error("node: gossip publish error", "err", err)
 		}
@@ -956,6 +1091,13 @@ func (n *Node) forwardCrawlTask(task *models.CrawlTask) {
 func (n *Node) routeSeedURL(rawURL string) {
 	normalized := urlutil.Normalize(rawURL)
 	domain := urlutil.ExtractDomain(normalized)
+
+	// Check URL filter
+	if !n.urlFilter.IsEmpty() && !n.urlFilter.IsAllowed(normalized, domain) {
+		slog.Debug("crawler: seed URL blocked by filter", "url", normalized)
+		return
+	}
+
 	task := &models.CrawlTask{
 		URL:       normalized,
 		Domain:    domain,
@@ -996,11 +1138,37 @@ func (n *Node) gossipLoop() {
 			continue
 		}
 
+		// Rate limit per peer (malicious crawl defense)
+		if !n.gossipLimiter.Allow(ann.PeerID) {
+			continue
+		}
+
+		// Verify proof-of-work if present (Sybil resistance)
+		if ann.PoWTimestamp > 0 {
+			challenge := p2p.PoWChallenge(ann.PeerID, ann.URLs)
+			pow := p2p.ProofOfWork{
+				Nonce:      ann.PoWNonce,
+				Timestamp:  ann.PoWTimestamp,
+				Difficulty: ann.PoWDifficulty,
+			}
+			trust := n.trustManager.TrustScore(ann.PeerID)
+			minDiff := p2p.PoWDifficultyForTrust(trust)
+			if err := p2p.VerifyPoW(challenge, pow, minDiff); err != nil {
+				slog.Debug("gossip: invalid PoW from peer", "peer", ann.PeerID[:12], "err", err)
+				continue
+			}
+		}
+
 		for _, u := range ann.URLs {
 			domain := urlutil.ExtractDomain(u)
 
-			// Skip URLs from flagged domains
-			if n.trustManager.IsDomainFlagged(domain) {
+			// Skip URLs from flagged or consensus-blocked domains
+			if n.trustManager.IsDomainFlagged(domain) || n.trustStore.IsDomainBlocked(domain) {
+				continue
+			}
+
+			// Skip URLs blocked by operator filter
+			if !n.urlFilter.IsEmpty() && !n.urlFilter.IsAllowed(u, domain) {
 				continue
 			}
 
@@ -1113,8 +1281,8 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 func (n *Node) handleReplicateRequest(senderPeerID string, req *p2p.ReplicateRequest) (*p2p.ReplicateResponse, error) {
 	accepted := 0
 	for _, doc := range req.Documents {
-		// Skip documents from flagged domains
-		if n.trustManager.IsDomainFlagged(doc.Domain) {
+		// Skip documents from flagged or consensus-blocked domains
+		if n.trustManager.IsDomainFlagged(doc.Domain) || n.trustStore.IsDomainBlocked(doc.Domain) {
 			continue
 		}
 
@@ -1158,6 +1326,19 @@ func (n *Node) ReportURL(rawURL, reason, detail string) error {
 		return nil // duplicate, don't broadcast
 	}
 
+	// Append to audit trail (signed, hash-chained)
+	if n.auditTrail != nil {
+		if _, err := n.auditTrail.Append(report); err != nil {
+			slog.Error("audit: failed to append report", "err", err)
+		}
+	}
+
+	// Consensus-based domain blocklist: count unique reporter votes
+	const consensusThreshold = 3
+	if blocked, voters := n.trustStore.AddDomainVote(domain, n.peerID.String(), consensusThreshold); blocked {
+		slog.Warn("trust: domain consensus-blocked", "domain", domain, "voters", voters)
+	}
+
 	// Record in master profile
 	_ = n.profileStore.RecordReport()
 
@@ -1189,8 +1370,21 @@ func (n *Node) spamReportLoop() {
 			continue
 		}
 
-		if _, err := n.trustManager.HandleReport(report); err != nil {
+		if isNew, err := n.trustManager.HandleReport(report); err != nil {
 			slog.Error("trust: error handling peer report", "err", err)
+		} else if isNew {
+			// Audit trail for incoming reports
+			if n.auditTrail != nil {
+				if _, err := n.auditTrail.Append(report); err != nil {
+					slog.Error("audit: failed to append peer report", "err", err)
+				}
+			}
+
+			// Consensus domain blocklist vote
+			const consensusThreshold = 3
+			if blocked, voters := n.trustStore.AddDomainVote(report.Domain, report.ReporterID, consensusThreshold); blocked {
+				slog.Warn("trust: domain consensus-blocked via peer report", "domain", report.Domain, "voters", voters)
+			}
 		}
 	}
 }
@@ -1220,6 +1414,19 @@ func (n *Node) maintenanceLoop() {
 				slog.Debug("maintenance: dedup store", "seen_count", count)
 			}
 
+			// Cleanup rate limiter expired entries
+			n.gossipLimiter.Cleanup()
+
+			// Trend maintenance: recompute averages and prune
+			if n.trendStore != nil {
+				n.trendStore.ComputeAverages()
+				retention := n.cfg.Storage.TrendRetention
+				if retention <= 0 {
+					retention = 168 * time.Hour // 7 days
+				}
+				n.trendStore.PruneOldBuckets(retention)
+			}
+
 			// Prune stale content records
 			maxAge := n.cfg.Storage.ContentMaxAge
 			if maxAge <= 0 {
@@ -1234,6 +1441,21 @@ func (n *Node) maintenanceLoop() {
 			return
 		}
 	}
+}
+
+// toModelTrends converts store.TrendItem to models.TrendItem.
+func toModelTrends(items []store.TrendItem) []models.TrendItem {
+	result := make([]models.TrendItem, len(items))
+	for i, item := range items {
+		result[i] = models.TrendItem{
+			Name:          item.Name,
+			CurrentRate:   item.CurrentRate,
+			AverageRate:   item.AverageRate,
+			VelocityRatio: item.VelocityRatio,
+			Volume:        item.Volume,
+		}
+	}
+	return result
 }
 
 func multiaddrsToStrings(h host.Host) []string {

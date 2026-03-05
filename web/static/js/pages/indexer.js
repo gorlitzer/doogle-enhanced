@@ -1,13 +1,62 @@
-// Doogle v2 — Indexer Dashboard (enhanced with document browser + detail modals)
+// Doogle v2 — Indexer Dashboard (Spotlight Diagram + document browser + detail modals)
 import { api, peerNames } from '../api.js';
-import { showModal, scoreBar, cardSkeleton, escapeHtml } from '../components.js';
-import { formatNum } from '../spotlight.js';
+import { showModal, scoreBar, cardSkeleton, escapeHtml, icon, getCSS, renderLineChart, timeAgo } from '../components.js';
+import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
 let activeTab = 'overview';
 let docOffset = 0;
 const DOC_PAGE_SIZE = 20;
 let currentPeerID = '';
 let docPeerFilter = ''; // '' = all, 'local' = my docs, 'peers' = from peers
+
+// ── Spotlight Diagram State ──
+let diagram = null;
+let currentView = localStorage.getItem('doogle-indexer-view') || 'flow';
+let lastOverviewData = null;
+let mobileBoxData = new Map();
+let _mobileResizeHandler = null;
+let indexerHistory = [];
+const MOBILE_BP = 700;
+
+// ── Spotlight Diagram Configs ──
+
+// GAUGE layout (3 cols, 3 rows) — rich gauges
+const GAUGE_COMPONENTS = [
+  { id: 'input',  label: 'Crawl Input',     col: 0, row: 0, boxH: 130 },
+  { id: 'dedup',  label: 'Deduplication',    col: 0, row: 1, boxH: 110 },
+  { id: 'nlp',    label: 'NLP Analysis',     col: 1, row: 0, boxH: 130 },
+  { id: 'spam',   label: 'Spam Filter',      col: 1, row: 1, boxH: 130 },
+  { id: 'scorer', label: 'Quality Scorer',   col: 2, row: 0, boxH: 130 },
+  { id: 'index',  label: 'Index Store',      col: 2, row: 1, boxH: 130 },
+];
+
+const GAUGE_CONNECTIONS = [
+  { from: 'input', to: 'dedup' },
+  { from: 'dedup', to: 'nlp' },
+  { from: 'dedup', to: 'spam' },
+  { from: 'nlp',   to: 'scorer' },
+  { from: 'spam',  to: 'scorer' },
+  { from: 'scorer', to: 'index' },
+];
+
+// FLOW layout (3 cols, 5 rows) — architecture diagram
+const FLOW_COMPONENTS = [
+  { id: 'input',  label: 'Crawl Input',     col: 1, row: 0 },
+  { id: 'dedup',  label: 'Deduplication',    col: 1, row: 1 },
+  { id: 'nlp',    label: 'NLP Analysis',     col: 0, row: 2 },
+  { id: 'spam',   label: 'Spam Filter',      col: 2, row: 2 },
+  { id: 'scorer', label: 'Quality Scorer',   col: 1, row: 3 },
+  { id: 'index',  label: 'Index Store',      col: 0, row: 4 },
+];
+
+const FLOW_CONNECTIONS = [
+  { from: 'input', to: 'dedup' },
+  { from: 'dedup', to: 'nlp' },
+  { from: 'dedup', to: 'spam' },
+  { from: 'nlp',   to: 'scorer' },
+  { from: 'spam',  to: 'scorer' },
+  { from: 'scorer', to: 'index' },
+];
 
 // ── Dashboard Helpers ──
 
@@ -62,6 +111,12 @@ function parseUptimeMinutes(uptime) {
   return Math.max(1, total);
 }
 
+function formatTime(d) {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// ── Page Entry ──
+
 export function renderIndexer(container) {
   container.innerHTML = `
     <div class="page-header">
@@ -79,15 +134,26 @@ export function renderIndexer(container) {
 
   document.querySelectorAll('#indexer-tabs .tab').forEach(tab => {
     tab.addEventListener('click', () => {
+      const prevTab = activeTab;
       activeTab = tab.dataset.tab;
       document.querySelectorAll('#indexer-tabs .tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
+      // Destroy diagram when leaving overview
+      if (prevTab === 'overview' && activeTab !== 'overview') {
+        if (diagram) { diagram.destroy(); diagram = null; }
+        if (_mobileResizeHandler) { window.removeEventListener('resize', _mobileResizeHandler); _mobileResizeHandler = null; }
+      }
       renderTab();
     });
   });
 
   renderTab();
-  window._pageInterval = setInterval(() => { if (activeTab === 'overview') renderTab(); }, 5000);
+  window._pageInterval = setInterval(() => { if (activeTab === 'overview') renderOverview(document.getElementById('indexer-content')); }, 5000);
+  window._pageCleanup = () => {
+    if (diagram) { diagram.destroy(); diagram = null; }
+    if (_mobileResizeHandler) { window.removeEventListener('resize', _mobileResizeHandler); _mobileResizeHandler = null; }
+    mobileBoxData.clear();
+  };
 }
 
 async function renderTab() {
@@ -99,6 +165,182 @@ async function renderTab() {
   else if (activeTab === 'scoring') renderScoring(content);
   else if (activeTab === 'pipeline') renderPipeline(content);
 }
+
+// ── Spotlight Diagram Functions ──
+
+function buildIndexerDiagram() {
+  const canvasEl = document.getElementById('indexer-spotlight');
+  if (!canvasEl) return;
+
+  const isGauge = currentView === 'grid';
+  diagram = new SpotlightDiagram(canvasEl, {
+    components: isGauge ? GAUGE_COMPONENTS : FLOW_COMPONENTS,
+    connections: isGauge ? GAUGE_CONNECTIONS : FLOW_CONNECTIONS,
+    layout: isGauge ? 'grid' : 'flow',
+    cols: 3,
+    rows: isGauge ? 2 : 5,
+    boxW: isGauge ? 160 : 180,
+    boxH: isGauge ? 105 : 90,
+    minHeight: isGauge ? 400 : 560,
+    maxHeight: isGauge ? 500 : 680,
+    onTooltipExtra: (box) => {
+      const d = lastOverviewData;
+      if (!d) return [];
+      const ix = d.indexer || {};
+      const avgSpam = ix.avg_spam || 0;
+      const avgQ = ix.avg_quality || 0;
+      const qualGrade = avgQ >= 0.8 ? 'A' : avgQ >= 0.6 ? 'B' : avgQ >= 0.4 ? 'C' : avgQ >= 0.2 ? 'D' : 'F';
+      const map = {
+        input:  () => [`Docs/min: ${d.docsPerMin}`, 'From crawler pipeline'],
+        dedup:  () => ['Jaccard similarity >80%', '4-gram shingling'],
+        nlp:    () => ['Language detection', 'Keyword extraction', 'Readability analysis'],
+        spam:   () => ['Spam phrases, caps, thin content', `Avg spam: ${avgSpam.toFixed(2)}`],
+        scorer: () => ['E-E-A-T + quality + freshness', `Grade: ${qualGrade}`],
+        index:  () => [`Local: ${formatNum(d.localDocs)}`, `Peer: ${formatNum(d.peerDocs)}`],
+      };
+      return (map[box.id] || (() => []))();
+    },
+  });
+  diagram.start();
+  if (lastOverviewData) applyIndexerDiagram(lastOverviewData);
+}
+
+function rebuildIndexerDiagram() {
+  if (diagram) { diagram.destroy(); diagram = null; }
+  buildIndexerDiagram();
+}
+
+function applyIndexerDiagram(d) {
+  if (!diagram) return;
+
+  const isGauge = currentView === 'grid';
+  const comps = isGauge ? GAUGE_COMPONENTS : FLOW_COMPONENTS;
+  const labelMap = {};
+  for (const c of comps) labelMap[c.id] = c.label;
+
+  function setBox(id, data) {
+    if (diagram) diagram.setBoxData(id, data);
+    mobileBoxData.set(id, { id, label: labelMap[id] || id, ...data });
+  }
+
+  diagram.setData({ status: d.status, indexer: d.indexer });
+
+  const totalProcessed = d.totalIndexed + d.totalFiltered;
+  const indexerIdle = d.totalIndexed === 0 && d.avgQuality === 0;
+  const indexerHealth = indexerIdle ? 'amber' : d.avgQuality > 0.5 ? 'green' : d.avgQuality > 0.3 ? 'amber' : 'red';
+
+  if (isGauge) {
+    // Rich gauges
+    setBox('input', {
+      health: totalProcessed > 0 ? 'green' : 'amber',
+      gauges: [
+        { type: 'counter', value: totalProcessed, label: 'processed', color: getCSS('--accent') },
+        { type: 'ring', value: d.acceptanceRate, max: 1, label: 'accepted', color: getCSS('--green') },
+      ],
+      metrics: [],
+    });
+    setBox('dedup', {
+      health: d.duplicates > 0 ? 'amber' : 'green',
+      gauges: [
+        { type: 'counter', value: d.duplicates, label: 'dupes caught', color: getCSS('--amber') },
+        { type: 'bar', value: d.duplicates, max: Math.max(totalProcessed, 1), label: 'duplicate rate', color: getCSS('--amber') },
+      ],
+      metrics: [],
+    });
+    setBox('nlp', {
+      health: d.avgQuality > 0.3 ? 'green' : 'amber',
+      gauges: [
+        { type: 'ring', value: d.avgQuality, max: 1, label: 'quality', color: getCSS('--green') },
+      ],
+      metrics: [],
+    });
+    setBox('spam', {
+      health: d.rejected > 100 ? 'amber' : 'green',
+      gauges: [
+        { type: 'ring', value: d.avgSpam, max: 1, label: 'spam score', color: getCSS('--red') },
+        { type: 'counter', value: d.rejected, label: 'rejected', color: getCSS('--red') },
+      ],
+      metrics: [],
+    });
+    setBox('scorer', {
+      health: indexerHealth,
+      gauges: [
+        { type: 'ring', value: d.avgQuality, max: 1, label: 'avg quality', color: getCSS('--green') },
+        { type: 'counter', value: d.totalIndexed, label: 'indexed', color: getCSS('--accent') },
+      ],
+      metrics: [],
+    });
+    setBox('index', {
+      health: d.indexedDocs > 0 ? 'green' : 'amber',
+      gauges: [
+        { type: 'counter', value: d.indexedDocs, label: 'documents', color: getCSS('--accent') },
+        { type: 'cylinder', value: d.indexedDocs, max: Math.max(5000, d.indexedDocs), label: 'stored', color: getCSS('--green') },
+      ],
+      metrics: [],
+    });
+  } else {
+    // Flow view — text metrics
+    setBox('input', {
+      health: totalProcessed > 0 ? 'green' : 'amber',
+      gauges: [{ type: 'counter', value: totalProcessed, label: 'processed', color: getCSS('--accent') }],
+      metrics: [],
+    });
+    setBox('dedup', {
+      health: d.duplicates > 0 ? 'amber' : 'green',
+      gauges: [{ type: 'counter', value: d.duplicates, label: 'dupes', color: getCSS('--amber') }],
+      metrics: [],
+    });
+    setBox('nlp', {
+      health: d.avgQuality > 0.3 ? 'green' : 'amber',
+      gauges: [{ type: 'ring', value: d.avgQuality, max: 1, label: 'quality', color: getCSS('--green') }],
+      metrics: [],
+    });
+    setBox('spam', {
+      health: d.rejected > 100 ? 'amber' : 'green',
+      gauges: [{ type: 'counter', value: d.rejected, label: 'rejected', color: getCSS('--red') }],
+      metrics: [],
+    });
+    setBox('scorer', {
+      health: indexerHealth,
+      gauges: [{ type: 'ring', value: d.avgQuality, max: 1, label: 'quality', color: getCSS('--green') }],
+      metrics: [],
+    });
+    setBox('index', {
+      health: d.indexedDocs > 0 ? 'green' : 'amber',
+      gauges: [{ type: 'counter', value: d.indexedDocs, label: 'stored', color: getCSS('--accent') }],
+      metrics: [],
+    });
+  }
+
+  diagram.setSpawnRate(Math.max(1, Math.ceil(d.totalIndexed / 100)));
+}
+
+function syncMobileView() {
+  if (activeTab !== 'overview') return;
+  const isMobile = window.innerWidth < MOBILE_BP;
+  const canvasWrap = document.getElementById('indexer-canvas-wrap');
+  const cardsWrap = document.getElementById('indexer-mobile-cards');
+  const toggleEl = document.getElementById('indexer-view-toggle');
+  if (!canvasWrap || !cardsWrap) return;
+
+  if (isMobile) {
+    canvasWrap.style.display = 'none';
+    if (toggleEl) toggleEl.style.display = 'none';
+    cardsWrap.style.display = '';
+    if (mobileBoxData.size > 0)
+      renderMobileCards(cardsWrap, [...mobileBoxData.values()]);
+  } else {
+    canvasWrap.style.display = '';
+    if (toggleEl) toggleEl.style.display = '';
+    cardsWrap.style.display = 'none';
+    if (!diagram) {
+      buildIndexerDiagram();
+      if (lastOverviewData) applyIndexerDiagram(lastOverviewData);
+    }
+  }
+}
+
+// ── Overview Tab ──
 
 async function renderOverview(el) {
   try {
@@ -141,6 +383,74 @@ async function renderOverview(el) {
     const received = status.received_tasks || 0;
     const connectedPeers = status.connected_peers || 0;
     const totalTasks = forwarded + received;
+
+    // Leaderboard data
+    const explorers = leaderboard?.explorers || [];
+
+    // Store for diagram + tooltip access
+    lastOverviewData = {
+      status, indexer, indexedDocs, localDocs, peerDocs, totalIndexed,
+      avgQuality, avgSpam, rejected, duplicates, emptySkipped,
+      totalFiltered, acceptanceRate, docsPerMin, qualGrade, explorers,
+    };
+
+    // Track history
+    indexerHistory.push({ time: new Date(), indexed: totalIndexed, filtered: totalFiltered });
+    if (indexerHistory.length > 60) indexerHistory.shift();
+
+    // ── Spotlight Diagram Section ──
+    // Only rebuild the diagram section if it doesn't exist yet
+    const existingCanvas = document.getElementById('indexer-spotlight');
+    if (!existingCanvas) {
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+          <div>
+            <h3 style="font-size:1.1em;font-weight:600;color:var(--text-primary);margin:0">Pipeline Spotlight</h3>
+            <p style="color:var(--text-muted);font-size:0.85em;margin:4px 0 0">Live view of the indexing pipeline stages</p>
+          </div>
+          <div class="view-toggle" id="indexer-view-toggle">
+            <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">
+              ${icon('gitBranch', 16)} Flow
+            </button>
+            <button class="view-toggle-btn ${currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Spotlight gauges">
+              ${icon('barChart2', 16)} Gauges
+            </button>
+          </div>
+        </div>
+        <div class="spotlight-canvas-wrap" id="indexer-canvas-wrap">
+          <canvas id="indexer-spotlight"></canvas>
+        </div>
+        <div id="indexer-mobile-cards" class="mobile-cards-grid" style="display:none"></div>
+        <div id="indexer-dashboard" class="spotlight-summary">
+          <div class="loading">Loading indexer data...</div>
+        </div>
+      `;
+
+      document.getElementById('indexer-view-toggle').addEventListener('click', e => {
+        const btn = e.target.closest('.view-toggle-btn');
+        if (!btn) return;
+        const view = btn.dataset.view;
+        if (view === currentView) return;
+        currentView = view;
+        localStorage.setItem('doogle-indexer-view', view);
+        document.querySelectorAll('#indexer-view-toggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+        rebuildIndexerDiagram();
+      });
+
+      buildIndexerDiagram();
+      if (_mobileResizeHandler) window.removeEventListener('resize', _mobileResizeHandler);
+      _mobileResizeHandler = () => syncMobileView();
+      window.addEventListener('resize', _mobileResizeHandler);
+      syncMobileView();
+    }
+
+    // Apply data to diagram
+    applyIndexerDiagram(lastOverviewData);
+    syncMobileView();
+
+    // ── Dashboard Cards ──
+    const dashEl = document.getElementById('indexer-dashboard');
+    if (!dashEl) return;
 
     // ── Card 1a: Indexed Documents ──
     const indexedHealth = indexedDocs > 0 ? 'green' : 'amber';
@@ -191,8 +501,7 @@ async function renderOverview(el) {
       </div>
     `);
 
-    // ── Card 3: Content Sources (wide, span 2) — KEY CARD ──
-    const explorers = leaderboard?.explorers || [];
+    // ── Card 3: Content Sources (wide) — with trust badges ──
     const hasLeaderboard = explorers.length > 0;
     const hasBothSources = localDocs > 0 && peerDocs > 0;
     const sourcesHealth = hasBothSources ? 'green' : (localDocs > 0 || peerDocs > 0) ? 'amber' : 'red';
@@ -201,18 +510,23 @@ async function renderOverview(el) {
     let stackedBarHTML = '';
     let legendHTML = '';
     let contributorsCount = 0;
+    let avgTrustScore = 0;
+    let totalDomainCount = 0;
 
     if (hasLeaderboard && totalSourceDocs > 0) {
-      // Build segments from leaderboard data
       const segments = [];
-      // Local segment
       if (localDocs > 0) {
-        segments.push({ label: 'Local', count: localDocs, color: PEER_COLORS[0] });
+        segments.push({ label: 'Local', count: localDocs, color: PEER_COLORS[0], trust: null });
       }
-      // Top 5 peers from leaderboard
       const peerExplorers = explorers.filter(e => e.peer_id !== status.peer_id).slice(0, 5);
       contributorsCount = peerExplorers.length + (localDocs > 0 ? 1 : 0);
       let accountedPeerDocs = 0;
+
+      // Compute avg trust and total domains from all explorers
+      const trustScores = explorers.filter(e => e.trust_score != null).map(e => e.trust_score);
+      avgTrustScore = trustScores.length > 0 ? trustScores.reduce((a, b) => a + b, 0) / trustScores.length : 0;
+      totalDomainCount = explorers.reduce((s, e) => s + (e.domain_count || 0), 0);
+
       peerExplorers.forEach((exp, i) => {
         const count = exp.documents || exp.docs_contributed || 0;
         accountedPeerDocs += count;
@@ -220,12 +534,12 @@ async function renderOverview(el) {
           label: peerNames.resolve(exp.peer_id),
           count,
           color: PEER_COLORS[(i + 1) % PEER_COLORS.length],
+          trust: exp.trust_score,
         });
       });
-      // "Others" segment for unaccounted peer docs
       const otherDocs = Math.max(0, peerDocs - accountedPeerDocs);
       if (otherDocs > 0) {
-        segments.push({ label: 'Others', count: otherDocs, color: 'var(--text-muted)' });
+        segments.push({ label: 'Others', count: otherDocs, color: 'var(--text-muted)', trust: null });
       }
 
       const barSegments = segments.map(s => {
@@ -233,14 +547,14 @@ async function renderOverview(el) {
         return `<div class="sl-stacked-segment" style="width:${Math.max(pct, 1)}%;background:${s.color}" title="${escapeHtml(s.label)}: ${formatNum(s.count)}"></div>`;
       }).join('');
 
-      const legendItems = segments.map(s =>
-        `<span class="sl-stacked-legend-item"><span class="sl-stacked-dot" style="background:${s.color}"></span>${escapeHtml(s.label)} (${formatNum(s.count)})</span>`
-      ).join('');
+      const legendItems = segments.map(s => {
+        const trustBadge = s.trust != null ? ` <span class="badge badge-${s.trust >= 0.6 ? 'green' : s.trust >= 0.3 ? 'amber' : 'red'}" style="font-size:0.7em;padding:1px 4px">${s.trust.toFixed(2)}</span>` : '';
+        return `<span class="sl-stacked-legend-item"><span class="sl-stacked-dot" style="background:${s.color}"></span>${escapeHtml(s.label)} (${formatNum(s.count)})${trustBadge}</span>`;
+      }).join('');
 
       stackedBarHTML = `<div class="sl-stacked-bar">${barSegments}</div>`;
       legendHTML = `<div class="sl-stacked-legend">${legendItems}</div>`;
     } else if (totalSourceDocs > 0) {
-      // Fallback: simple 2-segment bar
       contributorsCount = (localDocs > 0 ? 1 : 0) + (peerDocs > 0 ? 1 : 0);
       const localPctBar = totalSourceDocs > 0 ? (localDocs / totalSourceDocs * 100) : 0;
       const peerPctBar = 100 - localPctBar;
@@ -265,6 +579,8 @@ async function renderOverview(el) {
         <div class="sl-stat"><span class="sl-stat-value">${formatNum(localDocs)}</span><span class="sl-stat-label">Local</span></div>
         <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerDocs)}</span><span class="sl-stat-label">From Peers</span></div>
         <div class="sl-stat"><span class="sl-stat-value">${contributorsCount}</span><span class="sl-stat-label">Contributors</span></div>
+        ${hasLeaderboard ? `<div class="sl-stat"><span class="sl-stat-value">${avgTrustScore.toFixed(2)}</span><span class="sl-stat-label">Avg Trust</span></div>` : ''}
+        ${totalDomainCount > 0 ? `<div class="sl-stat"><span class="sl-stat-value">${formatNum(totalDomainCount)}</span><span class="sl-stat-label">Domains</span></div>` : ''}
       </div>
     `, 'sl-card--wide');
 
@@ -302,9 +618,14 @@ async function renderOverview(el) {
       </div>
     `);
 
-    // ── Card 6: Network Contribution ──
+    // ── Card 6: Network Contribution — with avg peer trust ──
     const hasActivity = totalTasks > 0;
     const netHealth = connectedPeers > 0 && hasActivity ? 'green' : connectedPeers > 0 ? 'amber' : 'red';
+    const peerOnlyExplorers = explorers.filter(e => e.peer_id !== status.peer_id);
+    const avgPeerTrust = peerOnlyExplorers.length > 0
+      ? peerOnlyExplorers.reduce((s, e) => s + (e.trust_score || 0), 0) / peerOnlyExplorers.length
+      : 0;
+
     const card6 = cardWrap('Network Contribution', netHealth, `
       <div class="sl-body-row" style="gap:24px">
         <div style="text-align:center">
@@ -319,30 +640,82 @@ async function renderOverview(el) {
       <div class="sl-stat-row">
         <div class="sl-stat"><span class="sl-stat-value">${formatNum(connectedPeers)}</span><span class="sl-stat-label">Connected Peers</span></div>
         <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalTasks)}</span><span class="sl-stat-label">Total Tasks</span></div>
+        ${peerOnlyExplorers.length > 0 ? `<div class="sl-stat"><span class="sl-stat-value">${avgPeerTrust.toFixed(2)}</span><span class="sl-stat-label">Avg Peer Trust</span></div>` : ''}
       </div>
     `);
 
-    el.innerHTML = `
-      <div class="sl-dashboard">
-        ${card1a}${card1b}${card2}${card3}${card4}${card5}${card6}
-      </div>
+    // ── Card 7: Peer Leaderboard (wide) ──
+    let card7 = '';
+    if (hasLeaderboard) {
+      const topPeers = explorers.slice(0, 5);
+      const rows = topPeers.map(exp => {
+        const name = exp.peer_id === status.peer_id
+          ? (status.node_name || 'local')
+          : peerNames.resolve(exp.peer_id);
+        const docs = exp.documents || exp.docs_contributed || 0;
+        const trust = exp.trust_score != null ? exp.trust_score : 0;
+        const trustColor = trust >= 0.6 ? 'green' : trust >= 0.3 ? 'amber' : 'red';
+        const domCount = exp.domain_count || 0;
+        const lastSeen = exp.last_seen ? timeAgo(exp.last_seen) : '—';
+        const isLocal = exp.peer_id === status.peer_id;
+        return `
+          <tr>
+            <td>${escapeHtml(name)} ${isLocal ? '<span class="badge badge-green" style="font-size:0.7em;padding:1px 4px">you</span>' : ''}</td>
+            <td>${formatNum(docs)}</td>
+            <td><span class="badge badge-${trustColor}">${trust.toFixed(2)}</span></td>
+            <td>${formatNum(domCount)}</td>
+            <td style="color:var(--text-muted);font-size:0.85em">${lastSeen}</td>
+          </tr>`;
+      }).join('');
 
-      <div class="sl-pipeline-strip">
-        <span class="badge badge-blue">Crawl</span>
-        <span class="badge badge-default">Dedup</span>
-        <span class="badge badge-purple">NLP</span>
-        <span class="badge badge-amber">Score</span>
-        <span class="badge badge-red">Spam</span>
-        <span class="badge badge-green">Index</span>
-      </div>
-    `;
+      card7 = cardWrap('Peer Leaderboard', 'green', `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Peer</th><th>Docs</th><th>Trust</th><th>Domains</th><th>Last Seen</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `, 'sl-card--wide');
+    }
+
+    // ── Card 8: Indexing Activity (wide, line chart) ──
+    const card8 = cardWrap('Indexing Activity', totalIndexed > 0 ? 'green' : 'amber', `
+      <div class="chart-container"><canvas id="indexer-activity-chart"></canvas></div>
+    `, 'sl-card--wide');
+
+    // Assemble dashboard
+    dashEl.className = 'sl-dashboard';
+    dashEl.innerHTML = card1a + card1b + card2 + card3 + card4 + card5 + card6 + card7 + card8;
+
+    // Render indexing activity line chart
+    if (indexerHistory.length > 1) {
+      const indexDeltas = [];
+      const filterDeltas = [];
+      for (let i = 1; i < indexerHistory.length; i++) {
+        indexDeltas.push({
+          label: formatTime(indexerHistory[i].time),
+          value: indexerHistory[i].indexed - indexerHistory[i - 1].indexed,
+        });
+        filterDeltas.push({
+          label: formatTime(indexerHistory[i].time),
+          value: indexerHistory[i].filtered - indexerHistory[i - 1].filtered,
+        });
+      }
+      renderLineChart('indexer-activity-chart', [
+        { label: 'Indexed/interval', color: getCSS('--green'), data: indexDeltas },
+        { label: 'Filtered/interval', color: getCSS('--red'), data: filterDeltas },
+      ], { height: 180 });
+    } else {
+      renderLineChart('indexer-activity-chart', [], { height: 180 });
+    }
   } catch (err) {
     el.innerHTML = `<div class="empty-state"><p>Failed to load indexer stats: ${err.message}</p></div>`;
   }
 }
 
+// ── Documents Tab ──
+
 async function renderDocuments(el) {
-  // Fetch current peer ID for local detection
   try {
     const status = await api.status();
     currentPeerID = status.peer_id || '';
@@ -389,16 +762,13 @@ async function loadDocuments() {
   if (!results) return;
 
   try {
-    // Determine peer filter for API call
     let peerParam = '';
     if (docPeerFilter === 'local' && currentPeerID) peerParam = currentPeerID;
-    // 'peers' filter: we fetch all and filter client-side (no single peer to filter by)
 
     const data = await api.documents(docOffset, DOC_PAGE_SIZE, peerParam);
     let docs = data.documents || [];
     const total = data.total || 0;
 
-    // Client-side filter for "From Peers" (exclude local)
     if (docPeerFilter === 'peers' && currentPeerID) {
       docs = docs.filter(d => d.origin_peer_id && d.origin_peer_id !== currentPeerID);
     }
@@ -449,7 +819,6 @@ async function loadDocuments() {
       </div>
     `;
 
-    // Pagination
     const totalPages = Math.ceil(total / DOC_PAGE_SIZE);
     const currentPage = Math.floor(docOffset / DOC_PAGE_SIZE) + 1;
     if (pagination) {
@@ -468,7 +837,6 @@ async function loadDocuments() {
       });
     }
 
-    // Detail buttons
     results.querySelectorAll('.doc-detail-btn').forEach(btn => {
       btn.addEventListener('click', () => showDocDetail(btn.dataset.id));
     });
@@ -653,6 +1021,8 @@ function showSearchResultDetail(r) {
   showModal('Search Result Details', html, { width: '700px' });
 }
 
+// ── Scoring Tab ──
+
 function renderScoring(el) {
   el.innerHTML = `
     <div class="section">
@@ -689,6 +1059,8 @@ function renderScoring(el) {
   `;
 }
 
+// ── Pipeline Tab ──
+
 function renderPipeline(el) {
   el.innerHTML = `
     <div class="section">
@@ -715,6 +1087,8 @@ function renderPipeline(el) {
   `;
 }
 
+// ── Helpers ──
+
 function scoreCard(name, desc, color) {
   return `
     <div class="card card-sm">
@@ -733,18 +1107,6 @@ function pipelineStep(name, desc) {
   `;
 }
 
-function qualityBar(value, color) {
-  const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
-  return `
-    <div class="score-bar" style="margin-top:8px">
-      <div class="score-bar-fill">
-        <div class="fill" style="width:${pct}%;background:var(--${color})"></div>
-      </div>
-      <span class="score-bar-label">${pct}%</span>
-    </div>
-  `;
-}
-
 function qualColor(score) {
   if (score >= 0.7) return 'green';
   if (score >= 0.4) return 'blue';
@@ -756,4 +1118,3 @@ function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
-

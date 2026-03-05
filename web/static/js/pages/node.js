@@ -55,7 +55,7 @@ const NAV_ROUTES = {
 
 let diagram = null;
 let currentView = localStorage.getItem('doogle-node-view') || 'flow';
-let lastData = { status: null, crawler: null, indexer: null, profile: null, storage: null };
+let lastData = { status: null, crawler: null, indexer: null, storage: null };
 let mobileBoxData = new Map();
 const MOBILE_BP = 700;
 let nodeHistory = [];
@@ -131,7 +131,7 @@ function syncMobileView() {
     cardsWrap.style.display = 'none';
     if (!diagram) {
       buildDiagram();
-      if (lastData.status) applyData(lastData.status, lastData.crawler, lastData.indexer, lastData.profile, lastData.storage);
+      if (lastData.status) applyData(lastData.status, lastData.crawler, lastData.indexer, lastData.storage);
     }
   }
 }
@@ -158,7 +158,7 @@ function buildDiagram() {
       const ix = data.indexer || {};
       const map = {
         p2p:     () => [`Uptime: ${s.uptime || '—'}`, `Addrs: ${(s.addrs || []).length}`],
-        crawler: () => [`Rate limit: ${cr.rate_limit || '—'}`, `Errors: ${cr.total_errors || 0}`, `JS rendered: ${cr.js_rendered || 0}`, ...(cr.forwarded_tasks ? [`Forwarded: ${cr.forwarded_tasks}`] : []), ...(cr.received_from_peers ? [`From peers: ${cr.received_from_peers}`] : [])],
+        crawler: () => [`Rate limit: ${cr.rate_limit || '—'}`, `Errors: ${cr.total_failed || 0}`, `JS rendered: ${cr.js_rendered || 0}`, ...(cr.forwarded_tasks ? [`Forwarded: ${cr.forwarded_tasks}`] : []), ...(cr.received_from_peers ? [`From peers: ${cr.received_from_peers}`] : [])],
         indexer: () => [`Avg spam: ${(ix.avg_spam || 0).toFixed(2)}`, `Empty skipped: ${ix.empty_skipped || 0}`],
         trust:   () => [`Spam: ${ix.spam_rejected || 0}`, `Dupes: ${ix.duplicates_skipped || 0}`],
       };
@@ -168,7 +168,7 @@ function buildDiagram() {
   diagram.start();
   // Re-apply last fetched data
   if (lastData.status || lastData.crawler || lastData.indexer) {
-    applyData(lastData.status, lastData.crawler, lastData.indexer, lastData.profile, lastData.storage);
+    applyData(lastData.status, lastData.crawler, lastData.indexer, lastData.storage);
   }
 }
 
@@ -179,22 +179,21 @@ function rebuildDiagram() {
 
 async function loadAllData() {
   try {
-    const [status, crawler, indexer, profile, storage] = await Promise.all([
+    const [status, crawler, indexer, storage] = await Promise.all([
       api.status().catch(() => null),
       api.crawlerStatus().catch(() => null),
       api.indexerStats().catch(() => null),
-      api.profile().catch(() => null),
       api.storage().catch(() => null),
     ]);
-    lastData = { status, crawler, indexer, profile, storage };
-    applyData(status, crawler, indexer, profile, storage);
+    lastData = { status, crawler, indexer, storage };
+    applyData(status, crawler, indexer, storage);
   } catch (err) {
     const el = document.getElementById('spotlight-summary');
     if (el) el.innerHTML = `<div class="empty-state">${icon('alertTriangle', 24, 'var(--red)')} Failed to load: ${escapeHtml(err.message)}</div>`;
   }
 }
 
-function applyData(status, crawler, indexer, profile, storage) {
+function applyData(status, crawler, indexer, storage) {
   const s = status || {};
   const cr = crawler || {};
   const ix = indexer || {};
@@ -338,7 +337,7 @@ function applyData(status, crawler, indexer, profile, storage) {
   }
 
   if (diagram) diagram.setSpawnRate(Math.max(1, activeW));
-  renderDashboard(status, crawler, indexer, profile, storage);
+  renderDashboard(status, crawler, indexer, storage);
   syncMobileView();
 }
 
@@ -399,7 +398,7 @@ function formatTime(d) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function renderDashboard(status, crawler, indexer, profile, storage) {
+function renderDashboard(status, crawler, indexer, storage) {
   const el = document.getElementById('spotlight-summary');
   if (!el) return;
   const s = status || {};
@@ -425,6 +424,7 @@ function renderDashboard(status, crawler, indexer, profile, storage) {
       <div class="sl-stat"><span class="sl-stat-value" title="${escapeHtml(peerId)}">${escapeHtml(shortPeer)}</span><span class="sl-stat-label">Peer ID</span></div>
       <div class="sl-stat"><span class="sl-stat-value">${escapeHtml(s.uptime || '—')}</span><span class="sl-stat-label">Uptime</span></div>
       <div class="sl-stat"><span class="sl-stat-value">${escapeHtml(commit)}</span><span class="sl-stat-label">Commit</span></div>
+      ${s.build_date ? `<div class="sl-stat"><span class="sl-stat-value">${escapeHtml(s.build_date)}</span><span class="sl-stat-label">Build Date</span></div>` : ''}
     </div>
   `, 'sl-card--wide');
 

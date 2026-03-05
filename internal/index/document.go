@@ -25,6 +25,9 @@ type IndexDocument struct {
 	Categories string `json:"categories"` // comma-separated for Bleve
 	Keywords   string `json:"keywords"`   // comma-separated for Bleve
 
+	// Summary (extractive)
+	Summary string `json:"summary"`
+
 	// Anchor text from inbound links
 	AnchorText string `json:"anchor_text"`
 
@@ -58,6 +61,14 @@ type IndexDocument struct {
 	IsHTTPS         bool `json:"is_https"`
 	IsTimeSensitive bool `json:"is_time_sensitive"`
 	IsEvergreen     bool `json:"is_evergreen"`
+
+	// Image search: concatenated alt text + captions for full-text search
+	ImageText  string `json:"image_text"`
+	ImageCount int    `json:"image_count"`
+
+	// Structured data: schema type for filtering
+	SchemaType     string `json:"schema_type"`
+	StructuredText string `json:"structured_text"` // flattened structured data for search
 }
 
 // Type implements bleve.Classifier. All documents use the default mapping;

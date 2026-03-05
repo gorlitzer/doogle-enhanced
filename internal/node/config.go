@@ -21,6 +21,7 @@ type Config struct {
 	Search   SearchConfig  `yaml:"search"`
 
 	Fleet FleetConfig `yaml:"fleet"`
+	Trust TrustConfig `yaml:"trust"`
 
 	// Seed URLs provided via CLI
 	SeedURLs []string `yaml:"-"`
@@ -67,6 +68,18 @@ type CrawlerConfig struct {
 	HeadlessTimeout   time.Duration `yaml:"headless_timeout"`
 }
 
+// TrustConfig holds trust & safety settings, including per-node allowlist/denylist.
+type TrustConfig struct {
+	// DomainAllowlist: if non-empty, ONLY these domains are crawled/indexed.
+	DomainAllowlist []string `yaml:"domain_allowlist,omitempty"`
+	// DomainDenylist: these domains are never crawled/indexed.
+	DomainDenylist []string `yaml:"domain_denylist,omitempty"`
+	// URLAllowlist: if non-empty, ONLY URLs matching these prefixes are allowed.
+	URLAllowlist []string `yaml:"url_allowlist,omitempty"`
+	// URLDenylist: URLs matching these prefixes are blocked.
+	URLDenylist []string `yaml:"url_denylist,omitempty"`
+}
+
 type IndexConfig struct {
 	BleveDir             string        `yaml:"bleve_dir"`
 	PageRankInterval     time.Duration `yaml:"pagerank_interval"`
@@ -75,14 +88,21 @@ type IndexConfig struct {
 	IncrementalInterval  time.Duration `yaml:"incremental_interval"`
 	ReplicationFactor    int           `yaml:"replication_factor"`
 	AntiEntropyInterval  time.Duration `yaml:"anti_entropy_interval"`
+
+	// Semantic search (Phase 4)
+	EnableSemantic bool    `yaml:"enable_semantic"`
+	SemanticWeight float64 `yaml:"semantic_weight"`
+	ClusterInterval time.Duration `yaml:"cluster_interval"`
+	ClusterCount    int           `yaml:"cluster_count"`
 }
 
 type StorageConfig struct {
-	DataDir       string        `yaml:"data_dir"`
-	BadgerDir     string        `yaml:"badger_dir"`
-	GCInterval    time.Duration `yaml:"gc_interval"`
-	SeenTTL       time.Duration `yaml:"seen_ttl"`
-	ContentMaxAge time.Duration `yaml:"content_max_age"`
+	DataDir        string        `yaml:"data_dir"`
+	BadgerDir      string        `yaml:"badger_dir"`
+	GCInterval     time.Duration `yaml:"gc_interval"`
+	SeenTTL        time.Duration `yaml:"seen_ttl"`
+	ContentMaxAge  time.Duration `yaml:"content_max_age"`
+	TrendRetention time.Duration `yaml:"trend_retention"`
 }
 
 type SearchConfig struct {
@@ -92,6 +112,12 @@ type SearchConfig struct {
 	MaxPeers        int           `yaml:"max_peers"`
 	CacheSize       int           `yaml:"cache_size"`
 	CacheTTL        time.Duration `yaml:"cache_ttl"`
+
+	// Hybrid search weights (Phase 4)
+	HybridBM25Weight     float64       `yaml:"hybrid_bm25_weight"`
+	HybridVecWeight      float64       `yaml:"hybrid_vec_weight"`
+	LTRRetrainInterval   time.Duration `yaml:"ltr_retrain_interval"`
+	LTRMinSignals        int           `yaml:"ltr_min_signals"`
 }
 
 // DefaultConfig returns sensible defaults.
@@ -129,21 +155,30 @@ func DefaultConfig() *Config {
 			IncrementalInterval: 10 * time.Minute,
 			ReplicationFactor:   3,
 			AntiEntropyInterval: 2 * time.Minute,
+			EnableSemantic:      true,
+			SemanticWeight:      0.3,
+			ClusterInterval:     30 * time.Minute,
+			ClusterCount:        20,
 		},
 		Storage: StorageConfig{
-			DataDir:       "./data/doogle",
-			BadgerDir:     "badger",
-			GCInterval:    5 * time.Minute,
-			SeenTTL:       7 * 24 * time.Hour,
-			ContentMaxAge: 30 * 24 * time.Hour,
+			DataDir:        "./data/doogle",
+			BadgerDir:      "badger",
+			GCInterval:     5 * time.Minute,
+			SeenTTL:        7 * 24 * time.Hour,
+			ContentMaxAge:  30 * 24 * time.Hour,
+			TrendRetention: 168 * time.Hour,
 		},
 		Search: SearchConfig{
-			MaxResults:      50,
-			DefaultPageSize: 10,
-			PeerTimeout:     2 * time.Second,
-			MaxPeers:        10,
-			CacheSize:       1000,
-			CacheTTL:        5 * time.Minute,
+			MaxResults:         50,
+			DefaultPageSize:    10,
+			PeerTimeout:        2 * time.Second,
+			MaxPeers:           10,
+			CacheSize:          1000,
+			CacheTTL:           5 * time.Minute,
+			HybridBM25Weight:   0.7,
+			HybridVecWeight:    0.3,
+			LTRRetrainInterval: 1 * time.Hour,
+			LTRMinSignals:      100,
 		},
 		Fleet: FleetConfig{
 			Role:              "coordinator",

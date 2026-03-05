@@ -51,6 +51,8 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		r.Post("/report", ReportHandler(deps))
 		r.Post("/config/name", SetNodeNameHandler(deps))
 		r.Post("/profile/interests", ProfileInterestsHandler(deps))
+		r.Get("/trends", TrendsHandler(deps))
+		r.Post("/click", ClickHandler(deps))
 
 		// Admin endpoints
 		r.Route("/admin", func(r chi.Router) {

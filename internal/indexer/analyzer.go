@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/doogle/doogle-v2/internal/store"
 )
 
 // Analyzer provides NLP-style text analysis: tokenization, keyword extraction,
@@ -321,6 +323,78 @@ func (a *Analyzer) extractTopics(text string) []string {
 		result = append(result, scores[i].topic)
 	}
 	return result
+}
+
+// EnhancedEntity represents a named entity with type and confidence score.
+type EnhancedEntity struct {
+	Name       string  `json:"name"`
+	Type       string  `json:"type"`
+	Confidence float64 `json:"confidence"`
+}
+
+// ExtractEntitiesEnhanced performs pattern-based NER with confidence scores and more patterns.
+// Returns typed entities suitable for knowledge graph population.
+func (a *Analyzer) ExtractEntitiesEnhanced(content, title string) []store.TypedEntity {
+	var entities []store.TypedEntity
+	seen := make(map[string]bool)
+
+	addEntity := func(name, typ string, confidence float64) {
+		key := typ + ":" + name
+		if seen[key] || len(name) < 2 {
+			return
+		}
+		seen[key] = true
+		entities = append(entities, store.TypedEntity{
+			Name:       name,
+			Type:       typ,
+			Confidence: confidence,
+		})
+	}
+
+	// Extract from title (higher confidence)
+	titleEntities := a.ExtractEntities(title)
+	for _, p := range titleEntities.People {
+		addEntity(p, "person", 0.8)
+	}
+	for _, o := range titleEntities.Organizations {
+		addEntity(o, "organization", 0.8)
+	}
+	for _, l := range titleEntities.Locations {
+		addEntity(l, "location", 0.7)
+	}
+	for _, t := range titleEntities.Topics {
+		addEntity(t, "topic", 0.7)
+	}
+
+	// Extract from content (lower confidence)
+	contentEntities := a.ExtractEntities(content)
+	for _, p := range contentEntities.People {
+		addEntity(p, "person", 0.6)
+	}
+	for _, o := range contentEntities.Organizations {
+		addEntity(o, "organization", 0.6)
+	}
+	for _, l := range contentEntities.Locations {
+		addEntity(l, "location", 0.5)
+	}
+	for _, t := range contentEntities.Topics {
+		addEntity(t, "topic", 0.5)
+	}
+
+	// Additional patterns: technology names (camelCase, ALL_CAPS acronyms)
+	techPatterns := regexp.MustCompile(`\b([A-Z][a-zA-Z]+(?:\.js|\.go|\.py|\.rs)?)\b`)
+	for _, m := range techPatterns.FindAllString(title+" "+content, 20) {
+		if len(m) >= 3 && len(m) <= 30 {
+			addEntity(m, "technology", 0.4)
+		}
+	}
+
+	// Limit total entities
+	if len(entities) > 50 {
+		entities = entities[:50]
+	}
+
+	return entities
 }
 
 // langProfile defines stop words for a language and the threshold to trigger detection.
