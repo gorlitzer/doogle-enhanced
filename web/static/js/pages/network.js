@@ -5,8 +5,13 @@ import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba } from '../co
 
 let graph = null;
 
-function peerTier(score, quarantineCount) {
-  if (quarantineCount >= 3) return 'banned';
+function peerTier(score, quarantineCount, strikes = 0) {
+  // Strike-based tiers take priority (the "bounty board")
+  if (strikes >= 15) return 'excommunicado';
+  if (strikes >= 8) return 'quarantined';
+  if (strikes >= 5) return 'throttled';
+  if (strikes >= 3) return 'warning';
+  // Fall back to trust score
   if (score >= 0.3) return 'trusted';
   if (score >= 0.2) return 'warning';
   if (score >= 0.1) return 'throttled';
@@ -82,8 +87,10 @@ async function loadNetwork() {
           </div>
           <div class="graph-legend">
             <span><span class="dot" style="background:var(--accent)"></span> This node</span>
-            <span><span class="dot" style="background:var(--green)"></span> Connected peer</span>
-            <span><span class="dot" style="background:var(--border-light)"></span> Connection</span>
+            <span><span class="dot" style="background:var(--green)"></span> Trusted</span>
+            <span><span class="dot" style="background:var(--amber)"></span> Warning</span>
+            <span><span class="dot" style="background:var(--red)"></span> Quarantined</span>
+            <span><span class="dot" style="background:var(--purple)"></span> Excommunicado</span>
           </div>
         </div>
       </div>
@@ -160,8 +167,8 @@ async function loadNetwork() {
                     const rep = trustMap.get(id);
                     const trustScore = rep ? rep.trust_score : null;
                     const qCount = rep ? (rep.quarantine_count || 0) : 0;
-                    const tier = trustScore !== null ? peerTier(trustScore, qCount) : 'new';
-                    const tierColors = { trusted: 'green', warning: 'amber', throttled: 'amber', quarantined: 'red', banned: 'purple', new: 'default' };
+                    const tier = trustScore !== null ? peerTier(trustScore, qCount, rep.strikes || 0) : 'new';
+                    const tierColors = { trusted: 'green', warning: 'amber', throttled: 'amber', quarantined: 'red', excommunicado: 'purple', new: 'default' };
                     return `
                       <tr>
                         <td>${escapeHtml(name || 'Anonymous Node')}</td>
@@ -213,6 +220,14 @@ async function loadNetwork() {
   }
 }
 
+const TIER_COLORS = () => ({
+  trusted:        getCSS('--green'),
+  warning:        getCSS('--amber') || '#f59e0b',
+  throttled:      getCSS('--amber') || '#f59e0b',
+  quarantined:    getCSS('--red') || '#ef4444',
+  excommunicado:  getCSS('--purple') || '#a855f7',
+});
+
 function buildGraph(status, peerList, trustMap) {
   // Stop previous graph
   if (graph) graph.stop();
@@ -221,6 +236,8 @@ function buildGraph(status, peerList, trustMap) {
 
   const nodes = [];
   const edges = [];
+  const connectedIds = new Set();
+  const colors = TIER_COLORS();
 
   // This node (center, larger)
   nodes.push({
@@ -233,36 +250,58 @@ function buildGraph(status, peerList, trustMap) {
   });
 
   // Connected peers (colored by trust tier)
-  peerList.forEach((p, i) => {
+  peerList.forEach(p => {
     const id = typeof p === 'string' ? p : p.peer_id;
+    connectedIds.add(id);
     const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : 'Anonymous Node';
     const rep = trustMap?.get(id);
-    const tier = rep ? peerTier(rep.trust_score || 0, rep.quarantine_count || 0) : 'trusted';
-    const tierNodeColors = {
-      trusted: getCSS('--green'),
-      warning: getCSS('--amber') || '#f59e0b',
-      throttled: getCSS('--amber') || '#f59e0b',
-      quarantined: getCSS('--red') || '#ef4444',
-      banned: getCSS('--purple') || '#a855f7',
-    };
+    const tier = rep ? peerTier(rep.trust_score || 0, rep.quarantine_count || 0, rep.strikes || 0) : 'trusted';
+    const edgeColor = tier === 'quarantined' ? hexToRgba(colors.quarantined, 0.4)
+                    : tier === 'excommunicado'      ? hexToRgba(colors.banned, 0.25)
+                    : tier === 'warning'     ? hexToRgba(colors.warning, 0.4)
+                    : hexToRgba(getCSS('--green'), 0.4);
     nodes.push({
-      id: id,
+      id,
       label: peerName,
       tooltip: peerName + ' — ' + id.slice(0, 20) + '... [' + tier + ']',
-      type: 'peer',
-      color: tierNodeColors[tier] || getCSS('--green'),
-      radius: 14,
+      type: tier === 'quarantined' ? 'quarantined' : tier === 'excommunicado' ? 'banned' : 'peer',
+      color: colors[tier] || colors.trusted,
+      radius: tier === 'excommunicado' ? 10 : 14,
     });
     edges.push({
       from: status.peer_id,
       to: id,
-      color: hexToRgba(getCSS('--green'), 0.4),
-      width: 2,
+      color: edgeColor,
+      width: (tier === 'quarantined' || tier === 'excommunicado') ? 1 : 2,
+      dashed: tier === 'quarantined' || tier === 'excommunicado',
     });
   });
 
-  // If no peers, add ghost nodes for visual appeal
-  if (peerList.length === 0) {
+  // Add quarantined/banned peers from trust data that aren't currently connected
+  for (const [peerId, rep] of trustMap) {
+    if (connectedIds.has(peerId) || peerId === status.peer_id) continue;
+    const tier = peerTier(rep.trust_score || 0, rep.quarantine_count || 0, rep.strikes || 0);
+    if (tier !== 'quarantined' && tier !== 'banned') continue;
+
+    nodes.push({
+      id: peerId,
+      label: 'Anonymous Node',
+      tooltip: peerId.slice(0, 20) + '... [' + tier + ' — disconnected]',
+      type: tier,
+      color: colors[tier],
+      radius: tier === 'excommunicado' ? 8 : 11,
+    });
+    edges.push({
+      from: status.peer_id,
+      to: peerId,
+      color: hexToRgba(colors[tier], 0.15),
+      width: 1,
+      dashed: true,
+    });
+  }
+
+  // If no peers at all, add ghost nodes for visual appeal
+  if (peerList.length === 0 && trustMap.size === 0) {
     for (let i = 0; i < 3; i++) {
       const id = `ghost-${i}`;
       nodes.push({

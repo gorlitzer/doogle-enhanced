@@ -17,6 +17,7 @@ type Engine struct {
 	entityStore        *store.EntityStore
 	clusterComputer    ClusterProvider
 	QuarantinedPeersFn func() []string
+	DocQuarantineFn    func(docID string) (quarantined bool, reason string)
 }
 
 // ClusterProvider provides related topic labels for search results.
@@ -142,6 +143,13 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			CrawledAt:            hit.Doc.CrawledAt,
 			IsTimeSensitive:      hit.Doc.IsTimeSensitive,
 			IsEvergreen:          hit.Doc.IsEvergreen,
+		}
+		// Check document-level quarantine (24h voting window)
+		if e.DocQuarantineFn != nil {
+			if q, reason := e.DocQuarantineFn(hit.Doc.ID); q {
+				result.Quarantined = true
+				result.QuarantineReason = reason
+			}
 		}
 		results = append(results, result)
 	}

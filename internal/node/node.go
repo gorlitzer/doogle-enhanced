@@ -359,11 +359,12 @@ func (n *Node) init() error {
 	search.PeerTierFn = func(peerID string) string {
 		score := n.trustManager.TrustScore(peerID)
 		rep, _ := n.trustStore.GetReputation(peerID)
-		qCount := 0
+		qCount, strikes := 0, 0
 		if rep != nil {
 			qCount = rep.QuarantineCount
+			strikes = rep.Strikes
 		}
-		return ComputeTier(score, qCount)
+		return ComputeTier(score, qCount, strikes)
 	}
 
 	// 12. Search engines (shard-aware distributed search)
@@ -378,6 +379,13 @@ func (n *Node) init() error {
 			ids = append(ids, rep.PeerID)
 		}
 		return ids
+	}
+	n.localEng.DocQuarantineFn = func(docID string) (bool, string) {
+		q := n.trustStore.GetDocQuarantine(docID)
+		if q == nil || q.Resolved {
+			return false, ""
+		}
+		return true, q.Reason
 	}
 	n.search = search.NewDistributedSearch(
 		h, n.localEng, n.shards,
@@ -509,6 +517,11 @@ func (n *Node) init() error {
 	deps.DismissReportFn = n.trustManager.DismissReport
 	deps.ConfirmReportFn = n.trustManager.ConfirmReport
 	deps.UnblockDomainFn = n.trustStore.UnblockDomain
+	deps.VoteDocQuarantineFn = func(url string, confirm bool) error {
+		docID := models.DocumentID(url)
+		_, err := n.trustStore.VoteDocQuarantine(docID, confirm)
+		return err
+	}
 	if n.auditTrail != nil {
 		deps.AuditTrailFn = func(limit int) []interface{} {
 			return n.auditTrailEntries(limit)
@@ -551,6 +564,20 @@ func (n *Node) Run() error {
 
 	// Start trust decay (idle peers slowly lose reputation)
 	n.trustManager.StartDecayLoop(n.ctx)
+
+	// Start quarantine resolution loop (checks every 5 min for expired voting windows)
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-n.ctx.Done():
+				return
+			case <-ticker.C:
+				n.resolveQuarantines()
+			}
+		}
+	}()
 
 	// Start hash ring rebalancer
 	n.rebalancer.Start(n.ctx)
@@ -1361,6 +1388,9 @@ func (n *Node) ReportURL(rawURL, reason, detail string) error {
 		return nil // duplicate, don't broadcast
 	}
 
+	// Penalize the origin peer and clean up the document
+	n.penalizeAndCleanup(rawURL, reason)
+
 	// Append to audit trail (signed, hash-chained)
 	if n.auditTrail != nil {
 		if _, err := n.auditTrail.Append(report); err != nil {
@@ -1383,6 +1413,104 @@ func (n *Node) ReportURL(rawURL, reason, detail string) error {
 	}
 
 	return nil
+}
+
+// penalizeAndCleanup implements staged quarantine:
+//  1. Document enters quarantine (still visible in search with warning flag)
+//  2. 24-hour voting window opens for peers to confirm/dismiss
+//  3. After window closes, resolveQuarantines() tallies votes and either deletes
+//     the doc + penalizes origin peer, or lifts the quarantine.
+//
+// Replica holders are NOT penalized — only the origin peer (patient zero) takes
+// the trust hit when the quarantine is confirmed.
+func (n *Node) penalizeAndCleanup(rawURL, reason string) {
+	docID := models.DocumentID(rawURL)
+	doc, err := n.bleveIdx.Get(docID)
+	if err != nil {
+		return // document not in our index
+	}
+
+	// Check if already quarantined
+	if n.trustStore.IsDocQuarantined(docID) {
+		// Another report for the same URL — count as a confirmation vote
+		n.trustStore.VoteDocQuarantine(docID, true)
+		slog.Info("trust: additional vote for quarantined doc", "url", rawURL)
+		return
+	}
+
+	// Stage 1: quarantine the document (don't delete yet)
+	now := time.Now()
+	q := &models.DocQuarantine{
+		URL:           rawURL,
+		DocID:         docID,
+		OriginPeerID:  doc.OriginPeerID,
+		Reason:        reason,
+		ReporterID:    n.peerID.String(),
+		QuarantinedAt: now,
+		ExpiresAt:     now.Add(models.QuarantineVotingWindow),
+		Confirms:      1, // the initial report counts as first confirmation
+	}
+	if err := n.trustStore.QuarantineDoc(q); err != nil {
+		slog.Error("trust: failed to quarantine doc", "url", rawURL, "err", err)
+		return
+	}
+
+	slog.Info("trust: document quarantined — 24h voting window open",
+		"url", rawURL, "origin", doc.OriginPeerID, "reason", reason)
+}
+
+// resolveQuarantines is called periodically to check for expired voting windows.
+// For each expired quarantine:
+//   - If confirms > dismissals → delete doc from index, penalize origin peer
+//   - Otherwise → lift quarantine, doc stays in index
+func (n *Node) resolveQuarantines() {
+	entries, err := n.trustStore.UnresolvedQuarantines()
+	if err != nil || len(entries) == 0 {
+		return
+	}
+
+	now := time.Now()
+	for _, q := range entries {
+		if now.Before(q.ExpiresAt) {
+			continue // voting window still open
+		}
+
+		confirmed := q.Confirms > q.Dismissals
+		q.Resolved = true
+		q.Confirmed = confirmed
+		n.trustStore.QuarantineDoc(q)
+
+		if confirmed {
+			// Penalize the origin peer (patient zero)
+			if q.OriginPeerID != "" {
+				reporterTrust := 1.0
+				if q.OriginPeerID != n.peerID.String() {
+					if rep, _ := n.trustStore.GetReputation(n.peerID.String()); rep != nil {
+						reporterTrust = rep.TrustScore
+					}
+				}
+				n.trustManager.RecordSpamDoc(q.OriginPeerID, reporterTrust, q.Reason)
+			}
+
+			// Delete from all replicas (including our own index)
+			if err := n.bleveIdx.Delete(q.DocID); err != nil {
+				slog.Error("trust: failed to delete confirmed-spam doc", "url", q.URL, "err", err)
+			} else {
+				slog.Warn("trust: CONFIRMED quarantine — doc deleted, origin penalized",
+					"url", q.URL, "origin", q.OriginPeerID,
+					"confirms", q.Confirms, "dismissals", q.Dismissals)
+			}
+
+			// Update reporter credibility — the reporter was right
+			n.trustManager.RecordReporterConfirm(q.ReporterID)
+		} else {
+			slog.Info("trust: quarantine DISMISSED — doc restored",
+				"url", q.URL, "confirms", q.Confirms, "dismissals", q.Dismissals)
+
+			// Update reporter credibility — the reporter was wrong
+			n.trustManager.RecordReporterReject(q.ReporterID)
+		}
+	}
 }
 
 // spamReportLoop listens for incoming spam reports from peers.
@@ -1414,6 +1542,9 @@ func (n *Node) spamReportLoop() {
 		if isNew, err := n.trustManager.HandleReport(report); err != nil {
 			slog.Error("trust: error handling peer report", "err", err)
 		} else if isNew {
+			// Penalize the origin peer and clean up the document
+			n.penalizeAndCleanup(report.URL, report.Reason)
+
 			// Audit trail for incoming reports
 			if n.auditTrail != nil {
 				if _, err := n.auditTrail.Append(report); err != nil {

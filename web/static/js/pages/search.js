@@ -299,8 +299,13 @@ function renderResult(r, index) {
   const trust = trustLevel(r);
   const trustVal = ((r.quality_score || 0) + (r.eeat_score || 0) + (1 - (r.spam_score || 0))) / 3;
 
+  // Quarantine warning (document under 24h voting review)
+  const quarantineWarning = r.quarantined
+    ? `<div class="content-warning content-warning--quarantine">${icon('alertTriangle', 14)} Under review — reported as ${escapeHtml(r.quarantine_reason || 'suspicious')}. Voting open for 24h.</div>`
+    : '';
+
   // Spam warning
-  const spamWarning = r.spam_score > 0.3
+  const spamWarning = !r.quarantined && r.spam_score > 0.3
     ? `<div class="content-warning">${icon('alertTriangle', 14)} Low trust — content may be unreliable</div>`
     : '';
 
@@ -325,7 +330,7 @@ function renderResult(r, index) {
     : `<span class="result-favicon-fallback">${initial}</span>`;
 
   return `
-    <div class="result-card result-card--${trust.color}">
+    <div class="result-card result-card--${r.quarantined ? 'quarantined' : trust.color}">
       <div class="result-card-header">
         <div class="result-card-header-left">
           ${faviconHtml}
@@ -343,6 +348,7 @@ function renderResult(r, index) {
         <button class="result-copy-url" data-url="${escapeHtml(r.url)}" title="Copy URL">${icon('copy', 12)}</button>
       </div>
       <div class="result-card-snippet">${desc}</div>
+      ${quarantineWarning}
       ${spamWarning}
       <div class="result-card-footer">
         <div class="result-card-footer-left">
