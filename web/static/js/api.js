@@ -43,9 +43,9 @@ export const peerNames = {
   },
   /** Resolve a peer ID to a display label: node name → "local" → truncated hash. */
   resolve(id) {
-    if (!id) return 'Unknown';
-    if (id === _localPeerID) return _localNodeName || 'local';
-    return _nameMap.get(id) || id.slice(0, 12) + '…';
+    if (!id) return 'Anonymous Node';
+    if (id === _localPeerID) return _localNodeName || 'Anonymous Node';
+    return _nameMap.get(id) || 'Anonymous Node';
   },
   /** Check if the given id is the local node. */
   isLocal(id) { return id && id === _localPeerID; },

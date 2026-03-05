@@ -1,5 +1,6 @@
 // Doogle v2 — Indexer Dashboard (Spotlight Diagram + document browser + detail modals)
 import { api, peerNames } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { showModal, scoreBar, cardSkeleton, escapeHtml, icon, getCSS, renderLineChart, timeAgo } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
@@ -343,6 +344,7 @@ function syncMobileView() {
 // ── Overview Tab ──
 
 async function renderOverview(el) {
+  const gen = navGen();
   try {
     const [status, indexer, leaderboard, domains] = await Promise.all([
       api.status(),
@@ -350,6 +352,7 @@ async function renderOverview(el) {
       api.leaderboard().catch(() => null),
       api.domainOwnership().catch(() => null),
     ]);
+    if (gen !== navGen()) return;
 
     peerNames.update(status);
 
@@ -650,7 +653,7 @@ async function renderOverview(el) {
       const topPeers = explorers.slice(0, 5);
       const rows = topPeers.map(exp => {
         const name = exp.peer_id === status.peer_id
-          ? (status.node_name || 'local')
+          ? (status.node_name || 'Anonymous Node')
           : peerNames.resolve(exp.peer_id);
         const docs = exp.documents || exp.docs_contributed || 0;
         const trust = exp.trust_score != null ? exp.trust_score : 0;
@@ -760,12 +763,14 @@ async function loadDocuments() {
   const results = document.getElementById('doc-results');
   const pagination = document.getElementById('doc-pagination');
   if (!results) return;
+  const gen = navGen();
 
   try {
     let peerParam = '';
     if (docPeerFilter === 'local' && currentPeerID) peerParam = currentPeerID;
 
     const data = await api.documents(docOffset, DOC_PAGE_SIZE, peerParam);
+    if (gen !== navGen()) return;
     let docs = data.documents || [];
     const total = data.total || 0;
 

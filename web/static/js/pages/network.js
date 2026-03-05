@@ -1,5 +1,6 @@
 // Doogle v2 — P2P Network with interactive graph visualization
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba } from '../components.js';
 
 let graph = null;
@@ -28,12 +29,14 @@ export function renderNetwork(container) {
 }
 
 async function loadNetwork() {
+  const gen = navGen();
   try {
     const [status, peers, trustData] = await Promise.all([
       api.status(),
       api.peers().catch(() => []),
       api.trust().catch(() => ({})),
     ]);
+    if (gen !== navGen()) return; // navigated away
 
     // Build trust lookup: peer_id → reputation
     const trustMap = new Map();
@@ -50,7 +53,7 @@ async function loadNetwork() {
       <div class="card-grid">
         <div class="card">
           <div class="card-label">This Node</div>
-          <div class="card-value">${status.node_name ? escapeHtml(status.node_name) : '<span style="font-size:0.85em;word-break:break-all;font-family:monospace">' + status.peer_id.slice(0, 16) + '...</span>'}</div>
+          <div class="card-value">${escapeHtml(status.node_name || 'Anonymous Node')}</div>
         </div>
         <div class="card">
           <div class="card-label">Connected Peers</div>
@@ -161,7 +164,7 @@ async function loadNetwork() {
                     const tierColors = { trusted: 'green', warning: 'amber', throttled: 'amber', quarantined: 'red', banned: 'purple', new: 'default' };
                     return `
                       <tr>
-                        <td>${name ? escapeHtml(name) : '<span style="color:var(--text-muted)">—</span>'}</td>
+                        <td>${escapeHtml(name || 'Anonymous Node')}</td>
                         <td class="mono" style="font-size:0.8em">${escapeHtml(id).slice(0, 24)}...</td>
                         <td>
                           ${trustScore !== null
@@ -222,7 +225,7 @@ function buildGraph(status, peerList, trustMap) {
   // This node (center, larger)
   nodes.push({
     id: status.peer_id,
-    label: status.node_name || 'You',
+    label: status.node_name || 'Anonymous Node',
     tooltip: (status.node_name ? status.node_name + ' — ' : '') + status.peer_id.slice(0, 24) + '...',
     type: 'self',
     color: getCSS('--accent'),
@@ -232,7 +235,7 @@ function buildGraph(status, peerList, trustMap) {
   // Connected peers (colored by trust tier)
   peerList.forEach((p, i) => {
     const id = typeof p === 'string' ? p : p.peer_id;
-    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : id.slice(0, 12) + '…';
+    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : 'Anonymous Node';
     const rep = trustMap?.get(id);
     const tier = rep ? peerTier(rep.trust_score || 0, rep.quarantine_count || 0) : 'trusted';
     const tierNodeColors = {

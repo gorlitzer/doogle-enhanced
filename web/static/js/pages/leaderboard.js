@@ -1,5 +1,6 @@
 // Doogle v2 — WebExplorers Leaderboard (Visual Redesign)
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, getCSS, hexToRgba, escapeHtml } from '../components.js';
 import { formatNum } from '../spotlight.js';
 
@@ -13,8 +14,8 @@ function getTheme() {
 }
 
 function shortPeer(id) {
-  if (!id) return 'Unknown';
-  return id.slice(0, 8) + '...' + id.slice(-6);
+  if (!id) return 'Anonymous Node';
+  return 'Anonymous Node';
 }
 
 function animateCounter(el, target) {
@@ -412,8 +413,10 @@ function renderTable(explorers, localPeerID) {
 
 /* ── Load & Orchestrate ── */
 async function loadLeaderboard() {
+  const gen = navGen();
   try {
     const data = await api.leaderboard();
+    if (gen !== navGen()) return;
     const content = document.getElementById('lb-content');
     if (!content) return;
 

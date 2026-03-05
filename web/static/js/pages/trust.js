@@ -1,5 +1,6 @@
 // Doogle v2 — Trust & Safety Admin Page
 import { api, peerNames } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, cardSkeleton, escapeHtml, timeAgo } from '../components.js';
 
 let activeTab = 'overview';
@@ -106,8 +107,10 @@ async function doAction(fn, successMsg) {
 
 async function renderOverview(el) {
   el.innerHTML = cardSkeleton(4);
+  const gen = navGen();
   try {
     const data = await api.trust();
+    if (gen !== navGen()) return;
 
     const totalReports = data.total_reports || 0;
     const quarantinedPeers = data.quarantined_peers || 0;
@@ -191,8 +194,10 @@ async function renderOverview(el) {
 
 async function renderPeers(el) {
   el.innerHTML = cardSkeleton(4);
+  const gen = navGen();
   try {
     const data = await api.trust();
+    if (gen !== navGen()) return;
     const peers = (data.all_peers || []).sort((a, b) => (a.trust_score || 0) - (b.trust_score || 0));
 
     if (peers.length === 0) {
@@ -246,8 +251,10 @@ async function renderPeers(el) {
 
 async function renderQuarantined(el) {
   el.innerHTML = cardSkeleton(4);
+  const gen = navGen();
   try {
     const data = await api.trust();
+    if (gen !== navGen()) return;
     const peers = data.quarantined_list || [];
 
     if (peers.length === 0) {
@@ -301,8 +308,10 @@ async function renderQuarantined(el) {
 
 async function renderDomains(el) {
   el.innerHTML = cardSkeleton(4);
+  const gen = navGen();
   try {
     const data = await api.trust();
+    if (gen !== navGen()) return;
     const flagged = data.flagged_domain_list || [];
     const blocked = data.blocked_domain_list || [];
 
@@ -367,8 +376,10 @@ async function renderDomains(el) {
 
 async function renderAudit(el) {
   el.innerHTML = cardSkeleton(4);
+  const gen = navGen();
   try {
     const data = await api.auditTrail(50);
+    if (gen !== navGen()) return;
     const entries = data.entries || [];
 
     if (entries.length === 0) {

@@ -1,5 +1,6 @@
 // Doogle v2 — About Page: Interactive, visual, simple explanations (tabbed layout)
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, getCSS, hexToRgba, showModal } from '../components.js';
 
 let activeTab = 'overview';
@@ -877,8 +878,10 @@ function typewriter(text) {
 
 // ---- Live Stats ----
 async function loadStats() {
+  const gen = navGen();
   try {
     const s = await api.status();
+    if (gen !== navGen()) return;
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('about-stat-docs', s.indexed_docs?.toLocaleString() ?? '0');
     set('about-stat-crawled', s.crawled_urls?.toLocaleString() ?? '0');

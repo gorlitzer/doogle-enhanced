@@ -1,5 +1,6 @@
 // Doogle v2 — Onboarding Wizard
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, showModal, closeModal } from '../components.js';
 import { animateElement } from '../logo-animation.js';
 
@@ -1790,8 +1791,10 @@ function renderWelcome(el) {
 // ─── Step 1: Node Identity ────────────────────────────
 async function renderIdentity(el) {
   el.innerHTML = `<div class="wizard-identity"><div class="wizard-loading">Loading node info...</div></div>`;
+  const gen = navGen();
   try {
     const s = await api.status();
+    if (gen !== navGen()) return;
     const peerId = s.peer_id || 'unknown';
     const truncated = peerId.length > 16 ? peerId.slice(0, 16) + '...' : peerId;
     const nodeName = s.node_name || '';
