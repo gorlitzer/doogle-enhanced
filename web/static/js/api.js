@@ -134,4 +134,19 @@ export const api = {
   click(query, url, position) {
     return postJSON('/api/click', { query, url, position });
   },
+  unquarantine(peerID) {
+    return postJSON('/api/admin/trust/unquarantine', { peer_id: peerID });
+  },
+  dismissReport(reportID) {
+    return postJSON('/api/admin/trust/dismiss-report', { report_id: reportID });
+  },
+  confirmReport(reportID) {
+    return postJSON('/api/admin/trust/confirm-report', { report_id: reportID });
+  },
+  unblockDomain(domain) {
+    return postJSON('/api/admin/trust/unblock-domain', { domain });
+  },
+  auditTrail(limit = 50) {
+    return fetchJSON(`/api/admin/trust/audit?limit=${limit}`);
+  },
 };

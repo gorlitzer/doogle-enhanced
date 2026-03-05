@@ -18,6 +18,7 @@ type SpamReport struct {
 	Reason     string    `json:"reason"`      // spam, malware, phishing, illegal, low_quality
 	Detail     string    `json:"detail,omitempty"`
 	Timestamp  time.Time `json:"timestamp"`
+	Status     string    `json:"status,omitempty"` // "", "dismissed", "confirmed"
 }
 
 // Valid report reasons.
@@ -52,6 +53,24 @@ type PeerReputation struct {
 	FirstSeen    time.Time `json:"first_seen"`
 	LastSeen     time.Time `json:"last_seen"`
 	UpdatedAt    time.Time `json:"updated_at"`
+
+	// Graduated response fields
+	QuarantinedAt    time.Time `json:"quarantined_at,omitempty"`
+	QuarantineCount  int       `json:"quarantine_count"`
+	TrustCap         float64   `json:"trust_cap,omitempty"`
+	TrustCapExpiry   time.Time `json:"trust_cap_expiry,omitempty"`
+
+	// Reporter credibility
+	ReportsConfirmed int64 `json:"reports_confirmed"`
+	ReportsRejected  int64 `json:"reports_rejected"`
+}
+
+// DomainFlagEntry represents a flagged or blocked domain for the admin UI.
+type DomainFlagEntry struct {
+	Domain      string `json:"domain"`
+	ReportCount int64  `json:"report_count"`
+	Blocked     bool   `json:"blocked"`
+	Voters      int    `json:"voters"`
 }
 
 // TrustSummary is the API response for trust system status.
@@ -62,4 +81,15 @@ type TrustSummary struct {
 	FlaggedDomains    int              `json:"flagged_domains"`
 	RecentReports     []SpamReport     `json:"recent_reports,omitempty"`
 	QuarantinedList   []PeerReputation `json:"quarantined_list,omitempty"`
+	FlaggedDomainList []DomainFlagEntry  `json:"flagged_domain_list,omitempty"`
+	BlockedDomainList []DomainVotesInfo  `json:"blocked_domain_list,omitempty"`
+	AllPeers          []PeerReputation   `json:"all_peers,omitempty"`
+}
+
+// DomainVotesInfo is a serializable view of domain block votes for the API.
+type DomainVotesInfo struct {
+	Domain    string   `json:"domain"`
+	Voters    []string `json:"voters"`
+	Blocked   bool     `json:"blocked"`
+	BlockedAt int64    `json:"blocked_at"`
 }

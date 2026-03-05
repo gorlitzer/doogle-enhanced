@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dgraph-io/badger/v4"
+
 	"github.com/doogle/doogle-v2/internal/models"
 	"github.com/doogle/doogle-v2/internal/store"
 )
@@ -136,6 +138,48 @@ func (at *AuditTrail) GetEntry(reportID string) (*AuditEntry, error) {
 		return nil, fmt.Errorf("unmarshal audit entry: %w", err)
 	}
 	return &entry, nil
+}
+
+// RecentEntries returns the most recent audit entries (up to limit).
+func (at *AuditTrail) RecentEntries(limit int) []AuditEntry {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+
+	prefix := []byte(auditPrefix)
+	var entries []AuditEntry
+
+	at.store.DB().View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		opts.Reverse = true
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		count := 0
+		for it.Seek(append(prefix, 0xFF)); it.ValidForPrefix(prefix); it.Next() {
+			if count >= limit {
+				break
+			}
+			var entry AuditEntry
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &entry)
+			})
+			if err != nil {
+				continue
+			}
+
+			// Verify inline
+			if verifyErr := at.Verify(&entry); verifyErr != nil {
+				entry.SignerID = "INVALID: " + verifyErr.Error()
+			}
+
+			entries = append(entries, entry)
+			count++
+		}
+		return nil
+	})
+
+	return entries
 }
 
 // auditPayload builds the canonical bytes for hashing/signing.
