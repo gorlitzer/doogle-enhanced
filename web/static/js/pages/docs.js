@@ -397,7 +397,7 @@ function renderArchitecture(el) {
               ${icon('search', 18, 'var(--accent)')}
               <div>
                 <strong>Search</strong>
-                <p>BM25 full-text. Intent classification, synonym expansion, spelling correction, domain diversity, passage snippets. Shard-aware routing.</p>
+                <p>Hybrid BM25+vector (RRF). Learn-to-rank ML model. Entity cards, intent classification, multilingual semantic search. Shard-aware routing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="3" style="cursor:pointer">
@@ -704,14 +704,25 @@ function renderAPI(el) {
       "quality_score": 0.78,
       "spam_score": 0.02,
       "pagerank_score": 0.89,
-      "peer_id": "12D3KooW..."
+      "peer_id": "12D3KooW...",
+      "vector_similarity": 0.82
     }
   ],
   "total": 42,
   "page": 1,
   "page_size": 10,
   "took_ms": 23,
-  "peers_asked": 2
+  "peers_asked": 2,
+  "suggestion": "",
+  "intent": "informational",
+  "search_mode": "hybrid",
+  "entity_card": {
+    "name": "Go (programming language)",
+    "type": "technology",
+    "description": "Statically typed, compiled language...",
+    "doc_count": 15
+  },
+  "related_topics": ["go concurrency", "go web framework"]
 }`, 'json')}
         `)}
         ${endpoint('GET', '/api/status', 'Node health and statistics', `
@@ -819,6 +830,27 @@ function renderAPI(el) {
           <h4>Response</h4>
           ${codeBlock(`{"status": "deleted"}`, 'json')}
           <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Caution: this permanently removes all indexed documents and crawl data. The node identity key is preserved.</p>
+        `)}
+        ${endpoint('GET', '/api/trends', 'Trending queries and domains (Intelligence)', `
+          ${codeBlock(`curl http://localhost:7002/api/trends`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{
+  "trending_queries": [
+    { "name": "golang", "current_rate": 5.2, "average_rate": 1.1, "velocity_ratio": 4.7, "volume": 42 }
+  ],
+  "trending_domains": [
+    { "name": "go.dev", "current_rate": 3.1, "average_rate": 0.8, "velocity_ratio": 3.9, "volume": 28 }
+  ],
+  "computed_at": "2026-03-05T12:00:00Z"
+}`, 'json')}
+        `)}
+        ${endpoint('POST', '/api/click', 'Record a search result click (used for learn-to-rank training)', `
+          ${codeBlock(`curl -X POST http://localhost:7002/api/click \\
+  -H 'Content-Type: application/json' \\
+  -d '{"query":"golang tutorial","url":"https://go.dev/tour/","position":1}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "recorded"}`, 'json')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Click data is stored locally and used to train the learn-to-rank model. Training auto-triggers every 6 hours when 200+ click pairs are available.</p>
         `)}
       </div>
     </div>

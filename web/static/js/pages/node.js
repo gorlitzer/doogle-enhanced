@@ -282,7 +282,7 @@ function applyData(status, crawler, indexer, storage) {
       gauges: [
         { type: 'counter', value: s.indexed_docs || 0, label: 'searchable docs', color: getCSS('--accent') },
       ],
-      metrics: ['BM25 full-text', 'Fan-out to peers'],
+      metrics: ['Hybrid BM25+vector', 'LTR ranking', 'Entity cards'],
     });
     setBox('storage', {
       health: 'green',
@@ -332,7 +332,7 @@ function applyData(status, crawler, indexer, storage) {
     setBox('search', {
       health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
       gauges: [{ type: 'counter', value: s.indexed_docs || 0, label: 'searchable', color: getCSS('--accent') }],
-      metrics: [],
+      metrics: ['Hybrid + LTR'],
     });
   }
 
