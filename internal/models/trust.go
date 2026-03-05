@@ -54,6 +54,10 @@ type PeerReputation struct {
 	LastSeen     time.Time `json:"last_seen"`
 	UpdatedAt    time.Time `json:"updated_at"`
 
+	// Strike system — each confirmed bad document = 1 strike (permanent evidence).
+	// Strikes drive the graduated response: 3=warning, 5=throttled, 8=quarantined, 15=excommunicado.
+	Strikes int `json:"strikes"`
+
 	// Graduated response fields
 	QuarantinedAt    time.Time `json:"quarantined_at,omitempty"`
 	QuarantineCount  int       `json:"quarantine_count"`
@@ -64,6 +68,53 @@ type PeerReputation struct {
 	ReportsConfirmed int64 `json:"reports_confirmed"`
 	ReportsRejected  int64 `json:"reports_rejected"`
 }
+
+// Strike thresholds for graduated peer response.
+const (
+	StrikesWarning       = 3  // peer's results demoted 20%
+	StrikesThrottled     = 5  // results demoted 50%, max 2 per query
+	StrikesQuarantined   = 8  // excluded from search results entirely
+	StrikesExcommunicado = 15 // permanent ban — never accepted again
+)
+
+// ComputeStrikeTier returns the tier based on strike count alone.
+func ComputeStrikeTier(strikes int) string {
+	if strikes >= StrikesExcommunicado {
+		return "excommunicado"
+	}
+	if strikes >= StrikesQuarantined {
+		return "quarantined"
+	}
+	if strikes >= StrikesThrottled {
+		return "throttled"
+	}
+	if strikes >= StrikesWarning {
+		return "warning"
+	}
+	return "trusted"
+}
+
+// DocQuarantine tracks a document's quarantine state during the 24-hour voting window.
+// While quarantined, the document still appears in search results with a warning flag.
+// After the window closes, confirmations are tallied: if confirmed, the document is
+// deleted from all replicas and the origin peer is penalized. If dismissed, the
+// quarantine is lifted.
+type DocQuarantine struct {
+	URL          string    `json:"url"`
+	DocID        string    `json:"doc_id"`        // sha256(url)[:16]
+	OriginPeerID string    `json:"origin_peer_id"` // patient zero
+	Reason       string    `json:"reason"`
+	ReporterID   string    `json:"reporter_id"`   // who filed the initial report
+	QuarantinedAt time.Time `json:"quarantined_at"`
+	ExpiresAt    time.Time `json:"expires_at"`     // quarantined_at + 24h
+	Resolved     bool      `json:"resolved"`       // true after voting window closes
+	Confirmed    bool      `json:"confirmed"`      // true if confirmed after resolution
+	Confirms     int       `json:"confirms"`       // peer confirmations
+	Dismissals   int       `json:"dismissals"`     // peer dismissals
+}
+
+// QuarantineVotingWindow is how long a document stays in quarantine before resolution.
+const QuarantineVotingWindow = 24 * time.Hour
 
 // DomainFlagEntry represents a flagged or blocked domain for the admin UI.
 type DomainFlagEntry struct {

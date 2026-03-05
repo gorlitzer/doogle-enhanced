@@ -57,11 +57,12 @@ type Deps struct {
 	ClickFn  func(query, url string, position int) error
 
 	// Trust admin operations
-	UnquarantineFn  func(peerID string) error
-	DismissReportFn func(reportID string) error
-	ConfirmReportFn func(reportID string) error
-	UnblockDomainFn func(domain string) error
-	AuditTrailFn    func(limit int) []interface{}
+	UnquarantineFn      func(peerID string) error
+	DismissReportFn     func(reportID string) error
+	ConfirmReportFn     func(reportID string) error
+	UnblockDomainFn     func(domain string) error
+	AuditTrailFn        func(limit int) []interface{}
+	VoteDocQuarantineFn func(url string, confirm bool) error
 
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
@@ -895,6 +896,33 @@ func UnblockDomainHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "unblocked", "domain": body.Domain})
+	}
+}
+
+// VoteDocQuarantineHandler handles POST /api/admin/trust/vote-quarantine
+func VoteDocQuarantineHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.VoteDocQuarantineFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			URL     string `json:"url"`
+			Confirm bool   `json:"confirm"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url'"})
+			return
+		}
+		if err := deps.VoteDocQuarantineFn(body.URL, body.Confirm); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		action := "confirmed"
+		if !body.Confirm {
+			action = "dismissed"
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": action, "url": body.URL})
 	}
 }
 

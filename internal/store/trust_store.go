@@ -14,10 +14,11 @@ import (
 
 // Key prefixes for trust data in BadgerDB.
 const (
-	prefixReport      = "trust:report:"      // trust:report:<id> → SpamReport
-	prefixReputation  = "trust:reputation:"  // trust:reputation:<peerID> → PeerReputation
-	prefixDomainFlag  = "trust:domain:"      // trust:domain:<domain> → report count
-	prefixDomainVotes = "trust:domvotes:"    // trust:domvotes:<domain> → DomainVotes (consensus)
+	prefixReport        = "trust:report:"        // trust:report:<id> → SpamReport
+	prefixReputation    = "trust:reputation:"    // trust:reputation:<peerID> → PeerReputation
+	prefixDomainFlag    = "trust:domain:"        // trust:domain:<domain> → report count
+	prefixDomainVotes   = "trust:domvotes:"      // trust:domvotes:<domain> → DomainVotes (consensus)
+	prefixDocQuarantine = "trust:docq:"          // trust:docq:<docID> → DocQuarantine
 )
 
 // TrustStore persists spam reports and peer reputation in BadgerDB.
@@ -509,4 +510,81 @@ func ExtractDomain(rawURL string) string {
 		u = u[:idx]
 	}
 	return strings.ToLower(u)
+}
+
+// ─── Document Quarantine ──────────────────────────────
+
+// QuarantineDoc creates or updates a document quarantine entry.
+func (ts *TrustStore) QuarantineDoc(q *models.DocQuarantine) error {
+	data, err := json.Marshal(q)
+	if err != nil {
+		return err
+	}
+	return ts.bs.Set([]byte(prefixDocQuarantine+q.DocID), data)
+}
+
+// GetDocQuarantine returns the quarantine state for a document, or nil if not quarantined.
+func (ts *TrustStore) GetDocQuarantine(docID string) *models.DocQuarantine {
+	val, err := ts.bs.Get([]byte(prefixDocQuarantine + docID))
+	if err != nil || val == nil {
+		return nil
+	}
+	var q models.DocQuarantine
+	if err := json.Unmarshal(val, &q); err != nil {
+		return nil
+	}
+	return &q
+}
+
+// VoteDocQuarantine adds a confirm or dismiss vote. Returns updated entry.
+func (ts *TrustStore) VoteDocQuarantine(docID string, confirm bool) (*models.DocQuarantine, error) {
+	q := ts.GetDocQuarantine(docID)
+	if q == nil {
+		return nil, fmt.Errorf("quarantine not found: %s", docID)
+	}
+	if q.Resolved {
+		return q, nil // already resolved
+	}
+	if confirm {
+		q.Confirms++
+	} else {
+		q.Dismissals++
+	}
+	if err := ts.QuarantineDoc(q); err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// UnresolvedQuarantines returns all quarantined documents that haven't been resolved yet.
+func (ts *TrustStore) UnresolvedQuarantines() ([]*models.DocQuarantine, error) {
+	prefix := []byte(prefixDocQuarantine)
+	var result []*models.DocQuarantine
+
+	err := ts.bs.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			var q models.DocQuarantine
+			if err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &q)
+			}); err != nil {
+				continue
+			}
+			if !q.Resolved {
+				result = append(result, &q)
+			}
+		}
+		return nil
+	})
+	return result, err
+}
+
+// IsDocQuarantined returns true if a document is under active (unresolved) quarantine.
+func (ts *TrustStore) IsDocQuarantined(docID string) bool {
+	q := ts.GetDocQuarantine(docID)
+	return q != nil && !q.Resolved
 }

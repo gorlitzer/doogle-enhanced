@@ -474,6 +474,7 @@ export class NetworkGraph {
   _startSimulation() {
     if (this.running) return;
     this.running = true;
+    this._startTime = performance.now();
     const tick = () => {
       this._simulate();
       this._draw();
@@ -569,9 +570,24 @@ export class NetworkGraph {
     ctx.setLineDash([]);
 
     // Nodes
+    const t = (performance.now() - (this._startTime || 0)) / 1000;
     for (const n of this.nodes) {
+      const isQuarantined = n.type === 'quarantined';
+      const isBanned = n.type === 'excommunicado';
+
+      // Quarantined: pulsing red glow
+      if (isQuarantined) {
+        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(t * 2));
+        ctx.globalAlpha = pulse;
+        ctx.shadowColor = n.color;
+        ctx.shadowBlur = 12 + 6 * Math.sin(t * 2);
+      }
+      // Banned: faded, shrinking feel
+      else if (isBanned) {
+        ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 0.8);
+      }
       // Glow for hovered
-      if (n === this.hovered) {
+      else if (n === this.hovered) {
         ctx.shadowColor = n.color || getCSS('--accent');
         ctx.shadowBlur = 15;
       }
@@ -584,9 +600,41 @@ export class NetworkGraph {
       ctx.shadowBlur = 0;
 
       // Border
-      ctx.strokeStyle = n === this.hovered ? getCSS('--canvas-node-border-hover') : getCSS('--canvas-node-border');
-      ctx.lineWidth = n === this.hovered ? 2 : 1;
+      if (isBanned) {
+        // Banned: dashed border
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = n.color;
+        ctx.lineWidth = 1.5;
+      } else {
+        ctx.setLineDash([]);
+        ctx.strokeStyle = n === this.hovered ? getCSS('--canvas-node-border-hover') : getCSS('--canvas-node-border');
+        ctx.lineWidth = n === this.hovered ? 2 : 1;
+      }
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Banned: draw X through the node
+      if (isBanned) {
+        const r = n.radius * 0.55;
+        ctx.strokeStyle = getCSS('--bg-primary') || '#0a0a0f';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(n.x - r, n.y - r); ctx.lineTo(n.x + r, n.y + r);
+        ctx.moveTo(n.x + r, n.y - r); ctx.lineTo(n.x - r, n.y + r);
+        ctx.stroke();
+      }
+
+      // Quarantined: draw warning icon (!)
+      if (isQuarantined) {
+        ctx.fillStyle = getCSS('--bg-primary') || '#0a0a0f';
+        ctx.font = `bold ${n.radius}px system-ui`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', n.x, n.y);
+        ctx.textBaseline = 'alphabetic';
+      }
+
+      ctx.globalAlpha = 1;
 
       // Label
       ctx.fillStyle = getCSS('--canvas-text');

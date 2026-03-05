@@ -146,6 +146,9 @@ export const api = {
   unblockDomain(domain) {
     return postJSON('/api/admin/trust/unblock-domain', { domain });
   },
+  voteQuarantine(url, confirm) {
+    return postJSON('/api/admin/trust/vote-quarantine', { url, confirm });
+  },
   auditTrail(limit = 50) {
     return fetchJSON(`/api/admin/trust/audit?limit=${limit}`);
   },

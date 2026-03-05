@@ -490,6 +490,17 @@ a:hover { text-decoration: underline; }
 .result-card--green { border-left-color: var(--green); }
 .result-card--amber { border-left-color: var(--amber); }
 .result-card--red   { border-left-color: var(--red); }
+.result-card--quarantined {
+  border-left-color: var(--amber);
+  opacity: 0.75;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--bg-card),
+    var(--bg-card) 10px,
+    rgba(245,158,11,0.03) 10px,
+    rgba(245,158,11,0.03) 20px
+  );
+}
 .result-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.10);
@@ -498,6 +509,7 @@ a:hover { text-decoration: underline; }
 .result-card--green:hover { border-left-color: var(--green); }
 .result-card--amber:hover { border-left-color: var(--amber); }
 .result-card--red:hover   { border-left-color: var(--red); }
+.result-card--quarantined:hover { border-left-color: var(--amber); opacity: 0.85; }
 
 /* Card header */
 .result-card-header {
@@ -1781,6 +1793,16 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   font-size: 0.8em;
   color: var(--red);
   margin-top: 6px;
+}
+.content-warning--quarantine {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.35);
+  color: var(--amber);
+  animation: quarantine-pulse 2s ease-in-out infinite;
+}
+@keyframes quarantine-pulse {
+  0%, 100% { border-color: rgba(245,158,11,0.2); }
+  50% { border-color: rgba(245,158,11,0.6); }
 }
 
 /* ===============================================
