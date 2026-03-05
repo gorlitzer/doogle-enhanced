@@ -81,9 +81,10 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 
 **Search & Indexing**
 - BM25 full-text search via Bleve with stemming, phrase matching, fuzzy queries
-- Hybrid search: BM25 + TF-IDF vector similarity via Reciprocal Rank Fusion (RRF)
+- Hybrid search: BM25 + multilingual TF-IDF vector similarity via Reciprocal Rank Fusion (RRF)
 - Boolean query operators: `AND`, `OR`, `NOT` (`-term` exclusion, `python OR ruby`)
 - Multi-language stemmers: 15 languages (English + DE, FR, ES, IT, PT, NL, RU, SV, DA, FI, HU, RO, TR, NO)
+- Cross-language semantic search: query in one language finds results in another (9 languages)
 - PageRank computation on the backlink graph
 - Domain authority scoring (aggregated PageRank, quality, backlink domains per site)
 - Query intent classification (navigational, informational, transactional, local) with ranking adjustments
@@ -617,7 +618,7 @@ url_filter:
 - [ ] Network source tagging (clearnet/tor/i2p label on every doc, filterable in search UI)
 - [ ] Tor circuit management (connection pooling, circuit rotation, bandwidth-aware scheduling)
 
-### Phase 4 — Intelligence
+### Phase 4 — Intelligence ✅
 - [x] Query intent classification (navigational, informational, transactional, local) with ranking adjustments
 - [x] Spelling correction ("Did you mean?") via index term dictionary + Damerau-Levenshtein
 - [x] Synonym expansion (100+ bidirectional pairs, acronyms, compound words)
@@ -635,7 +636,7 @@ url_filter:
 - [x] Topic clustering (document grouping with keyword labels, related topics in results)
 - [x] Trend detection (hourly-bucketed crawl velocity + query frequency, spike detection)
 - [x] ML-based ranking (gradient-boosted decision stumps, pairwise RankNet loss, auto-trains from click data every 6h)
-- [ ] Multilingual semantic search (cross-language retrieval via multilingual embeddings)
+- [x] Multilingual semantic search (cross-lingual dictionary projection, ~500 words across 9 languages)
 
 ### Phase 5 — Ecosystem
 - [ ] Browser extension (address bar search, optional query obfuscation via P2P)
