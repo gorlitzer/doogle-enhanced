@@ -67,9 +67,9 @@ func (cs *ClickStore) AllClicks() map[string][]ClickRecord {
 		if strings.HasPrefix(k, "click_pos:") {
 			return true
 		}
-		// Parse "click:{query}:{url}"
+		// Parse "click:{query}:{url}" — use Index not LastIndex since URLs contain colons
 		rest := strings.TrimPrefix(k, "click:")
-		idx := strings.LastIndex(rest, ":")
+		idx := strings.Index(rest, ":")
 		if idx <= 0 {
 			return true
 		}
