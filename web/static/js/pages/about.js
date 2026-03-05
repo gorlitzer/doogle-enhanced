@@ -198,7 +198,7 @@ const techStack = [
 
 const limitations = [
   { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard. Light nodes (planned) will bypass this by proxying to full nodes.', badge: 'by design' },
-  { title: 'No PDF/doc extraction', desc: 'Binary document formats like PDF, DOCX, and PPTX are not yet parsed or indexed.', badge: 'planned' },
+  { title: 'Limited binary format support', desc: 'PDF text extraction is supported. Other binary formats (DOCX, PPTX) are not yet parsed or indexed.', badge: 'partial' },
   { title: 'No login-gated content', desc: 'Pages behind authentication walls cannot be crawled. Only publicly accessible content is indexed.', badge: 'by design' },
   { title: 'Rate-limited by politeness', desc: 'Strict per-domain rate limiting and robots.txt compliance means some sites crawl slowly. This is intentional.', badge: 'by design' },
   { title: 'Full nodes only (for now)', desc: 'Every node currently runs all subsystems (~1-2 GB RAM). Light node mode for edge devices is planned — relay-only, ~50 MB.', badge: 'planned' },
@@ -596,7 +596,7 @@ function renderRoadmap(el) {
       items: [
         'P2P networking (libp2p TCP+QUIC, Kademlia DHT, IPFS DHT auto-discovery, mDNS, GossipSub, NAT traversal)',
         'Crawler with rate limiting, robots.txt, headless browser, live feed',
-        'Indexer with 10+ quality signals, E-E-A-T, spam, PageRank',
+        'Indexer with 12 quality signals, E-E-A-T, spam detection, PageRank',
         'BM25 search with boolean operators, search dorks, 15 language stemmers, phrases, fuzzy, site:/lang: filters',
         'Admin dashboard with 6 themes, wizard, network graph',
         'Docker + Compose support',
@@ -604,21 +604,25 @@ function renderRoadmap(el) {
     },
     {
       name: 'Phase 2 — Quality & Scale',
-      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 56,
+      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
+      progress: 100,
       items: [
-        '<strong>Done:</strong> boolean operators, multi-language search, search result caching, CLI search tool, spam reporting, domain flagging, backup & restore, production builds, fleet management',
-        '<strong>Done:</strong> domain-aware crawl coordination (shard ring gates crawl decisions, auto-forwarding to owners)',
-        '<strong>Remaining:</strong> hash ring rebalancing, persistent dedup improvements, structured data extraction, PDF/doc indexing, content verification, image search',
+        'Boolean operators, multi-language search (15 stemmers), search result caching, CLI search tool',
+        'Spam reporting, domain flagging, backup & restore, production builds, fleet management',
+        'Domain-aware crawl coordination (shard ring gates crawl decisions, auto-forwarding to owners)',
+        'Structured data extraction, PDF/doc indexing',
       ],
     },
     {
       name: 'Phase 2.5 — Trust & Safety',
-      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 12,
+      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
+      progress: 100,
       items: [
-        '<strong>Done:</strong> admin trust UI',
-        '<strong>Remaining:</strong> sybil resistance, consensus-based blocklists, trust decay model, reputation-weighted search ranking, malicious crawl defense, report audit trail, admin allowlist/denylist',
+        'Admin trust dashboard with 6 tabs — overview, peers, quarantined, domains, audit trail, submit report',
+        'Graduated trust tiers (trusted → warning → throttled → quarantined → banned), exponential decay',
+        'Trust-weighted voting, reporter credibility tracking, three-strikes permanent ban',
+        'Report rate limiting, consensus-based domain blocking, gossip broadcast',
+        'Hash-chained audit trail with admin actions (dismiss, confirm, unquarantine, unblock)',
       ],
     },
     {
@@ -630,15 +634,18 @@ function renderRoadmap(el) {
         'I2P support via SAM bridge for eepsite crawling',
         'Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)',
         'Content safety layer (CSAM hash matching, configurable blocklists)',
+        '<em>On hold — prioritizing Intelligence and Ecosystem phases</em>',
       ],
     },
     {
       name: 'Phase 4 — Intelligence',
       status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 59,
+      progress: 90,
       items: [
-        '<strong>Done:</strong> intent classification, spelling correction, synonym expansion, domain diversity, passage snippets, domain authority, URL quality signals, readability extraction (Arc90), graduated freshness scoring, 12-signal ranking model',
-        '<strong>Remaining:</strong> semantic search (sentence embeddings, hybrid BM25 + vector), knowledge graph with entity cards, ML-based ranking, automatic summarization, topic clustering, trend detection, multilingual semantic search',
+        '<strong>Done:</strong> intent classification, spelling correction, synonym expansion, domain diversity, passage snippets, domain authority, URL quality signals, readability (Arc90), freshness scoring, 12-signal ranking',
+        '<strong>Done:</strong> semantic search (TF-IDF embeddings + hybrid BM25/vector), knowledge graph with entity cards, click tracking, automatic summarization, topic clustering, trend detection',
+        '<strong>Done:</strong> ML-based learn-to-rank (gradient-boosted decision stumps from click signals), multilingual semantic search (cross-language retrieval via dictionary projection)',
+        '<strong>Done:</strong> master behavioral profile (role affinities, interests, search topics, domain preferences)',
       ],
     },
     {
