@@ -1,5 +1,6 @@
 // Doogle v2 — Crawler: Dual-View Spotlight Diagram + Management Tabs
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
@@ -190,11 +191,13 @@ function rebuildDiagram() {
 // DIAGRAM DATA
 // ============================================================
 async function loadDiagramData() {
+  const gen = navGen();
   try {
     const [status, crawler] = await Promise.all([
       api.status().catch(() => null),
       api.crawlerStatus().catch(() => null),
     ]);
+    if (gen !== navGen()) return;
     lastData = { status, crawler };
     applyDiagramData(status, crawler);
   } catch { /* ignore */ }
@@ -547,8 +550,10 @@ function renderArchitecture(el) {
 }
 
 async function renderStatus(el) {
+  const gen = navGen();
   try {
     const [status, crawler] = await Promise.all([api.status(), api.crawlerStatus().catch(() => null)]);
+    if (gen !== navGen()) return;
     const workers = crawler?.workers || 'N/A';
     const rateLimit = crawler?.rate_limit || 'N/A';
     const maxDepth = crawler?.max_depth || 'N/A';
@@ -652,8 +657,10 @@ function scheduleFade(row) {
 }
 
 async function renderAnalytics(el) {
+  const gen = navGen();
   try {
     const status = await api.status();
+    if (gen !== navGen()) return;
     const upMins = parseUptimeMinutes(status.uptime);
     const crawlRate = upMins > 0 ? (status.crawled_urls / upMins).toFixed(1) : '0';
 

@@ -59,7 +59,7 @@ function stopCycling() {
 }
 
 function applyPhase() {
-  const displayName = nodeName || 'Anonymous';
+  const displayName = nodeName || 'Anonymous Node';
 
   if (phase === 0) {
     document.title = DEFAULT_TITLE;

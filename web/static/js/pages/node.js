@@ -1,6 +1,7 @@
 // Doogle v2 — Node Spotlight: Dual-View Monitoring Dashboard
 // Toggle between Spotlight gauge columns and Architecture flow diagram
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, getCSS, escapeHtml, renderLineChart } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
@@ -178,6 +179,7 @@ function rebuildDiagram() {
 }
 
 async function loadAllData() {
+  const gen = navGen();
   try {
     const [status, crawler, indexer, storage] = await Promise.all([
       api.status().catch(() => null),
@@ -185,6 +187,7 @@ async function loadAllData() {
       api.indexerStats().catch(() => null),
       api.storage().catch(() => null),
     ]);
+    if (gen !== navGen()) return;
     lastData = { status, crawler, indexer, storage };
     applyData(status, crawler, indexer, storage);
   } catch (err) {
@@ -407,7 +410,7 @@ function renderDashboard(status, crawler, indexer, storage) {
   const stor = storage || {};
 
   // ── Card 1: Node Identity (wide) ──
-  const nodeName = s.node_name || 'Unnamed Node';
+  const nodeName = s.node_name || 'Anonymous Node';
   const peerId = s.peer_id || '';
   const shortPeer = peerId.length > 16 ? peerId.slice(0, 8) + '...' + peerId.slice(-8) : peerId;
   const version = s.version || '—';

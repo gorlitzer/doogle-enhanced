@@ -1,6 +1,7 @@
 // Doogle v2 — Fleet Management Dashboard
 import { escapeHtml, cardSkeleton, timeAgo } from '../components.js';
 import { api, peerNames } from '../api.js';
+import { navGen } from '../nav-gen.js';
 
 let fleetToken = '';
 
@@ -47,9 +48,11 @@ export function renderFleet(container) {
 async function loadFleetData(container) {
   const content = document.getElementById('fleet-content');
   if (!content) return;
+  const gen = navGen();
 
   try {
     const data = await fleetFetch('/api/fleet/nodes');
+    if (gen !== navGen()) return;
 
     const totalNodes = data.total_nodes || 0;
     const onlineNodes = data.online_nodes || 0;
@@ -96,7 +99,7 @@ async function loadFleetData(container) {
               </tr></thead>
               <tbody>
                 ${nodes.map(n => `<tr>
-                  <td>${escapeHtml(n.name || '(unnamed)')}</td>
+                  <td>${escapeHtml(n.name || 'Anonymous Node')}</td>
                   <td class="mono" style="font-size:0.85em" title="${escapeHtml(n.peer_id)}">${escapeHtml((n.peer_id || '').slice(0, 12))}...</td>
                   <td><span class="badge badge-${statusColor(n.status)}">${escapeHtml(n.status)}</span></td>
                   <td>${(n.stats?.indexed_docs || 0).toLocaleString()}</td>
@@ -140,7 +143,7 @@ async function openWorkerDetail(peerID) {
     const status = await fleetProxy(peerID, '/api/status');
     detail.innerHTML = `
       <div class="section">
-        <h3>Worker: ${escapeHtml(status.node_name || peerID.slice(0, 12))}</h3>
+        <h3>Worker: ${escapeHtml(status.node_name || 'Anonymous Node')}</h3>
         <div class="card-grid">
           <div class="card">
             <div class="card-label">Indexed Docs</div>

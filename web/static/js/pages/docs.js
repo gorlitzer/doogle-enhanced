@@ -1648,7 +1648,7 @@ class DHTDiscoveryViz {
 
   _initNodes() {
     const cx = this.cx, cy = this.cy;
-    this.selfNode = { x: cx, y: cy, r: 22, label: 'You', type: 'self' };
+    this.selfNode = { x: cx, y: cy, r: 22, label: 'Anonymous Node', type: 'self' };
 
     const bootstrapNames = ['IPFS-1', 'IPFS-2', 'IPFS-3', 'IPFS-4', 'IPFS-5'];
     const innerR = 100;
@@ -1918,7 +1918,7 @@ class DHTDiscoveryViz {
     ctx.font = 'bold 11px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('You', this.selfNode.x, this.selfNode.y);
+    ctx.fillText('Anon', this.selfNode.x, this.selfNode.y);
     ctx.textBaseline = 'alphabetic';
 
     const phaseLabels = [

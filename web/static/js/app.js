@@ -18,6 +18,7 @@ import { renderProfile } from './pages/profile.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
 import { initTabIdentity, updateNodeIdentity } from './tab-identity.js';
+import { bumpNavGen } from './nav-gen.js';
 
 const routes = {
   '':            { render: renderHome,   layout: 'home' },
@@ -75,6 +76,9 @@ function render() {
   const navLinks = document.querySelector('.nav-links');
   if (navLinks) navLinks.classList.remove('open');
 
+  // Bump generation so stale async renders bail out
+  bumpNavGen();
+
   // Clear any existing intervals from previous page
   if (window._pageInterval) {
     clearInterval(window._pageInterval);
@@ -107,7 +111,7 @@ function startStatusPolling() {
       updateNodeIdentity(s);
       const badge = document.getElementById('node-badge-text');
       if (badge) {
-        const name = s.node_name || `${s.peer_id.slice(0, 12)}...`;
+        const name = s.node_name || 'Anonymous Node';
         badge.textContent = `${name} | ${s.indexed_docs} docs | ${s.connected_peers} peers`;
       }
       // Update sidebar wizard status icon.

@@ -1,5 +1,6 @@
 // Doogle v2 — Actions & Management Page
 import { api } from '../api.js';
+import { navGen } from '../nav-gen.js';
 import { icon, showModal, closeModal } from '../components.js';
 
 export function renderActions(container) {
@@ -245,8 +246,10 @@ export function renderActions(container) {
 }
 
 async function loadCurrentName() {
+  const gen = navGen();
   try {
     const s = await api.status();
+    if (gen !== navGen()) return;
     const input = document.getElementById('node-name-input');
     if (input && s.node_name) input.value = s.node_name;
     const idInput = document.getElementById('node-id-display');
