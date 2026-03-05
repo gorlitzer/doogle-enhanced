@@ -38,6 +38,7 @@ This document describes the internal architecture of Doogle v2 — how each subs
 │  │  Entity Store (knowledge graph)  │  Trend Detection (spikes)  │ │
 │  │  Hybrid Search (BM25 + cosine)   │  Click Tracking (L2R)     │ │
 │  │  TF-IDF Embedder (384-dim)       │  Topic Clusters           │ │
+│  │  Multilingual Search (9 langs)  │  Learn-to-Rank (GBDT)     │ │
 │  └───────────────────────────────────────────────────────────────┘ │
 │                                                                     │
 │  ┌───────────────────────────────────────────────────────────────┐ │
@@ -624,13 +625,23 @@ Two event streams are tracked:
 
 **Spike detection** uses velocity-based thresholds: if the current hour's count exceeds 3x the moving average, the entity is flagged as trending. Trending status is ephemeral (not persisted) and recalculated on read. Trending domains and queries can receive a ranking boost during search.
 
-### Click Tracking
+### Click Tracking & Learn-to-Rank
 
 **Recording** (`store/click_store.go`):
 
-When a user clicks a search result, the API records a click event containing the query, clicked URL, and result position. Click counts are stored at `click:{query}:{url}` (incremented atomically). Position data is stored at `click_pos:{query}:{url}` for future learn-to-rank model training.
+When a user clicks a search result, the API records a click event containing the query, clicked URL, and result position. Click counts are stored at `click:{query}:{url}` (incremented atomically). Position data is stored at `click_pos:{query}:{url}` for learn-to-rank model training.
 
-Click data is strictly local — it is not shared with peers. The intended use is offline signal generation: queries with high click-through on position 3+ suggest the ranker is under-scoring that URL for that query.
+Click data is strictly local — it is not shared with peers.
+
+**Learn-to-Rank model** (`search/ltr.go`):
+
+A gradient-boosted decision stump ensemble trained from pairwise click signals (RankNet-style logistic loss). The model uses 14 features: BM25 score, quality score, PageRank, domain authority, URL quality, readability, freshness, word count, title match, exact phrase match, domain match, HTTPS, depth, and click-through rate. Training runs every 6 hours in a background goroutine. The model is serialized to BadgerDB (`ltr:model`) and loaded on startup. When available, LTR scores replace the hand-tuned ranking formula.
+
+### Multilingual Semantic Search
+
+**Cross-lingual projection** (`index/multilingual.go`):
+
+A dictionary-based expansion layer wrapping the TF-IDF embedder. A curated map of ~500 common words across 9 languages (English, German, French, Spanish, Italian, Portuguese, Dutch, Russian, Japanese romanized) enables cross-language retrieval. When embedding a query like "haus" (German for "house"), the multilingual embedder expands it to include English translations, producing vectors that overlap with English documents about houses. Expansion is bidirectional — English queries also pick up foreign-language document terms.
 
 ### Hybrid Search
 
@@ -677,13 +688,33 @@ The summarizer is invoked after entity extraction and before embedding. Summary 
 
 ### Peer Trust
 
-Each peer has a trust score [0, 1] stored in BadgerDB (`trust:score:{peerID}`):
+Each peer has a trust score [0, 1] stored in BadgerDB (`trust:reputation:{peerID}`):
 
 - **Initial trust:** 0.5 for new peers
-- **Good behavior:** +0.01 per quality document contributed
-- **Bad behavior:** -0.05 per confirmed spam report
-- **Trust decay:** idle peers lose 0.005/hour (configurable)
+- **Good behavior:** +0.01 per quality document contributed (capped by trust cap if under probation)
+- **Bad behavior:** Trust-weighted penalty: `basePenalty × reporterTrust × reasonWeight(reason)`. Reason weights: malware/phishing 1.5×, illegal 1.2×, spam 1.0×, low_quality 0.5×
+- **Trust decay:** Exponential decay with base 0.998 per idle hour (~14-day half-life), replacing the old flat decay
 - **Quarantine:** peers below 0.15 trust are blocked from search and gossip
+
+### Graduated Trust Tiers
+
+Peers are classified into tiers based on trust score and quarantine history:
+
+| Tier | Score Range | Search Effect |
+|------|------------|---------------|
+| **Trusted** | ≥ 0.30 | Full ranking (1.0× multiplier) |
+| **Warning** | 0.20–0.29 | Results demoted 20% (0.80×) |
+| **Throttled** | 0.10–0.19 | Results demoted 50% (0.50×) |
+| **Quarantined** | < 0.10 | Excluded from results (0.0×) |
+| **Banned** | 3+ quarantines | Permanent exclusion, cannot be unquarantined |
+
+### Admin Controls
+
+- **Unquarantine:** Reset peer trust to 0.10 with a 30-day cap at 0.70. Three-strikes rule: peers quarantined 3+ times are permanently banned.
+- **Report management:** Reports can be dismissed or confirmed. Confirmed reports boost reporter trust (+0.01). High rejection rates (>50% after 5+ reviews) penalize false reporters (−0.02 per rejection).
+- **Domain unblocking:** Consensus domain blocks can be manually lifted by the node operator.
+- **Report rate limiting:** 10 reports/minute per peer, 5-minute block for offenders.
+- **Peer age gating:** Reports from peers < 1 hour old are rejected. Peers < 24 hours old have half-weight penalties.
 
 ### Sybil Resistance
 
@@ -734,11 +765,7 @@ Operator-defined allowlist/denylist per node:
 
 ### Reputation-Weighted Search
 
-Results from high-trust peers ranked higher:
-
-- Trust score [0, 1] maps to ranking multiplier [0.85, 1.15]
-- Formula: `0.85 + trustScore * 0.30`
-- Applied during distributed search re-ranking via `PeerTrustFn` callback
+Results from peers are ranked using tier-based multipliers (see Graduated Trust Tiers above). The `PeerTierFn` callback in the search ranker maps peer IDs to tiers, and each tier has a fixed multiplier applied during re-ranking. This replaces the old linear trust scaling with a cleaner graduated response.
 
 ---
 
@@ -772,6 +799,7 @@ data_dir/
 - `trend:avg:{kind}:{name}` → moving average baselines for spike detection
 - `click:{query}:{url}` → click-through records (query, URL, count)
 - `click_pos:{query}:{url}` → click position tracking for learn-to-rank
+- `ltr:model` → serialized learn-to-rank model (gradient-boosted decision stumps)
 - `cluster:{id}` → document topic cluster data
 - `vec:{docID}` → TF-IDF embedding vectors (384-dim float32)
 - `vecmeta:{docID}` → embedding metadata (domain, timestamp)
@@ -809,6 +837,7 @@ cmd/doogle/main.go
        │    ├─ horizontal_shard.go (domain-based FNV sharding)
        │    ├─ rebalancer.go (hash ring topology change detection)
        │    ├─ embedder.go (384-dim TF-IDF feature-hashing embedder)
+       │    ├─ multilingual.go (cross-lingual dictionary expansion, 9 languages)
        │    ├─ vector_store.go (BadgerDB-backed embedding storage + cosine search)
        │    ├─ hybrid_search.go (BM25 + vector RRF fusion)
        │    └─ pkg/consistent
@@ -816,6 +845,7 @@ cmd/doogle/main.go
        │    ├─ internal/index
        │    ├─ internal/p2p
        │    ├─ entity_card.go (entity query detection → knowledge cards)
+       │    ├─ ltr.go (learn-to-rank: gradient-boosted decision stumps)
        │    └─ internal/models
        ├─ internal/fleet
        │    ├─ internal/p2p

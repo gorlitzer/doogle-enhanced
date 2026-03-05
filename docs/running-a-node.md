@@ -440,6 +440,19 @@ Open `http://localhost:7002` in a browser. The bottom status bar shows real-time
 - Number of crawled URLs
 - Connected peer count
 
+### Trust & Safety Dashboard
+
+The **Trust** page (`#/trust`) provides full admin controls:
+
+- **Overview:** Recent reports with dismiss/confirm actions, status badges
+- **Peers:** All tracked peers with trust tier badges (trusted/warning/throttled/quarantined/banned)
+- **Quarantined:** Quarantined peers with unquarantine button (disabled for permanently banned peers)
+- **Domains:** Flagged and blocked domains with unblock button
+- **Audit Trail:** Hash-chained, Ed25519-signed log of all trust actions with verification badges
+- **Submit Report:** Report URLs as spam/malware/phishing
+
+The **Network** page shows trust tiers per connected peer in both the peer table and the topology graph.
+
 ### Logs
 
 The node logs to stdout using structured logging (`log/slog` with colored tint output). Key log lines:
