@@ -7,18 +7,23 @@ import (
 	"github.com/doogle/doogle-v2/internal/models"
 )
 
+// TextEmbedder is the interface for computing text embeddings.
+type TextEmbedder interface {
+	Embed(text string) ([]float32, error)
+}
+
 // HybridSearcher combines BM25 (Bleve) and vector similarity search,
 // merging results via Reciprocal Rank Fusion (RRF).
 type HybridSearcher struct {
 	bleve      *BleveStore
 	vectorDB   *BadgerVectorStore
-	embedder   *TFIDFEmbedder
+	embedder   TextEmbedder
 	bm25Weight float64
 	vecWeight  float64
 }
 
 // NewHybridSearcher creates a hybrid searcher combining BM25 and vector search.
-func NewHybridSearcher(bleve *BleveStore, vectorDB *BadgerVectorStore, embedder *TFIDFEmbedder, bm25Weight, vecWeight float64) *HybridSearcher {
+func NewHybridSearcher(bleve *BleveStore, vectorDB *BadgerVectorStore, embedder TextEmbedder, bm25Weight, vecWeight float64) *HybridSearcher {
 	if bm25Weight <= 0 {
 		bm25Weight = 0.7
 	}
