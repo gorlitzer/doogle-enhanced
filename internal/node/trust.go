@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -33,6 +34,11 @@ const (
 
 	// Number of reports from different peers needed to auto-flag a domain.
 	domainFlagThreshold int64 = 5
+
+	// Trust decay settings — idle peers slowly lose trust.
+	trustDecayInterval = 1 * time.Hour  // how often to run decay
+	trustDecayAmount   = 0.005          // per-interval decay for idle peers
+	trustDecayIdleTime = 24 * time.Hour // peers not seen in this window are "idle"
 )
 
 // TrustManager handles spam reporting, peer reputation, and quarantine decisions.
@@ -162,6 +168,87 @@ func (tm *TrustManager) Summary() *models.TrustSummary {
 		FlaggedDomains:   flaggedDomains,
 		RecentReports:    recent,
 		QuarantinedList:  quarantined,
+	}
+}
+
+// QuarantinedPeerIDs returns the IDs of all quarantined peers.
+func (tm *TrustManager) QuarantinedPeerIDs() []string {
+	quarantined, err := tm.store.QuarantinedPeers()
+	if err != nil {
+		return nil
+	}
+	ids := make([]string, len(quarantined))
+	for i, rep := range quarantined {
+		ids[i] = rep.PeerID
+	}
+	return ids
+}
+
+// StartDecayLoop starts a background goroutine that periodically decays
+// trust for idle peers. Active peers maintain their trust; idle peers
+// slowly lose it. Stops when ctx is cancelled.
+func (tm *TrustManager) StartDecayLoop(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(trustDecayInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				tm.decayIdlePeers()
+			}
+		}
+	}()
+	log.Printf("trust: decay loop started (interval=%s, idle threshold=%s, decay=%.3f)",
+		trustDecayInterval, trustDecayIdleTime, trustDecayAmount)
+}
+
+// decayIdlePeers reduces trust for peers that haven't been seen recently.
+func (tm *TrustManager) decayIdlePeers() {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	allReps, err := tm.store.AllReputations()
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	decayed := 0
+	for _, rep := range allReps {
+		// Skip self
+		if rep.PeerID == tm.selfID {
+			continue
+		}
+		// Skip already quarantined peers
+		if rep.Quarantined {
+			continue
+		}
+		// Skip peers at minimum trust
+		if rep.TrustScore <= minTrustScore {
+			continue
+		}
+		// Only decay if peer hasn't been seen in the idle window
+		if now.Sub(rep.LastSeen) < trustDecayIdleTime {
+			continue
+		}
+
+		updated := rep
+		updated.TrustScore = clampTrust(rep.TrustScore - trustDecayAmount)
+		updated.UpdatedAt = now
+
+		// Auto-quarantine if trust drops too low
+		if updated.TrustScore <= quarantineThreshold && !updated.Quarantined {
+			updated.Quarantined = true
+			log.Printf("trust: QUARANTINED idle peer %s (trust=%.2f)", truncPeer(rep.PeerID), updated.TrustScore)
+		}
+
+		tm.store.SetReputation(&updated)
+		decayed++
+	}
+	if decayed > 0 {
+		log.Printf("trust: decayed trust for %d idle peer(s)", decayed)
 	}
 }
 

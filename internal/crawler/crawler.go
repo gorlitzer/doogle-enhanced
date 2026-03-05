@@ -377,9 +377,38 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 		return nil, nil, nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	// Check content type
+	// Check content type — handle non-HTML documents (PDF, text, etc.)
 	ct := resp.Header.Get("Content-Type")
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "application/xhtml") {
+		if SupportedContentType(ct) {
+			// Read body and extract text from document
+			docBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+			if readErr != nil {
+				return nil, nil, nil, fmt.Errorf("read doc body: %w", readErr)
+			}
+			var title, content string
+			if strings.Contains(ct, "application/pdf") {
+				title, content = extractPDFText(docBody, rawURL)
+			} else {
+				title, content = extractPlainText(docBody, rawURL)
+			}
+			if content == "" {
+				return nil, nil, nil, fmt.Errorf("no text extracted from %s", ct)
+			}
+			doc := &models.Document{
+				ID:          models.DocumentID(rawURL),
+				URL:         rawURL,
+				Domain:      urlutil.ExtractDomain(rawURL),
+				Title:       title,
+				Content:     content,
+				ContentSize: len(content),
+				StatusCode:  resp.StatusCode,
+				CrawledAt:   time.Now(),
+				IsHTTPS:     strings.HasPrefix(rawURL, "https://"),
+			}
+			doc.ComputeHash()
+			return doc, nil, docBody, nil
+		}
 		return nil, nil, nil, fmt.Errorf("not HTML: %s", ct)
 	}
 
@@ -399,27 +428,33 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 	headings := ExtractHeadings(goDoc)
 	images := ExtractImages(goDoc, rawURL)
 	links, discoveredURLs := ExtractLinks(goDoc, rawURL)
+	structuredData := ExtractStructuredData(goDoc)
 
 	// ExtractContent removes script/style/nav/header/footer — call last
 	title, description, content := ExtractContent(goDoc, rawURL)
 
+	// Enrich images with surrounding context for image search
+	enrichImageContext(images, content)
+
 	doc := &models.Document{
-		ID:          models.DocumentID(rawURL),
-		URL:         rawURL,
-		Domain:      urlutil.ExtractDomain(rawURL),
-		Title:       title,
-		Description: description,
-		Content:     content,
-		ContentSize: len(content),
-		Links:       links,
-		Images:      images,
-		Headings:    headings,
-		StatusCode:  resp.StatusCode,
-		CrawledAt:   time.Now(),
-		OGTitle:     ogTitle,
-		OGDesc:      ogDesc,
-		Canonical:   canonical,
-		IsHTTPS:     strings.HasPrefix(rawURL, "https://"),
+		ID:             models.DocumentID(rawURL),
+		URL:            rawURL,
+		Domain:         urlutil.ExtractDomain(rawURL),
+		Title:          title,
+		Description:    description,
+		Content:        content,
+		ContentSize:    len(content),
+		Links:          links,
+		Images:         images,
+		Headings:       headings,
+		StatusCode:     resp.StatusCode,
+		CrawledAt:      time.Now(),
+		OGTitle:        ogTitle,
+		OGDesc:         ogDesc,
+		Canonical:       canonical,
+		IsHTTPS:        strings.HasPrefix(rawURL, "https://"),
+		StructuredData: structuredData,
+		SchemaType:     PrimarySchemaType(structuredData),
 	}
 
 	// Merge meta keywords into document keywords
@@ -448,25 +483,30 @@ func (c *Crawler) fetchHeadless(rawURL string) (*models.Document, []string, erro
 	headings := ExtractHeadings(goDoc)
 	images := ExtractImages(goDoc, rawURL)
 	links, discoveredURLs := ExtractLinks(goDoc, rawURL)
+	structuredData := ExtractStructuredData(goDoc)
 	title, description, content := ExtractContent(goDoc, rawURL)
 
+	enrichImageContext(images, content)
+
 	doc := &models.Document{
-		ID:          models.DocumentID(rawURL),
-		URL:         rawURL,
-		Domain:      urlutil.ExtractDomain(rawURL),
-		Title:       title,
-		Description: description,
-		Content:     content,
-		ContentSize: len(content),
-		Links:       links,
-		Images:      images,
-		Headings:    headings,
-		StatusCode:  200,
-		CrawledAt:   time.Now(),
-		OGTitle:     ogTitle,
-		OGDesc:      ogDesc,
-		Canonical:   canonical,
-		IsHTTPS:     strings.HasPrefix(rawURL, "https://"),
+		ID:             models.DocumentID(rawURL),
+		URL:            rawURL,
+		Domain:         urlutil.ExtractDomain(rawURL),
+		Title:          title,
+		Description:    description,
+		Content:        content,
+		ContentSize:    len(content),
+		Links:          links,
+		Images:         images,
+		Headings:       headings,
+		StatusCode:     200,
+		CrawledAt:      time.Now(),
+		OGTitle:        ogTitle,
+		OGDesc:         ogDesc,
+		Canonical:       canonical,
+		IsHTTPS:        strings.HasPrefix(rawURL, "https://"),
+		StructuredData: structuredData,
+		SchemaType:     PrimarySchemaType(structuredData),
 	}
 
 	if len(metaKeywords) > 0 {

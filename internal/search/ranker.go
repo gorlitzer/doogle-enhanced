@@ -8,6 +8,10 @@ import (
 	"github.com/doogle/doogle-v2/internal/models"
 )
 
+// PeerTrustFn resolves a peer ID to its trust score (0.0–1.0).
+// When nil, all peers are treated equally (trust=0.5).
+var PeerTrustFn func(peerID string) float64
+
 // RerankResults re-ranks search results using a multi-factor scoring model.
 // Combines BM25 text relevance with quality signals, freshness decay, and spam penalty.
 func RerankResults(results []models.SearchResult) {
@@ -15,6 +19,7 @@ func RerankResults(results []models.SearchResult) {
 }
 
 // RerankWithIntent re-ranks results with optional intent-based weight adjustments.
+// Applies reputation-weighted scoring: results from high-trust peers are boosted.
 func RerankWithIntent(results []models.SearchResult, intent *QueryIntent) {
 	for i := range results {
 		results[i].Score = computeFinalScore(&results[i], intent)
@@ -64,6 +69,16 @@ func computeFinalScore(r *models.SearchResult, intent *QueryIntent) float64 {
 	// --- Intent-based adjustments ---
 	if intent != nil && intent.Confidence > 0.5 {
 		qualityMultiplier *= intentMultiplier(r, intent)
+	}
+
+	// --- Reputation-weighted scoring ---
+	// Results from high-trust peers get boosted, low-trust peers penalized.
+	// Trust=0.5 is neutral (multiplier=1.0). Trust=1.0 → 1.15, Trust=0.0 → 0.85.
+	if PeerTrustFn != nil && r.OriginPeerID != "" {
+		trust := PeerTrustFn(r.OriginPeerID)
+		// Map trust [0,1] → multiplier [0.85, 1.15] — centered at 0.5→1.0
+		trustMultiplier := 0.85 + trust*0.30
+		qualityMultiplier *= trustMultiplier
 	}
 
 	final := bm25 * qualityMultiplier

@@ -53,6 +53,9 @@ type Document struct {
 	IsTimeSensitive bool    `json:"is_time_sensitive"`
 	IsEvergreen     bool    `json:"is_evergreen"`
 
+	// Summarization (set by indexer)
+	Summary string `json:"summary,omitempty"`
+
 	// PageRank (set by PageRank computer)
 	PageRankScore float64 `json:"pagerank_score"`
 
@@ -64,6 +67,14 @@ type Document struct {
 
 	// Composite
 	RelevanceScore float64 `json:"relevance_score"`
+
+	// Structured data (Schema.org, JSON-LD, microdata)
+	StructuredData []StructuredItem `json:"structured_data,omitempty"`
+	SchemaType     string           `json:"schema_type,omitempty"`
+
+	// Content verification (Ed25519 signature of content hash)
+	ContentSig    string `json:"content_sig,omitempty"`    // hex-encoded Ed25519 signature
+	ContentSigner string `json:"content_signer,omitempty"` // hex-encoded public key
 }
 
 // Link represents a discovered hyperlink.
@@ -76,9 +87,18 @@ type Link struct {
 
 // Image represents an extracted image.
 type Image struct {
-	URL   string `json:"url"`
-	Alt   string `json:"alt"`
-	Title string `json:"title,omitempty"`
+	URL     string `json:"url"`
+	Alt     string `json:"alt"`
+	Title   string `json:"title,omitempty"`
+	Width   int    `json:"width,omitempty"`
+	Height  int    `json:"height,omitempty"`
+	Context string `json:"context,omitempty"` // surrounding text for image search
+}
+
+// StructuredItem represents extracted Schema.org/JSON-LD/microdata.
+type StructuredItem struct {
+	Type       string            `json:"type"`                 // e.g. "Article", "Product", "Recipe"
+	Properties map[string]string `json:"properties,omitempty"` // key-value pairs
 }
 
 // Heading represents an HTML heading element.

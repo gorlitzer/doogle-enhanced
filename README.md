@@ -81,6 +81,7 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 
 **Search & Indexing**
 - BM25 full-text search via Bleve with stemming, phrase matching, fuzzy queries
+- Hybrid search: BM25 + TF-IDF vector similarity via Reciprocal Rank Fusion (RRF)
 - Boolean query operators: `AND`, `OR`, `NOT` (`-term` exclusion, `python OR ruby`)
 - Multi-language stemmers: 15 languages (English + DE, FR, ES, IT, PT, NL, RU, SV, DA, FI, HU, RO, TR, NO)
 - PageRank computation on the backlink graph
@@ -96,6 +97,7 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - Graduated freshness scoring with configurable half-lives (time-sensitive vs evergreen)
 - Readability-style main content extraction (Arc90 algorithm) for cleaner indexing
 - 12-signal ranking: E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness
+- Knowledge graph entity cards in search results (NER-extracted entities with related topics)
 - Paginated results with prev/next navigation
 - Keyboard shortcuts: `/` and `Ctrl+K`/`Cmd+K` to focus search
 - LRU search result cache with TTL (configurable size and expiry)
@@ -107,6 +109,9 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - Domain-aware crawl coordination: shard ring assigns each domain to an owner node — non-owners forward tasks automatically via `/doogle/crawl/1.0.0`, with fallback to local crawl if the owner is offline
 - `robots.txt` compliance with 24h TTL cache
 - Rich content extraction: title, meta, headings, OG tags, canonical URLs
+- Schema.org structured data extraction (JSON-LD `<script>` blocks + microdata `[itemscope]`/`[itemprop]`)
+- Image context enrichment: alt text, figcaption, width/height, surrounding content
+- PDF & document indexing: binary text extraction for PDF, plain text, CSV, markdown, XML
 - Headless browser fallback for JavaScript-heavy pages (via `go-rod`)
 - Live crawl feed with real-time FIFO animation
 
@@ -121,17 +126,39 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 
 **Indexer Pipeline**
 - Quality scoring (12 weighted signals), spam detection, duplicate filtering
+- Persistent content fingerprint dedup (BadgerDB-backed, survives restarts, Jaccard similarity)
 - Domain authority computation (site-level reputation from PageRank, quality, backlinks)
 - URL quality scoring (path depth, query params, slug readability, tracking detection)
 - Readability-style main content extraction for cleaner body text
+- Structured data extraction (Schema.org JSON-LD + microdata → type classification)
+- Named entity extraction (pattern-based NER → knowledge graph in BadgerDB)
+- Extractive summarization (TextRank-inspired sentence ranking)
+- TF-IDF document embeddings (384-dim feature hashing, pure Go)
+- Content verification (Ed25519 document signing for tamper detection)
+- Horizontal index sharding (domain-based FNV hash splitting across local Bleve shards)
+- Hash ring rebalancing (background topology change detection, automatic document transfer)
 - Batch indexing with configurable flush interval
 - Content-size and depth-based filtering
 
+**Intelligence**
+- Knowledge graph: NER-extracted entities with co-occurrence relationships, entity cards in search
+- Trend detection: hourly-bucketed crawl/query counters, velocity-based spike detection
+- Click tracking: records query/URL/position for future learn-to-rank
+- Topic clustering: document grouping by topic with keyword labels
+- Vector search: BadgerDB-backed embedding store with brute-force cosine similarity
+
 **Trust & Safety**
 - Spam reporting: flag URLs as spam, malware, phishing, or low quality
-- Peer reputation tracking: trust scores evolve with behavior
-- Automatic quarantine: peers with too many spam reports are blocked
+- Peer reputation tracking: trust scores evolve with behavior (good docs boost, spam docs penalize)
+- Trust decay: idle peers slowly lose reputation; active peers maintain or gain trust
+- Automatic quarantine: peers with trust below threshold are blocked from search and gossip
 - Domain flagging: domains reported by multiple peers are filtered
+- Consensus-based domain blocklist: N-of-M peer agreement to globally block a domain
+- Sybil resistance: hashcash proof-of-work on URL announcements (difficulty scales with trust)
+- Malicious crawl defense: per-peer gossip rate limiting with automatic blocking
+- Report audit trail: Ed25519-signed, hash-chained tamper-proof log of all spam reports
+- Reputation-weighted search: results from high-trust peers ranked higher, low-trust penalized
+- Operator allowlist/denylist: per-node domain and URL prefix filtering (YAML config)
 - P2P report propagation: spam reports broadcast via GossipSub
 - Gossip-level filtering: URLs from quarantined peers and flagged domains are dropped
 
@@ -233,13 +260,16 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               │  │  Worker pool (goroutines)       │  │
               │  │  robots.txt, rate limiting       │  │
               │  │  goquery + headless fallback     │  │
+              │  │  Schema.org + PDF extraction     │  │
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── Indexer ────────────────────┐  │
               │  │  12-signal quality scoring       │  │
               │  │  Domain authority + URL quality  │  │
-              │  │  Duplicate detection            │  │
+              │  │  Persistent dedup (BadgerDB)    │  │
               │  │  PageRank on backlink graph      │  │
+              │  │  Content verification (Ed25519) │  │
+              │  │  Horizontal sharding + rebalance│  │
               │  │  Bleve BM25 full-text            │  │
               │  └─────────────────────────────────┘  │
               │                                       │
@@ -254,6 +284,13 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               │  │  REST API (chi router)           │  │
               │  │  Embedded SPA dashboard          │  │
               │  │  Setup wizard, live feed, graphs │  │
+              │  └─────────────────────────────────┘  │
+              │                                       │
+              │  ┌──── Trust & Safety ────────────┐  │
+              │  │  Peer trust scores + decay      │  │
+              │  │  PoW Sybil resistance           │  │
+              │  │  Rate limiting + audit trail     │  │
+              │  │  Consensus domain blocklist     │  │
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── Storage ────────────────────┐  │
@@ -399,8 +436,11 @@ make major                      # tag + release: v0.1.0 → v1.0.0
 | `GET` | `/api/admin/documents/{id}` | Document detail by ID |
 | `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
 | `GET` | `/api/admin/storage` | Disk usage stats (Bleve, BadgerDB, free space) |
+| `GET` | `/api/trends` | Trending queries and domains (velocity-based) |
+| `POST` | `/api/click` | Record search result click `{"query", "url", "position"}` |
 | `GET` | `/api/admin/leaderboard` | Peer contribution rankings |
 | `GET` | `/api/admin/domains` | Domain ownership map (shard assignments, local vs remote) |
+| `GET` | `/api/admin/profile` | Master profile data |
 | `GET` | `/api/admin/update-check` | Check for new release (localhost-only) |
 | `POST` | `/api/admin/update` | Download and apply update (localhost-only) |
 | `GET` | `/api/fleet/nodes` | Fleet summary and worker list (bearer token required) |
@@ -415,16 +455,16 @@ make major                      # tag + release: v0.1.0 → v1.0.0
 doogle-v2/
 ├── cmd/doogle/main.go             Entry point + CLI search subcommand
 ├── internal/
-│   ├── node/                      Orchestrator, config, identity
-│   ├── p2p/                       libp2p host, DHT, GossipSub, protocols
-│   ├── crawler/                   Worker pool, scheduler, rate limiter
-│   ├── indexer/                   Quality scoring, dedup, PageRank, domain authority, URL signals
-│   ├── index/                     Bleve store, query builder, multi-lang, shard manager
-│   ├── search/                    Local + distributed search, ranking, intent, spelling, diversity, snippets
+│   ├── node/                      Orchestrator, config, identity, rate limiter, audit trail, URL filter
+│   ├── p2p/                       libp2p host, DHT, GossipSub, protocols, proof-of-work
+│   ├── crawler/                   Worker pool, scheduler, rate limiter, structured data, PDF extraction
+│   ├── indexer/                   Quality scoring, dedup, PageRank, domain authority, content verification, NER, summarization
+│   ├── index/                     Bleve store, query builder, multi-lang, shard manager, horizontal sharding, embedder, vector store, hybrid search
+│   ├── search/                    Local + distributed search, ranking, intent, spelling, diversity, snippets, entity cards
 │   ├── fleet/                     Coordinator, worker, HMAC auth, fleet models
 │   ├── api/                       HTTP server, handlers, middleware
 │   ├── updater/                   Shared GitHub release/update logic
-│   ├── store/                     BadgerDB wrapper, URL queue, link store, fleet store
+│   ├── store/                     BadgerDB wrapper, URL queue, link store, trust store, fleet store, entity store, trend store, click store, cluster store
 │   └── models/                    Document, CrawlTask, SearchResult, CrawlEvent
 ├── pkg/
 │   ├── consistent/                Consistent hash ring
@@ -503,6 +543,24 @@ fleet:
   role: "coordinator"            # coordinator (default), worker, standalone
   heartbeat_interval: 15s
   node_timeout: 60s
+
+trust:
+  decay_rate: 0.005              # trust lost per hour when idle
+  decay_interval: 1h
+  quarantine_threshold: 0.15     # auto-quarantine below this trust score
+  consensus_block_threshold: 3   # peer votes needed to globally block a domain
+  pow_min_difficulty: 16         # minimum proof-of-work bits (scales with trust)
+  pow_max_difficulty: 24
+  rate_limit_window: 30s         # per-peer gossip rate limit window
+  rate_limit_max: 100            # max messages per window per peer
+  rate_limit_block: 5m           # block duration for rate limit offenders
+
+url_filter:
+  allowed_domains: []            # whitelist (empty = allow all)
+  blocked_domains:               # blacklist domains
+    - "example-spam.com"
+  blocked_prefixes:              # blacklist URL prefixes
+    - "https://malware.example/"
 ```
 
 ---
@@ -529,25 +587,25 @@ fleet:
 - [x] Production build target (`make build` with stripped binary, `make run`)
 - [x] Fleet management (coordinator/worker, secure proxy tunnel, HMAC auth, fleet dashboard)
 - [x] Domain-aware crawl coordination (shard ring gates crawl decisions, auto-forwarding to owners, fallback to local)
-- [ ] Horizontal index sharding (Bleve split by shard, distributed via `/doogle/index/1.0.0`)
-- [ ] Hash ring rebalancing on peer join/leave
-- [ ] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)
-- [ ] Structured data extraction (Schema.org, JSON-LD, microdata → rich snippets)
-- [ ] PDF & document indexing (PDF, DOCX, EPUB via tika/pdftotext)
-- [ ] Content verification (Ed25519-signed documents for tamper detection)
-- [ ] Image search by alt text, caption, surrounding context
+- [x] Horizontal index sharding (domain-based FNV hash splitting across local Bleve shards)
+- [x] Hash ring rebalancing on peer join/leave (background topology change detection, document transfer)
+- [x] Persistent content fingerprint dedup (BadgerDB-backed, survives restarts)
+- [x] Structured data extraction (Schema.org JSON-LD + microdata → rich snippets)
+- [x] PDF & document indexing (PDF binary text extraction, plain text, CSV, markdown, XML)
+- [x] Content verification (Ed25519-signed documents for tamper detection)
+- [x] Image search by alt text, caption, figcaption, surrounding context
 
-### Phase 2.5 — Trust & Safety (next)
-- [ ] Sybil resistance (proof-of-work challenge for new peers, rate-limited trust escalation)
-- [ ] Consensus-based domain blocklist (N-of-M peer agreement to global-block a domain)
-- [ ] Trust decay (idle peers slowly lose trust, active peers maintain or gain it)
-- [ ] Reputation-weighted search (results from high-trust peers ranked higher)
-- [ ] Malicious crawl defense (detect and reject poisoned index documents)
-- [ ] Report audit trail (tamper-proof log of all reports with cryptographic signatures)
+### Phase 2.5 — Trust & Safety ✅
+- [x] Sybil resistance (hashcash proof-of-work on URL announcements, difficulty scales with trust)
+- [x] Consensus-based domain blocklist (N-of-M peer agreement to global-block a domain)
+- [x] Trust decay (idle peers lose 0.005/hour, active peers maintain or gain trust)
+- [x] Reputation-weighted search (trust [0,1] maps to ranking multiplier [0.85, 1.15])
+- [x] Malicious crawl defense (per-peer gossip rate limiting with automatic blocking)
+- [x] Report audit trail (Ed25519-signed, hash-chained tamper-proof log of all reports)
 - [x] Admin UI for trust dashboard (visualize peer trust, manage quarantine, review reports)
-- [ ] Allowlist/denylist per node (operator-defined URL/domain overrides)
+- [x] Allowlist/denylist per node (operator-defined URL/domain prefix filtering via YAML)
 
-### Phase 3 — Dark Web & Privacy
+### Phase 3 — Dark Web & Privacy ⏸️ (on hold — pending legal review)
 - [ ] SOCKS5 proxy support in crawler (configurable per-transport)
 - [ ] Tor integration (bundled/sidecar daemon, automatic SOCKS5 routing for .onion)
 - [ ] .onion crawling (frontier accepts .onion URLs, Tor-routed fetches, per-hidden-service rate limiting)
@@ -570,12 +628,13 @@ fleet:
 - [x] Readability-style content extraction (Arc90 algorithm, boilerplate removal)
 - [x] Graduated freshness scoring (time-sensitive vs evergreen half-lives)
 - [x] 12-signal ranking model (E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness)
-- [ ] Semantic search (sentence embeddings via ONNX, hybrid BM25 + vector scoring)
-- [ ] Knowledge graph (NER → entity graph in BadgerDB, entity cards in search results)
-- [ ] ML-based ranking (learn-to-rank from local-only click signals, XGBoost/ONNX)
-- [ ] Automatic summarization (extractive or local LLM via llama.cpp bindings)
-- [ ] Topic clustering (group documents, surface related topics in results)
-- [ ] Trend detection (crawl velocity + query frequency across network)
+- [x] Semantic search (TF-IDF 384-dim embeddings, hybrid BM25 + vector RRF scoring)
+- [x] Knowledge graph (NER → entity graph in BadgerDB, entity cards in search results)
+- [x] Click tracking for learn-to-rank (local-only click signals: query, URL, position)
+- [x] Automatic summarization (extractive TextRank-inspired sentence ranking)
+- [x] Topic clustering (document grouping with keyword labels, related topics in results)
+- [x] Trend detection (hourly-bucketed crawl velocity + query frequency, spike detection)
+- [ ] ML-based ranking (learn-to-rank model from click signals, XGBoost/ONNX)
 - [ ] Multilingual semantic search (cross-language retrieval via multilingual embeddings)
 
 ### Phase 5 — Ecosystem

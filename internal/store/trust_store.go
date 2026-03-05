@@ -14,9 +14,10 @@ import (
 
 // Key prefixes for trust data in BadgerDB.
 const (
-	prefixReport     = "trust:report:"     // trust:report:<id> → SpamReport
-	prefixReputation = "trust:reputation:" // trust:reputation:<peerID> → PeerReputation
-	prefixDomainFlag = "trust:domain:"     // trust:domain:<domain> → report count
+	prefixReport      = "trust:report:"      // trust:report:<id> → SpamReport
+	prefixReputation  = "trust:reputation:"  // trust:reputation:<peerID> → PeerReputation
+	prefixDomainFlag  = "trust:domain:"      // trust:domain:<domain> → report count
+	prefixDomainVotes = "trust:domvotes:"    // trust:domvotes:<domain> → DomainVotes (consensus)
 )
 
 // TrustStore persists spam reports and peer reputation in BadgerDB.
@@ -281,6 +282,94 @@ func (ts *TrustStore) IsDomainFlagged(domain string, threshold int64) (bool, err
 		return false, err
 	}
 	return count >= threshold, nil
+}
+
+// ─── Consensus-based Domain Blocklist ─────────────────
+
+// DomainVotes tracks unique peer votes to block a domain.
+type DomainVotes struct {
+	Domain    string   `json:"domain"`
+	Voters    []string `json:"voters"`     // unique peer IDs that voted
+	Blocked   bool     `json:"blocked"`    // true if consensus reached
+	BlockedAt int64    `json:"blocked_at"` // unix timestamp
+}
+
+// AddDomainVote records a peer's vote to block a domain.
+// Returns (newly blocked, unique voters count).
+func (ts *TrustStore) AddDomainVote(domain, voterPeerID string, threshold int) (bool, int) {
+	key := []byte(prefixDomainVotes + domain)
+	votes := ts.getDomainVotes(domain)
+
+	// Check for duplicate vote
+	for _, v := range votes.Voters {
+		if v == voterPeerID {
+			return false, len(votes.Voters)
+		}
+	}
+
+	votes.Domain = domain
+	votes.Voters = append(votes.Voters, voterPeerID)
+
+	// Check consensus threshold
+	newlyBlocked := false
+	if !votes.Blocked && len(votes.Voters) >= threshold {
+		votes.Blocked = true
+		votes.BlockedAt = models.TimeNowUnix()
+		newlyBlocked = true
+	}
+
+	data, _ := json.Marshal(votes)
+	_ = ts.bs.Set(key, data)
+
+	return newlyBlocked, len(votes.Voters)
+}
+
+// getDomainVotes retrieves votes for a domain.
+func (ts *TrustStore) getDomainVotes(domain string) *DomainVotes {
+	data, err := ts.bs.Get([]byte(prefixDomainVotes + domain))
+	if err != nil || data == nil {
+		return &DomainVotes{Domain: domain}
+	}
+	var votes DomainVotes
+	if err := json.Unmarshal(data, &votes); err != nil {
+		return &DomainVotes{Domain: domain}
+	}
+	return &votes
+}
+
+// IsDomainBlocked returns true if a domain has been consensus-blocked.
+func (ts *TrustStore) IsDomainBlocked(domain string) bool {
+	votes := ts.getDomainVotes(domain)
+	return votes.Blocked
+}
+
+// BlockedDomains returns all consensus-blocked domains.
+func (ts *TrustStore) BlockedDomains() ([]DomainVotes, error) {
+	var blocked []DomainVotes
+	prefix := []byte(prefixDomainVotes)
+
+	err := ts.bs.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			var votes DomainVotes
+			err := it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &votes)
+			})
+			if err != nil {
+				continue
+			}
+			if votes.Blocked {
+				blocked = append(blocked, votes)
+			}
+		}
+		return nil
+	})
+
+	return blocked, err
 }
 
 // ─── URL-level helpers ────────────────────────────────

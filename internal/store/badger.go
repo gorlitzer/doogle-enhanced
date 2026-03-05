@@ -83,6 +83,30 @@ func (s *BadgerStore) RunGC() error {
 	return s.db.RunValueLogGC(0.5)
 }
 
+// Scan iterates over all keys with the given prefix, calling fn for each key-value pair.
+// Return true from fn to continue, false to stop.
+func (s *BadgerStore) Scan(prefix []byte, fn func(key, val []byte) bool) error {
+	return s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			key := item.KeyCopy(nil)
+			val, err := item.ValueCopy(nil)
+			if err != nil {
+				return err
+			}
+			if !fn(key, val) {
+				return nil
+			}
+		}
+		return nil
+	})
+}
+
 // Close closes the database.
 func (s *BadgerStore) Close() error {
 	log.Println("closing BadgerDB")
