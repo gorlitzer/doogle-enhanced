@@ -128,4 +128,10 @@ export const api = {
   recordInterests(subcategoryIDs) {
     return postJSON('/api/profile/interests', { subcategory_ids: subcategoryIDs });
   },
+  trends() {
+    return fetchJSON('/api/trends');
+  },
+  click(query, url, position) {
+    return postJSON('/api/click', { query, url, position });
+  },
 };

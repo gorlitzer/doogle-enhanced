@@ -49,7 +49,7 @@ const pipelineSteps = [
   {
     icon: 'star', title: 'Score', color: 'var(--amber)',
     eli5: 'Doogle gives the page a report card — is it well-written? Trustworthy? Useful?',
-    detail: '12-signal scoring: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
+    detail: '12-signal scoring with optional ML learn-to-rank. Hand-tuned weights used until 200+ click pairs enable gradient-boosted model training.',
     modal: `<p>Quality scoring combines 12 signals into a weighted score:</p>
       <ul>
         <li><strong>E-E-A-T</strong> (15%) — expertise, experience, authority, trust</li>
@@ -91,20 +91,21 @@ const pipelineSteps = [
   {
     icon: 'search', title: 'Search', color: 'var(--accent)',
     eli5: 'You ask a question, and Doogle looks through its filing cabinet super fast to find the best answers.',
-    detail: 'Queries are parsed, intent is classified, synonyms expanded, matched against Bleve, then ranked by 12 signals with domain diversity and spelling suggestions.',
+    detail: 'Hybrid BM25+vector search with RRF fusion. Intent classification, synonym expansion, entity cards, learn-to-rank ML model, and multilingual semantic matching.',
     modal: `<p>The search pipeline parses your query into structured components:</p>
       <ul>
+        <li><strong>Hybrid Search</strong> — BM25 (Bleve) + TF-IDF vector similarity merged via Reciprocal Rank Fusion (RRF, k=60)</li>
+        <li><strong>Learn-to-Rank</strong> — gradient-boosted ML model (when trained) replaces hand-tuned weights with click-trained ranking</li>
+        <li><strong>Entity Cards</strong> — NER-extracted entities appear as knowledge graph cards above search results</li>
+        <li><strong>Multilingual Matching</strong> — cross-lingual dictionary projection enables searching in 9 languages</li>
         <li><strong>Intent Classification</strong> — navigational, informational, transactional, or local — adjusts ranking weights per query</li>
         <li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs (e.g., "js" → "javascript", "k8s" → "kubernetes") added as low-boost clauses</li>
         <li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein against the index dictionary</li>
         <li><strong>Phrases</strong> — <code>"exact match"</code> terms</li>
         <li><strong>Boolean operators</strong> — <code>-exclude</code>, <code>OR</code> disjunctions</li>
-        <li><strong>Site filter</strong> — <code>site:example.com</code></li>
-        <li><strong>Language filter</strong> — <code>lang:de</code> with language-specific stemmers (15 languages)</li>
         <li><strong>Search dorks</strong> — <code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code></li>
-        <li><strong>Fuzzy matching</strong> — typo tolerance for short queries</li>
       </ul>
-      <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay * intentMultiplier</code></p>
+      <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay * intentMultiplier</code> (or LTR model score when trained)</p>
       <p><strong>Domain diversity:</strong> max 2 results per domain in top 10 — prevents one site from monopolizing results.</p>
       <p><strong>Passage snippets:</strong> sentence-level extraction with term highlight positions for rich rendering.</p>
       <p>BM25 is the text relevance engine inside <a href="https://blevesearch.com/" target="_blank">Bleve</a>. StaticScore is pre-computed at index time. Freshness uses graduated exponential decay with configurable half-lives (7 days for time-sensitive, 365 days for evergreen).</p>`,
@@ -172,8 +173,8 @@ const capabilities = [
     modal: `<p>Fleet management enables multi-node orchestration:</p><ul><li><strong>Coordinator/Worker Architecture</strong> — one coordinator manages multiple workers via libp2p stream protocols</li><li><strong>Secure Proxy Tunnel</strong> — workers bind API to localhost; remote access only through encrypted libp2p proxy (<code>/doogle/fleet/proxy/1.0.0</code>)</li><li><strong>HMAC-SHA256 Auth</strong> — all fleet messages signed with a shared 256-bit secret</li><li><strong>Heartbeat Monitoring</strong> — workers send heartbeats every 15s; stale after 60s, offline after 180s</li><li><strong>Fleet Dashboard</strong> — Admin → Fleet shows real-time worker status, stats, and proxy access</li></ul>` },
   { icon: 'shield', title: 'Trust & Safety', desc: 'Peer reputation, spam reporting, auto-quarantine, domain flagging, and gossip-level filtering for network integrity.',
     modal: `<p>Trust & safety features protect the network from abuse:</p><ul><li><strong>Peer Reputation</strong> — trust scores track peer behavior over time</li><li><strong>Spam Reporting</strong> — users can report spam URLs, triggering review and potential auto-quarantine</li><li><strong>Auto-Quarantine</strong> — domains exceeding spam thresholds are automatically quarantined from search results</li><li><strong>Domain Flagging</strong> — admins can flag domains for manual review or permanent blocking</li><li><strong>Gossip-Level Filtering</strong> — spam signals propagate to peers via GossipSub for network-wide protection</li></ul>` },
-  { icon: 'zap', title: 'Search Intelligence', desc: 'Intent classification, spelling correction, synonym expansion, domain diversity, and passage snippets with highlights.',
-    modal: `<p>Search intelligence features improve query understanding and result quality:</p><ul><li><strong>Intent Classification</strong> — queries classified as navigational, informational, transactional, or local, with intent-specific ranking weight adjustments</li><li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein distance against the index dictionary</li><li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs (e.g., "js" ↔ "javascript") added as low-boost query clauses</li><li><strong>Domain Diversity</strong> — max 2 results per domain in top 10, preventing single-site monopolization</li><li><strong>Passage Snippets</strong> — sentence-level extraction with term highlight positions for rich result rendering</li></ul>` },
+  { icon: 'zap', title: 'Search Intelligence', desc: 'Hybrid BM25+vector search, learn-to-rank ML model, entity knowledge cards, trending topics, multilingual semantic search, and click-based training.',
+    modal: `<p>Phase 4 Intelligence features bring ML-powered ranking and semantic understanding:</p><ul><li><strong>Hybrid Search (RRF)</strong> — combines BM25 text matching with TF-IDF vector similarity via Reciprocal Rank Fusion (k=60). Weights: BM25 0.7, vector 0.3</li><li><strong>Learn-to-Rank (LTR)</strong> — gradient-boosted decision stumps trained on click pairs (pairwise RankNet loss). 14 features including BM25, quality, E-E-A-T, freshness, PageRank, domain authority. Auto-trains every 6 hours when 200+ click pairs are available</li><li><strong>Entity Knowledge Cards</strong> — NER extraction identifies entities (people, orgs, places, tech) and builds knowledge graph cards shown above search results</li><li><strong>Multilingual Semantic Search</strong> — cross-lingual dictionary projection (~500 words, 9 languages: EN, DE, FR, ES, IT, PT, NL, RU, SV) maps queries and documents into shared vector space without neural models</li><li><strong>Trend Detection</strong> — hourly-bucketed counters with velocity-based spike detection surface trending queries and domains</li><li><strong>Click Tracking</strong> — records search result clicks (query, URL, position) to generate training data for LTR model improvement</li><li><strong>Intent Classification</strong> — navigational, informational, transactional, or local — with per-intent ranking weight adjustments</li><li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein distance</li><li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs added as low-boost query clauses</li></ul>` },
   { icon: 'globe', title: 'Onboarding Wizard', desc: 'Guided 5-step setup that auto-triggers on new nodes. Pick from 16 topic categories, see your node identity, and launch crawling.',
     modal: `<p>When a fresh node starts with 0 indexed documents, the <a href="#/wizard">setup wizard</a> auto-triggers. It walks users through 5 steps:</p><ol><li><strong>Welcome</strong> — intro and context</li><li><strong>Node Identity</strong> — Peer ID, addresses, connected peers</li><li><strong>Choose Focus</strong> — 16 topic categories across 4 groups (Knowledge, Lifestyle, Creative, Technology) plus custom URLs. Each group has a select-all toggle.</li><li><strong>Settings Preview</strong> — crawl depth and workers overview with growth estimate</li><li><strong>Launch</strong> — submit seeds via batch API, live polling of crawl/index counters</li></ol><p>Seeds are submitted via <code>POST /api/crawl/batch</code> (up to 200 URLs). The wizard can be re-accessed anytime from the admin sidebar.</p>` },
   { icon: 'eye', title: 'Theme Animations', desc: '6 themes with unique background animations and animated logo text. Matrix rain, bats, storm rain, particle mesh, aurora, and dust motes.',

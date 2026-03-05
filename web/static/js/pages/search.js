@@ -148,8 +148,14 @@ async function doSearch(keepPage = false) {
       return;
     }
 
-    meta.textContent = `${data.total} results in ${data.took_ms}ms` +
-      (data.peers_asked ? ` (queried ${data.peers_asked} peers)` : ' (local only)');
+    // Search meta line with mode and intent badges
+    let metaText = `${data.total} results in ${data.took_ms}ms`;
+    if (data.peers_asked) metaText += ` (queried ${data.peers_asked} peers)`;
+    else metaText += ' (local only)';
+    let metaHtml = escapeHtml(metaText);
+    if (data.search_mode) metaHtml += ` <span class="badge badge-blue">${escapeHtml(data.search_mode)}</span>`;
+    if (data.intent) metaHtml += ` <span class="badge badge-purple">${escapeHtml(data.intent)}</span>`;
+    meta.innerHTML = metaHtml;
 
     lastResults = data.results || [];
 
@@ -158,7 +164,20 @@ async function doSearch(keepPage = false) {
       return;
     }
 
-    results.innerHTML = lastResults.map((r, i) => renderResult(r, i)).join('')
+    // Render suggestion, entity card, related topics above results
+    let prefix = '';
+    if (data.suggestion) {
+      prefix += `<div class="search-suggestion">Did you mean: <a href="#" class="suggestion-link">${escapeHtml(data.suggestion)}</a></div>`;
+    }
+    if (data.entity_card) {
+      prefix += renderEntityCard(data.entity_card);
+    }
+    if (data.related_topics && data.related_topics.length > 0) {
+      prefix += `<div class="search-related"><span class="search-related-label">Related:</span> ${data.related_topics.map(t => `<a href="#" class="related-topic-link">${escapeHtml(t)}</a>`).join('')}</div>`;
+    }
+
+    results.innerHTML = prefix
+      + lastResults.map((r, i) => renderResult(r, i)).join('')
       + renderPagination(data.total, currentPage, size);
 
     // Bind click handlers for detail modal
@@ -195,6 +214,32 @@ async function doSearch(keepPage = false) {
     const nextBtn = results.querySelector('#pagination-next');
     if (prevBtn) prevBtn.addEventListener('click', () => { currentPage--; doSearch(true); });
     if (nextBtn) nextBtn.addEventListener('click', () => { currentPage++; doSearch(true); });
+
+    // "Did you mean" suggestion click
+    const suggLink = results.querySelector('.suggestion-link');
+    if (suggLink) {
+      suggLink.addEventListener('click', e => {
+        e.preventDefault();
+        document.getElementById('search-input').value = data.suggestion;
+        doSearch();
+      });
+    }
+
+    // Related topics click
+    results.querySelectorAll('.related-topic-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        document.getElementById('search-input').value = link.textContent;
+        doSearch();
+      });
+    });
+
+    // Click tracking on result title links
+    results.querySelectorAll('.result-card-title').forEach((link, i) => {
+      link.addEventListener('click', () => {
+        api.click(q, lastResults[i]?.url || '', i + 1).catch(() => {});
+      });
+    });
   } catch (err) {
     results.innerHTML = `<div class="empty-state"><p>Search failed: ${err.message}</p></div>`;
   }
@@ -309,6 +354,24 @@ function renderResult(r, index) {
           <button class="result-report-btn" data-url="${escapeHtml(r.url)}">${icon('flag', 14)}</button>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderEntityCard(card) {
+  if (!card || !card.name) return '';
+  const props = card.properties ? Object.entries(card.properties) : [];
+  const related = card.related_entities || [];
+  return `
+    <div class="entity-card">
+      <div class="entity-card-header">
+        <span class="entity-card-type badge badge-purple">${escapeHtml(card.type || 'entity')}</span>
+        <span class="entity-card-name">${escapeHtml(card.name)}</span>
+        ${card.doc_count ? `<span class="entity-card-count">${card.doc_count} docs</span>` : ''}
+      </div>
+      ${card.description ? `<div class="entity-card-desc">${escapeHtml(card.description)}</div>` : ''}
+      ${props.length ? `<div class="entity-card-props">${props.map(([k, v]) => `<div class="entity-card-prop"><span class="entity-card-prop-key">${escapeHtml(k)}</span><span class="entity-card-prop-val">${escapeHtml(v)}</span></div>`).join('')}</div>` : ''}
+      ${related.length ? `<div class="entity-card-related"><span class="entity-card-related-label">Related:</span> ${related.map(e => `<span class="badge badge-blue">${escapeHtml(e.name)}</span>`).join(' ')}</div>` : ''}
     </div>
   `;
 }

@@ -369,6 +369,113 @@ a:hover { text-decoration: underline; }
   max-width: 700px;
   margin: 16px auto 40px;
 }
+/* ---- Search Intelligence (suggestion, entity card, related topics) ---- */
+.search-suggestion {
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.92em;
+  color: var(--text-muted);
+}
+.suggestion-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.suggestion-link:hover { text-decoration: underline; }
+
+.entity-card {
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.08);
+}
+.entity-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.entity-card-name {
+  font-weight: 700;
+  font-size: 1.05em;
+  color: var(--text-primary);
+}
+.entity-card-count {
+  margin-left: auto;
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+.entity-card-desc {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.entity-card-props {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px 16px;
+  margin-bottom: 10px;
+}
+.entity-card-prop {
+  display: flex;
+  gap: 6px;
+  font-size: 0.85em;
+}
+.entity-card-prop-key {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.entity-card-prop-key::after { content: ':'; }
+.entity-card-prop-val {
+  color: var(--text-primary);
+}
+.entity-card-related {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+}
+.entity-card-related-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.search-related {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  font-size: 0.88em;
+}
+.search-related-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.related-topic-link {
+  padding: 3px 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.9em;
+  transition: background 0.15s, color 0.15s;
+}
+.related-topic-link:hover {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
 /* ---- Result Cards ---- */
 .result-card {
   padding: 16px 18px;
