@@ -12,6 +12,10 @@ import (
 // When nil, all peers are treated equally (trust=0.5).
 var PeerTrustFn func(peerID string) float64
 
+// ActiveLTRModel is the currently active learn-to-rank model.
+// When non-nil and Ready(), it replaces the hand-tuned scoring formula.
+var ActiveLTRModel *LTRModel
+
 // RerankResults re-ranks search results using a multi-factor scoring model.
 // Combines BM25 text relevance with quality signals, freshness decay, and spam penalty.
 func RerankResults(results []models.SearchResult) {
@@ -19,15 +23,41 @@ func RerankResults(results []models.SearchResult) {
 }
 
 // RerankWithIntent re-ranks results with optional intent-based weight adjustments.
-// Applies reputation-weighted scoring: results from high-trust peers are boosted.
+// Uses the LTR model when available, otherwise falls back to hand-tuned weights.
 func RerankWithIntent(results []models.SearchResult, intent *QueryIntent) {
+	useLTR := ActiveLTRModel != nil && ActiveLTRModel.Ready()
+
 	for i := range results {
-		results[i].Score = computeFinalScore(&results[i], intent)
+		if useLTR {
+			results[i].Score = computeLTRScore(&results[i], intent)
+		} else {
+			results[i].Score = computeFinalScore(&results[i], intent)
+		}
 	}
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
+}
+
+// computeLTRScore uses the trained gradient-boosted model for scoring,
+// with intent and trust adjustments applied on top.
+func computeLTRScore(r *models.SearchResult, intent *QueryIntent) float64 {
+	features := ExtractFeatures(r)
+	score := ActiveLTRModel.Predict(features)
+
+	// Intent adjustment (same multipliers as hand-tuned path)
+	if intent != nil && intent.Confidence > 0.5 {
+		score *= intentMultiplier(r, intent)
+	}
+
+	// Reputation-weighted scoring
+	if PeerTrustFn != nil && r.OriginPeerID != "" {
+		trust := PeerTrustFn(r.OriginPeerID)
+		score *= 0.85 + trust*0.30
+	}
+
+	return math.Max(0, score)
 }
 
 // computeFinalScore blends BM25 with quality signals.

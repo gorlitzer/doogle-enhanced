@@ -529,6 +529,10 @@ func (n *Node) Run() error {
 	// Start hash ring rebalancer
 	n.rebalancer.Start(n.ctx)
 
+	// Start learn-to-rank trainer (retrains every 6 hours from click data)
+	ltrTrainer := search.NewLTRTrainer(n.clickStore, n.bleveIdx, n.badger, 6*time.Hour)
+	go ltrTrainer.Run(n.ctx.Done())
+
 	// Start gossip listeners
 	go n.gossipLoop()
 	go n.shardCatalogLoop()

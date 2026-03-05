@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 )
 
 // ClickStore records search result click signals for learn-to-rank.
@@ -45,4 +46,69 @@ func (cs *ClickStore) GetClickCount(query, url string) uint64 {
 		return 0
 	}
 	return binary.BigEndian.Uint64(data)
+}
+
+// ClickRecord represents a single click entry for training.
+type ClickRecord struct {
+	Query    string
+	URL      string
+	Clicks   uint64
+	Position uint64
+}
+
+// AllClicks iterates all click records grouped by query.
+// Returns a map of query → []ClickRecord sorted by click count descending.
+func (cs *ClickStore) AllClicks() map[string][]ClickRecord {
+	byQuery := make(map[string][]ClickRecord)
+
+	_ = cs.db.Scan([]byte("click:"), func(key, val []byte) bool {
+		k := string(key)
+		// Skip position keys
+		if strings.HasPrefix(k, "click_pos:") {
+			return true
+		}
+		// Parse "click:{query}:{url}"
+		rest := strings.TrimPrefix(k, "click:")
+		idx := strings.LastIndex(rest, ":")
+		if idx <= 0 {
+			return true
+		}
+		query := rest[:idx]
+		url := rest[idx+1:]
+
+		var clicks uint64
+		if len(val) >= 8 {
+			clicks = binary.BigEndian.Uint64(val)
+		}
+
+		var position uint64
+		posKey := fmt.Sprintf("click_pos:%s:%s", query, url)
+		if posData, err := cs.db.Get([]byte(posKey)); err == nil && len(posData) >= 8 {
+			position = binary.BigEndian.Uint64(posData)
+		}
+
+		byQuery[query] = append(byQuery[query], ClickRecord{
+			Query:    query,
+			URL:      url,
+			Clicks:   clicks,
+			Position: position,
+		})
+		return true
+	})
+
+	return byQuery
+}
+
+// TotalClickPairs returns the approximate number of pairwise training examples
+// available (each query with N clicked URLs produces N*(N-1)/2 pairs, plus
+// each clicked URL paired against non-clicked results shown above it).
+func (cs *ClickStore) TotalClickPairs() int {
+	total := 0
+	byQuery := cs.AllClicks()
+	for _, records := range byQuery {
+		n := len(records)
+		// Each pair of URLs with different click counts is a training pair
+		total += n * (n - 1) / 2
+	}
+	return total
 }
