@@ -64,11 +64,12 @@ type Node struct {
 	clusterStore *store.ClusterStore
 
 	// Trust & safety
-	trustStore     *store.TrustStore
-	trustManager   *TrustManager
-	urlFilter      *URLFilter
-	auditTrail     *AuditTrail
-	gossipLimiter  *PeerRateLimiter
+	trustStore      *store.TrustStore
+	trustManager    *TrustManager
+	urlFilter       *URLFilter
+	auditTrail      *AuditTrail
+	gossipLimiter   *PeerRateLimiter
+	reportLimiter   *PeerRateLimiter
 
 	// Master profile
 	profileStore    *store.ProfileStore
@@ -216,6 +217,10 @@ func (n *Node) init() error {
 	// Allow 100 messages per 30s window, block offenders for 5 minutes
 	n.gossipLimiter = NewPeerRateLimiter(100, 30*time.Second, 5*time.Minute)
 
+	// 5b5. Report rate limiter (flood defense)
+	// Allow 10 reports per minute, block offenders for 5 minutes
+	n.reportLimiter = NewPeerRateLimiter(10, 1*time.Minute, 5*time.Minute)
+
 	// 5c. Profile store
 	n.profileStore = store.NewProfileStore(bs)
 
@@ -349,8 +354,17 @@ func (n *Node) init() error {
 		StatsStore:        n.urlStore,
 	}, n.scheduler, n.onDocumentCrawled)
 
-	// 11b. Wire reputation-weighted search ranking
+	// 11b. Wire reputation-weighted search ranking (graduated tiers)
 	search.PeerTrustFn = n.trustManager.TrustScore
+	search.PeerTierFn = func(peerID string) string {
+		score := n.trustManager.TrustScore(peerID)
+		rep, _ := n.trustStore.GetReputation(peerID)
+		qCount := 0
+		if rep != nil {
+			qCount = rep.QuarantineCount
+		}
+		return ComputeTier(score, qCount)
+	}
 
 	// 12. Search engines (shard-aware distributed search)
 	n.localEng = search.NewEngine(bleveIdx)
@@ -488,6 +502,17 @@ func (n *Node) init() error {
 	deps.ClickFn = func(query, url string, position int) error {
 		n.clickStore.RecordClick(query, url, position)
 		return nil
+	}
+
+	// Trust admin operations
+	deps.UnquarantineFn = n.trustManager.Unquarantine
+	deps.DismissReportFn = n.trustManager.DismissReport
+	deps.ConfirmReportFn = n.trustManager.ConfirmReport
+	deps.UnblockDomainFn = n.trustStore.UnblockDomain
+	if n.auditTrail != nil {
+		deps.AuditTrailFn = func(limit int) []interface{} {
+			return n.auditTrailEntries(limit)
+		}
 	}
 
 	deps.VersionInfo.Version = n.cfg.Version
@@ -1310,6 +1335,11 @@ func (n *Node) handleReplicateRequest(senderPeerID string, req *p2p.ReplicateReq
 
 // ReportURL handles a local spam report, stores it, and broadcasts to peers.
 func (n *Node) ReportURL(rawURL, reason, detail string) error {
+	// Rate limit local API reports
+	if !n.reportLimiter.Allow("local") {
+		return fmt.Errorf("rate limited: too many reports, try again later")
+	}
+
 	domain := urlutil.ExtractDomain(rawURL)
 	reportID := store.ReportID(n.peerID.String(), rawURL)
 
@@ -1375,6 +1405,12 @@ func (n *Node) spamReportLoop() {
 			continue
 		}
 
+		// Rate limit reports per peer
+		if !n.reportLimiter.Allow(report.ReporterID) {
+			slog.Warn("trust: rate-limiting reports from peer", "peer", report.ReporterID[:12])
+			continue
+		}
+
 		if isNew, err := n.trustManager.HandleReport(report); err != nil {
 			slog.Error("trust: error handling peer report", "err", err)
 		} else if isNew {
@@ -1392,6 +1428,19 @@ func (n *Node) spamReportLoop() {
 			}
 		}
 	}
+}
+
+// auditTrailEntries returns recent audit entries as generic interface slices for the API.
+func (n *Node) auditTrailEntries(limit int) []interface{} {
+	if n.auditTrail == nil {
+		return nil
+	}
+	entries := n.auditTrail.RecentEntries(limit)
+	result := make([]interface{}, len(entries))
+	for i, e := range entries {
+		result[i] = e
+	}
+	return result
 }
 
 // maintenanceLoop periodically runs BadgerDB GC and store pruning.

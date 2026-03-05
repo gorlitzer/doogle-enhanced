@@ -372,6 +372,127 @@ func (ts *TrustStore) BlockedDomains() ([]DomainVotes, error) {
 	return blocked, err
 }
 
+// ─── Admin Operations ─────────────────────────────────
+
+// DismissReport marks a report as dismissed by admin.
+func (ts *TrustStore) DismissReport(id string) error {
+	report, err := ts.GetReport(id)
+	if err != nil || report == nil {
+		return fmt.Errorf("report not found: %s", id)
+	}
+	report.Status = "dismissed"
+	data, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+	return ts.bs.Set([]byte(prefixReport+id), data)
+}
+
+// ConfirmReport marks a report as confirmed by admin.
+func (ts *TrustStore) ConfirmReport(id string) error {
+	report, err := ts.GetReport(id)
+	if err != nil || report == nil {
+		return fmt.Errorf("report not found: %s", id)
+	}
+	report.Status = "confirmed"
+	data, err := json.Marshal(report)
+	if err != nil {
+		return err
+	}
+	return ts.bs.Set([]byte(prefixReport+id), data)
+}
+
+// UnblockDomain removes a domain block (clears voters and blocked flag).
+func (ts *TrustStore) UnblockDomain(domain string) error {
+	key := []byte(prefixDomainVotes + domain)
+	votes := ts.getDomainVotes(domain)
+	if votes.Domain == "" {
+		return fmt.Errorf("domain not found: %s", domain)
+	}
+	votes.Blocked = false
+	votes.Voters = nil
+	votes.BlockedAt = 0
+	data, _ := json.Marshal(votes)
+	return ts.bs.Set(key, data)
+}
+
+// AllFlaggedDomains returns all domains that have been flagged or blocked.
+func (ts *TrustStore) AllFlaggedDomains() ([]models.DomainFlagEntry, error) {
+	// Collect report counts from trust:domain:*
+	domainCounts := make(map[string]int64)
+	prefix := []byte(prefixDomainFlag)
+
+	err := ts.bs.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			domain := strings.TrimPrefix(string(it.Item().Key()), prefixDomainFlag)
+			var count int64
+			_ = it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &count)
+			})
+			domainCounts[domain] = count
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect vote data from trust:domvotes:*
+	domainVotes := make(map[string]*DomainVotes)
+	vprefix := []byte(prefixDomainVotes)
+
+	err = ts.bs.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = vprefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(vprefix); it.ValidForPrefix(vprefix); it.Next() {
+			var votes DomainVotes
+			_ = it.Item().Value(func(val []byte) error {
+				return json.Unmarshal(val, &votes)
+			})
+			domainVotes[votes.Domain] = &votes
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge into unified list
+	seen := make(map[string]bool)
+	var result []models.DomainFlagEntry
+
+	for domain, count := range domainCounts {
+		entry := models.DomainFlagEntry{Domain: domain, ReportCount: count}
+		if v, ok := domainVotes[domain]; ok {
+			entry.Blocked = v.Blocked
+			entry.Voters = len(v.Voters)
+		}
+		result = append(result, entry)
+		seen[domain] = true
+	}
+
+	// Add domains that have votes but no flag count
+	for domain, v := range domainVotes {
+		if !seen[domain] {
+			result = append(result, models.DomainFlagEntry{
+				Domain:  domain,
+				Blocked: v.Blocked,
+				Voters:  len(v.Voters),
+			})
+		}
+	}
+
+	return result, nil
+}
+
 // ─── URL-level helpers ────────────────────────────────
 
 // ExtractDomain extracts the domain from a URL for report tracking.

@@ -56,6 +56,13 @@ type Deps struct {
 	TrendsFn func() *models.TrendsResponse
 	ClickFn  func(query, url string, position int) error
 
+	// Trust admin operations
+	UnquarantineFn  func(peerID string) error
+	DismissReportFn func(reportID string) error
+	ConfirmReportFn func(reportID string) error
+	UnblockDomainFn func(domain string) error
+	AuditTrailFn    func(limit int) []interface{}
+
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
 	FleetGetNode  func(peerID string) *fleet.FleetNode
@@ -800,6 +807,110 @@ func ClickHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "recorded"})
+	}
+}
+
+// UnquarantineHandler handles POST /api/admin/trust/unquarantine
+func UnquarantineHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.UnquarantineFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			PeerID string `json:"peer_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PeerID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'peer_id'"})
+			return
+		}
+		if err := deps.UnquarantineFn(body.PeerID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "unquarantined", "peer_id": body.PeerID})
+	}
+}
+
+// DismissReportHandler handles POST /api/admin/trust/dismiss-report
+func DismissReportHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.DismissReportFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			ReportID string `json:"report_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ReportID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'report_id'"})
+			return
+		}
+		if err := deps.DismissReportFn(body.ReportID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "dismissed", "report_id": body.ReportID})
+	}
+}
+
+// ConfirmReportHandler handles POST /api/admin/trust/confirm-report
+func ConfirmReportHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.ConfirmReportFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			ReportID string `json:"report_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ReportID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'report_id'"})
+			return
+		}
+		if err := deps.ConfirmReportFn(body.ReportID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "confirmed", "report_id": body.ReportID})
+	}
+}
+
+// UnblockDomainHandler handles POST /api/admin/trust/unblock-domain
+func UnblockDomainHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.UnblockDomainFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			Domain string `json:"domain"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Domain == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'domain'"})
+			return
+		}
+		if err := deps.UnblockDomainFn(body.Domain); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "unblocked", "domain": body.Domain})
+	}
+}
+
+// AuditTrailHandler handles GET /api/admin/trust/audit?limit=50
+func AuditTrailHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.AuditTrailFn == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"entries": []interface{}{}})
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		if limit < 1 || limit > 200 {
+			limit = 50
+		}
+		entries := deps.AuditTrailFn(limit)
+		writeJSON(w, http.StatusOK, map[string]interface{}{"entries": entries})
 	}
 }
 

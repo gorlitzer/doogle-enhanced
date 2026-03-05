@@ -12,6 +12,10 @@ import (
 // When nil, all peers are treated equally (trust=0.5).
 var PeerTrustFn func(peerID string) float64
 
+// PeerTierFn resolves a peer ID to its trust tier (trusted/warning/throttled/quarantined/banned).
+// When nil, tier-based scoring is not applied.
+var PeerTierFn func(peerID string) string
+
 // ActiveLTRModel is the currently active learn-to-rank model.
 // When non-nil and Ready(), it replaces the hand-tuned scoring formula.
 var ActiveLTRModel *LTRModel
@@ -51,8 +55,11 @@ func computeLTRScore(r *models.SearchResult, intent *QueryIntent) float64 {
 		score *= intentMultiplier(r, intent)
 	}
 
-	// Reputation-weighted scoring
-	if PeerTrustFn != nil && r.OriginPeerID != "" {
+	// Graduated tier-based scoring (replaces linear trust scaling)
+	if PeerTierFn != nil && r.OriginPeerID != "" {
+		tier := PeerTierFn(r.OriginPeerID)
+		score *= tierMultiplier(tier)
+	} else if PeerTrustFn != nil && r.OriginPeerID != "" {
 		trust := PeerTrustFn(r.OriginPeerID)
 		score *= 0.85 + trust*0.30
 	}
@@ -101,12 +108,12 @@ func computeFinalScore(r *models.SearchResult, intent *QueryIntent) float64 {
 		qualityMultiplier *= intentMultiplier(r, intent)
 	}
 
-	// --- Reputation-weighted scoring ---
-	// Results from high-trust peers get boosted, low-trust peers penalized.
-	// Trust=0.5 is neutral (multiplier=1.0). Trust=1.0 → 1.15, Trust=0.0 → 0.85.
-	if PeerTrustFn != nil && r.OriginPeerID != "" {
+	// --- Reputation-weighted scoring (graduated tiers) ---
+	if PeerTierFn != nil && r.OriginPeerID != "" {
+		tier := PeerTierFn(r.OriginPeerID)
+		qualityMultiplier *= tierMultiplier(tier)
+	} else if PeerTrustFn != nil && r.OriginPeerID != "" {
 		trust := PeerTrustFn(r.OriginPeerID)
-		// Map trust [0,1] → multiplier [0.85, 1.15] — centered at 0.5→1.0
 		trustMultiplier := 0.85 + trust*0.30
 		qualityMultiplier *= trustMultiplier
 	}
@@ -186,4 +193,20 @@ func graduatedFreshnessScore(crawledAt time.Time, isTimeSensitive, isEvergreen b
 	score := 0.5 + 0.5*math.Exp(-lambda*days)
 
 	return math.Max(0.1, math.Min(1.0, score))
+}
+
+// tierMultiplier maps a trust tier to a search score multiplier.
+func tierMultiplier(tier string) float64 {
+	switch tier {
+	case "trusted":
+		return 1.0
+	case "warning":
+		return 0.80
+	case "throttled":
+		return 0.50
+	case "quarantined", "banned":
+		return 0.0
+	default:
+		return 1.0
+	}
 }
