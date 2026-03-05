@@ -634,7 +634,7 @@ url_filter:
 - [x] Automatic summarization (extractive TextRank-inspired sentence ranking)
 - [x] Topic clustering (document grouping with keyword labels, related topics in results)
 - [x] Trend detection (hourly-bucketed crawl velocity + query frequency, spike detection)
-- [ ] ML-based ranking (learn-to-rank model from click signals, XGBoost/ONNX)
+- [x] ML-based ranking (gradient-boosted decision stumps, pairwise RankNet loss, auto-trains from click data every 6h)
 - [ ] Multilingual semantic search (cross-language retrieval via multilingual embeddings)
 
 ### Phase 5 — Ecosystem
