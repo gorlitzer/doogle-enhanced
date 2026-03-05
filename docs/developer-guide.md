@@ -96,6 +96,7 @@ doogle-v2/
 │   │   ├── horizontal_shard.go # Domain-based FNV hash splitting across local Bleve shards
 │   │   ├── rebalancer.go       # Hash ring topology change detection + document transfer
 │   │   ├── embedder.go         # TF-IDF embedder
+│   │   ├── multilingual.go     # Cross-lingual dictionary expansion (9 languages)
 │   │   ├── vector_store.go     # BadgerDB vector storage
 │   │   └── hybrid_search.go    # BM25+vector RRF fusion
 
@@ -109,7 +110,8 @@ doogle-v2/
 │   │   ├── diversity.go        # Domain diversity (max N per domain in top K)
 │   │   ├── snippets.go         # Passage-based snippet extraction with term highlights
 │   │   ├── spelling.go         # Spell checker (Damerau-Levenshtein, index dictionary)
-│   │   └── entity_card.go      # Knowledge graph entity cards in results
+│   │   ├── entity_card.go      # Knowledge graph entity cards in results
+│   │   └── ltr.go              # Learn-to-rank (gradient-boosted decision stumps)
 │   ├── fleet/                  # Fleet coordinator/worker management
 │   │   ├── coordinator.go      # Coordinator: heartbeat handler, proxy, staleness loop
 │   │   ├── worker.go           # Worker: heartbeat sender, proxy handler
@@ -130,11 +132,12 @@ doogle-v2/
 │   │   ├── dedup_store.go      # Persistent URL deduplication (SHA-256 keyed)
 │   │   ├── content_store.go    # Content hash tracking for incremental reindex
 │   │   ├── generation_store.go # Monotonic generation counter for score freshness
-│   │   ├── trust_store.go      # Peer trust scores and report persistence
+│   │   ├── trust_store.go      # Trust scores, reports, domain votes, admin ops
 │   │   ├── entity_store.go    # Knowledge graph entity persistence
 │   │   ├── trend_store.go     # Hourly trend tracking
 │   │   ├── click_store.go     # Click signal recording
-│   │   └── cluster_store.go   # Topic clustering
+│   │   ├── cluster_store.go   # Topic clustering
+│   │   └── profile_store.go   # User interest profile persistence
 │   └── models/                 # Shared data types
 │       ├── document.go         # Document, Link, StructuredItem, Image
 │       ├── crawl_task.go       # CrawlTask, URLAnnouncement (with PoW fields)
@@ -216,7 +219,7 @@ The `Store` interface abstracts the index backend. `BleveStore` is the implement
 
 **Rebalancing:** `rebalancer.go` runs a background loop (30s) detecting hash ring topology changes. When new nodes join, documents for domains now owned by the new node are transferred in batches via `/doogle/replicate/1.0.0`.
 
-**Embedder & vector search:** `embedder.go` builds TF-IDF vectors from document content. `vector_store.go` persists these vectors in BadgerDB. `hybrid_search.go` implements Reciprocal Rank Fusion (RRF) to combine BM25 lexical results with vector similarity results, improving recall for semantic queries.
+**Embedder & vector search:** `embedder.go` builds TF-IDF vectors from document content. `multilingual.go` wraps the embedder with cross-lingual dictionary expansion for 9 languages. `vector_store.go` persists these vectors in BadgerDB. `hybrid_search.go` implements Reciprocal Rank Fusion (RRF) to combine BM25 lexical results with vector similarity results, improving recall for semantic queries.
 
 ### `internal/search` — Query Execution
 
@@ -239,7 +242,7 @@ Coordinator/worker architecture for multi-node deployments. Entirely opt-in (def
 
 Stateless handlers that delegate to `search.DistributedSearch` and `node.Status()`.
 
-**Key pattern:** `api.Deps` struct is injected at creation — handlers don't import node or crawler directly. Fleet handlers are conditionally mounted only when `deps.FleetAPIToken != ""` (coordinator mode).
+**Key pattern:** `api.Deps` struct is injected at creation — handlers don't import node or crawler directly. Fleet handlers are conditionally mounted only when `deps.FleetAPIToken != ""` (coordinator mode). Trust admin handlers (`UnquarantineFn`, `DismissReportFn`, `ConfirmReportFn`, `UnblockDomainFn`, `AuditTrailFn`) are wired through function fields on `Deps`.
 
 ### `internal/store` — Persistent Storage
 
@@ -494,9 +497,11 @@ Each package should have `*_test.go` files testing its public API in isolation. 
 
 - `pkg/urlutil` — URL normalization, filtering
 - `pkg/consistent` — Hash ring behavior
-- `internal/indexer` — Scoring, dedup
+- `internal/indexer` — Scoring, dedup, readability, summarization
 - `internal/crawler` — Extraction, rate limiter
-- `internal/search` — Query parsing, ranking
+- `internal/search` — Query parsing, ranking, learn-to-rank
+- `internal/store` — Trust store, entity store, trend store, click store, cluster store
+- `internal/index` — Multilingual embedder, vector store, hybrid search
 
 ### Integration Tests
 

@@ -4,6 +4,14 @@ import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba } from '../co
 
 let graph = null;
 
+function peerTier(score, quarantineCount) {
+  if (quarantineCount >= 3) return 'banned';
+  if (score >= 0.3) return 'trusted';
+  if (score >= 0.2) return 'warning';
+  if (score >= 0.1) return 'throttled';
+  return 'quarantined';
+}
+
 export function renderNetwork(container) {
   container.innerHTML = `
     <div class="page-header">
@@ -21,10 +29,17 @@ export function renderNetwork(container) {
 
 async function loadNetwork() {
   try {
-    const [status, peers] = await Promise.all([
+    const [status, peers, trustData] = await Promise.all([
       api.status(),
       api.peers().catch(() => []),
+      api.trust().catch(() => ({})),
     ]);
+
+    // Build trust lookup: peer_id → reputation
+    const trustMap = new Map();
+    for (const p of (trustData.all_peers || [])) {
+      trustMap.set(p.peer_id, p);
+    }
 
     const peerList = Array.isArray(peers) && peers.length > 0 ? peers : (status.peer_list || []).map(id => ({ peer_id: id, addrs: [] }));
 
@@ -129,6 +144,7 @@ async function loadNetwork() {
                   <tr>
                     <th>Name</th>
                     <th>Peer ID</th>
+                    <th>Trust</th>
                     <th>Addresses</th>
                     <th>Status</th>
                   </tr>
@@ -138,10 +154,20 @@ async function loadNetwork() {
                     const id = typeof p === 'string' ? p : p.peer_id;
                     const addrs = typeof p === 'string' ? [] : (p.addrs || []);
                     const name = typeof p === 'string' ? '' : (p.node_name || '');
+                    const rep = trustMap.get(id);
+                    const trustScore = rep ? rep.trust_score : null;
+                    const qCount = rep ? (rep.quarantine_count || 0) : 0;
+                    const tier = trustScore !== null ? peerTier(trustScore, qCount) : 'new';
+                    const tierColors = { trusted: 'green', warning: 'amber', throttled: 'amber', quarantined: 'red', banned: 'purple', new: 'default' };
                     return `
                       <tr>
                         <td>${name ? escapeHtml(name) : '<span style="color:var(--text-muted)">—</span>'}</td>
                         <td class="mono" style="font-size:0.8em">${escapeHtml(id).slice(0, 24)}...</td>
+                        <td>
+                          ${trustScore !== null
+                            ? `<span class="badge badge-${tierColors[tier]}">${tier}</span> <span style="font-size:0.8em;color:var(--text-muted)">${trustScore.toFixed(2)}</span>`
+                            : '<span class="badge badge-default">new</span>'}
+                        </td>
                         <td class="mono" style="font-size:0.75em;color:var(--text-muted)">${addrs.length > 0 ? addrs.map(a => escapeHtml(a)).join('<br>') : '—'}</td>
                         <td><span class="badge badge-green">connected</span></td>
                       </tr>
@@ -169,11 +195,11 @@ async function loadNetwork() {
     `;
 
     // Build and render network graph
-    buildGraph(status, peerList);
+    buildGraph(status, peerList, trustMap);
 
     document.getElementById('graph-reset')?.addEventListener('click', () => {
       if (graph) { graph.stop(); graph = null; }
-      buildGraph(status, peerList);
+      buildGraph(status, peerList, trustMap);
     });
 
   } catch (err) {
@@ -184,7 +210,7 @@ async function loadNetwork() {
   }
 }
 
-function buildGraph(status, peerList) {
+function buildGraph(status, peerList, trustMap) {
   // Stop previous graph
   if (graph) graph.stop();
 
@@ -203,16 +229,25 @@ function buildGraph(status, peerList) {
     radius: 20,
   });
 
-  // Connected peers
+  // Connected peers (colored by trust tier)
   peerList.forEach((p, i) => {
     const id = typeof p === 'string' ? p : p.peer_id;
     const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : id.slice(0, 12) + '…';
+    const rep = trustMap?.get(id);
+    const tier = rep ? peerTier(rep.trust_score || 0, rep.quarantine_count || 0) : 'trusted';
+    const tierNodeColors = {
+      trusted: getCSS('--green'),
+      warning: getCSS('--amber') || '#f59e0b',
+      throttled: getCSS('--amber') || '#f59e0b',
+      quarantined: getCSS('--red') || '#ef4444',
+      banned: getCSS('--purple') || '#a855f7',
+    };
     nodes.push({
       id: id,
       label: peerName,
-      tooltip: peerName + ' — ' + id.slice(0, 20) + '...',
+      tooltip: peerName + ' — ' + id.slice(0, 20) + '... [' + tier + ']',
       type: 'peer',
-      color: getCSS('--green'),
+      color: tierNodeColors[tier] || getCSS('--green'),
       radius: 14,
     });
     edges.push({

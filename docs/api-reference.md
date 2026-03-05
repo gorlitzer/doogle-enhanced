@@ -32,6 +32,11 @@ Base URL: `http://localhost:7002` (the default `--bind` is `0.0.0.0`, so the API
 | `POST` | `/api/admin/restore` | Restore from backup |
 | `GET` | `/api/admin/profile` | Master profile data |
 | `GET` | `/api/admin/trust` | Trust system: reports, quarantined peers, flagged domains |
+| `POST` | `/api/admin/trust/unquarantine` | Lift peer quarantine (admin) |
+| `POST` | `/api/admin/trust/dismiss-report` | Dismiss a spam report (admin) |
+| `POST` | `/api/admin/trust/confirm-report` | Confirm a spam report (admin) |
+| `POST` | `/api/admin/trust/unblock-domain` | Remove a domain block (admin) |
+| `GET` | `/api/admin/trust/audit` | Trust audit trail (hash-chained log) |
 | `GET` | `/api/admin/update-check` | Check for new release (localhost-only) |
 | `POST` | `/api/admin/update` | Download and apply binary update (localhost-only) |
 | `DELETE` | `/api/admin/data` | Delete all local data (index, crawl history) |
@@ -719,6 +724,106 @@ curl http://localhost:7002/api/admin/profile
 ### Response — `200 OK`
 
 Returns the full profile object with interest categories, topic weights, and activity summaries.
+
+---
+
+## Trust Admin Endpoints
+
+These endpoints manage the trust & safety system. They are available to all requests (no auth required — designed for single-operator nodes).
+
+### `POST /api/admin/trust/unquarantine`
+
+Lifts quarantine on a peer, resetting their trust score to 0.10 with a 30-day cap at 0.70. Fails if the peer has been quarantined 3+ times (permanently banned).
+
+```json
+{"peer_id": "12D3KooWAbc..."}
+```
+
+**Response — `200 OK`**
+
+```json
+{"status": "ok"}
+```
+
+**Error — `400`** if peer is permanently banned (3+ quarantines).
+
+---
+
+### `POST /api/admin/trust/dismiss-report`
+
+Marks a spam report as dismissed. Tracks reporter credibility — reporters with >50% rejection rate after 5+ reviewed reports receive a trust penalty.
+
+```json
+{"report_id": "sha256-hash..."}
+```
+
+**Response — `200 OK`**
+
+```json
+{"status": "ok"}
+```
+
+---
+
+### `POST /api/admin/trust/confirm-report`
+
+Marks a spam report as confirmed. The reporter receives a small trust boost (+0.01).
+
+```json
+{"report_id": "sha256-hash..."}
+```
+
+**Response — `200 OK`**
+
+```json
+{"status": "ok"}
+```
+
+---
+
+### `POST /api/admin/trust/unblock-domain`
+
+Removes a consensus domain block. Clears all votes and the blocked flag.
+
+```json
+{"domain": "evil.com"}
+```
+
+**Response — `200 OK`**
+
+```json
+{"status": "ok"}
+```
+
+---
+
+### `GET /api/admin/trust/audit`
+
+Returns the most recent audit trail entries (Ed25519-signed, hash-chained).
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `limit` | int | no | `50` | Max entries to return |
+
+**Response — `200 OK`**
+
+```json
+{
+  "entries": [
+    {
+      "report_id": "sha256-hash...",
+      "reporter_id": "12D3KooWAbc...",
+      "url": "https://spam.com",
+      "reason": "spam",
+      "timestamp": "2026-03-05T10:00:00Z",
+      "chain_hash": "abc123...",
+      "prev_hash": "def456...",
+      "signature": "base64...",
+      "verified": true
+    }
+  ]
+}
+```
 
 ---
 
