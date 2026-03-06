@@ -454,6 +454,94 @@ func (a *Analyzer) DetectLanguage(text string) string {
 	return bestLang
 }
 
+// ccTLDCountry maps country-code TLDs to ISO 3166-1 alpha-2 country codes.
+var ccTLDCountry = map[string]string{
+	".ac": "SH", ".ad": "AD", ".ae": "AE", ".af": "AF", ".ag": "AG", ".ai": "AI", ".al": "AL", ".am": "AM",
+	".ao": "AO", ".ar": "AR", ".as": "AS", ".at": "AT", ".au": "AU", ".aw": "AW", ".az": "AZ", ".ba": "BA",
+	".bb": "BB", ".bd": "BD", ".be": "BE", ".bf": "BF", ".bg": "BG", ".bh": "BH", ".bi": "BI", ".bj": "BJ",
+	".bm": "BM", ".bn": "BN", ".bo": "BO", ".br": "BR", ".bs": "BS", ".bt": "BT", ".bw": "BW", ".by": "BY",
+	".bz": "BZ", ".ca": "CA", ".cd": "CD", ".cf": "CF", ".cg": "CG", ".ch": "CH", ".ci": "CI", ".cl": "CL",
+	".cm": "CM", ".cn": "CN", ".co": "CO", ".cr": "CR", ".cu": "CU", ".cv": "CV", ".cw": "CW", ".cy": "CY",
+	".cz": "CZ", ".de": "DE", ".dj": "DJ", ".dk": "DK", ".dm": "DM", ".do": "DO", ".dz": "DZ", ".ec": "EC",
+	".ee": "EE", ".eg": "EG", ".er": "ER", ".es": "ES", ".et": "ET", ".fi": "FI", ".fj": "FJ", ".fk": "FK",
+	".fm": "FM", ".fo": "FO", ".fr": "FR", ".ga": "GA", ".gd": "GD", ".ge": "GE", ".gf": "GF", ".gg": "GG",
+	".gh": "GH", ".gi": "GI", ".gl": "GL", ".gm": "GM", ".gn": "GN", ".gp": "GP", ".gq": "GQ", ".gr": "GR",
+	".gt": "GT", ".gu": "GU", ".gw": "GW", ".gy": "GY", ".hk": "HK", ".hn": "HN", ".hr": "HR", ".ht": "HT",
+	".hu": "HU", ".id": "ID", ".ie": "IE", ".il": "IL", ".im": "IM", ".in": "IN", ".iq": "IQ", ".ir": "IR",
+	".is": "IS", ".it": "IT", ".je": "JE", ".jm": "JM", ".jo": "JO", ".jp": "JP", ".ke": "KE", ".kg": "KG",
+	".kh": "KH", ".ki": "KI", ".km": "KM", ".kn": "KN", ".kp": "KP", ".kr": "KR", ".kw": "KW", ".ky": "KY",
+	".kz": "KZ", ".la": "LA", ".lb": "LB", ".lc": "LC", ".li": "LI", ".lk": "LK", ".lr": "LR", ".ls": "LS",
+	".lt": "LT", ".lu": "LU", ".lv": "LV", ".ly": "LY", ".ma": "MA", ".mc": "MC", ".md": "MD", ".me": "ME",
+	".mg": "MG", ".mh": "MH", ".mk": "MK", ".ml": "ML", ".mm": "MM", ".mn": "MN", ".mo": "MO", ".mp": "MP",
+	".mq": "MQ", ".mr": "MR", ".ms": "MS", ".mt": "MT", ".mu": "MU", ".mv": "MV", ".mw": "MW", ".mx": "MX",
+	".my": "MY", ".mz": "MZ", ".na": "NA", ".nc": "NC", ".ne": "NE", ".nf": "NF", ".ng": "NG", ".ni": "NI",
+	".nl": "NL", ".no": "NO", ".np": "NP", ".nr": "NR", ".nu": "NU", ".nz": "NZ", ".om": "OM", ".pa": "PA",
+	".pe": "PE", ".pf": "PF", ".pg": "PG", ".ph": "PH", ".pk": "PK", ".pl": "PL", ".pm": "PM", ".pn": "PN",
+	".pr": "PR", ".ps": "PS", ".pt": "PT", ".pw": "PW", ".py": "PY", ".qa": "QA", ".re": "RE", ".ro": "RO",
+	".rs": "RS", ".ru": "RU", ".rw": "RW", ".sa": "SA", ".sb": "SB", ".sc": "SC", ".sd": "SD", ".se": "SE",
+	".sg": "SG", ".sh": "SH", ".si": "SI", ".sk": "SK", ".sl": "SL", ".sm": "SM", ".sn": "SN", ".so": "SO",
+	".sr": "SR", ".ss": "SS", ".st": "ST", ".sv": "SV", ".sx": "SX", ".sy": "SY", ".sz": "SZ", ".tc": "TC",
+	".td": "TD", ".tg": "TG", ".th": "TH", ".tj": "TJ", ".tk": "TK", ".tl": "TL", ".tm": "TM", ".tn": "TN",
+	".to": "TO", ".tr": "TR", ".tt": "TT", ".tv": "TV", ".tw": "TW", ".tz": "TZ", ".ua": "UA", ".ug": "UG",
+	".uk": "GB", ".us": "US", ".uy": "UY", ".uz": "UZ", ".va": "VA", ".vc": "VC", ".ve": "VE", ".vg": "VG",
+	".vi": "VI", ".vn": "VN", ".vu": "VU", ".wf": "WF", ".ws": "WS", ".ye": "YE", ".yt": "YT", ".za": "ZA",
+	".zm": "ZM", ".zw": "ZW",
+	// Second-level ccTLDs
+	".co.uk": "GB", ".org.uk": "GB", ".ac.uk": "GB", ".gov.uk": "GB",
+	".com.au": "AU", ".org.au": "AU", ".edu.au": "AU", ".gov.au": "AU",
+	".co.nz": "NZ", ".org.nz": "NZ",
+	".co.jp": "JP", ".or.jp": "JP", ".ne.jp": "JP",
+	".com.br": "BR", ".org.br": "BR",
+	".co.in": "IN", ".org.in": "IN",
+	".co.za": "ZA", ".org.za": "ZA",
+	".com.mx": "MX", ".org.mx": "MX",
+	".com.cn": "CN", ".org.cn": "CN",
+	".co.kr": "KR", ".or.kr": "KR",
+	".com.ar": "AR", ".com.tr": "TR", ".com.sg": "SG",
+}
+
+// langToCountry provides a fallback country for content language when no ccTLD is available.
+var langToCountry = map[string]string{
+	"en": "US", "de": "DE", "fr": "FR", "es": "ES", "it": "IT", "pt": "BR",
+	"nl": "NL", "ru": "RU", "ja": "JP", "zh": "CN", "ko": "KR", "ar": "SA",
+	"hi": "IN", "tr": "TR", "pl": "PL", "sv": "SE", "da": "DK", "fi": "FI",
+	"hu": "HU", "ro": "RO", "no": "NO",
+}
+
+// DetectCountry infers the country of a document from its domain TLD and content language.
+// Priority: second-level ccTLD > top-level ccTLD > language-based fallback.
+// Returns ISO 3166-1 alpha-2 code (e.g. "US", "DE") or "" if undetermined.
+func (a *Analyzer) DetectCountry(domain, language string) string {
+	lower := strings.ToLower(domain)
+
+	// Check second-level ccTLDs first (more specific: .co.uk, .com.au, etc.)
+	for suffix, country := range ccTLDCountry {
+		if strings.Contains(suffix, ".") && strings.Count(suffix, ".") > 1 {
+			if strings.HasSuffix(lower, suffix) {
+				return country
+			}
+		}
+	}
+
+	// Check top-level ccTLD
+	lastDot := strings.LastIndex(lower, ".")
+	if lastDot >= 0 {
+		tld := lower[lastDot:]
+		if country, ok := ccTLDCountry[tld]; ok {
+			return country
+		}
+	}
+
+	// Fallback: infer from content language (only for non-generic TLDs)
+	if language != "" {
+		if country, ok := langToCountry[language]; ok {
+			return country
+		}
+	}
+
+	return ""
+}
+
 // ClassifyContent returns content categories.
 func (a *Analyzer) ClassifyContent(text string) []string {
 	lower := strings.ToLower(text)

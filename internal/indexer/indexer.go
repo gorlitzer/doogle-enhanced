@@ -271,6 +271,9 @@ func (ix *Indexer) enrich(doc *models.Document) {
 	// Language detection
 	doc.Language = ix.analyzer.DetectLanguage(doc.Content)
 
+	// Country detection (TLD + language fallback)
+	doc.Country = ix.analyzer.DetectCountry(doc.Domain, doc.Language)
+
 	// Content categories
 	doc.Categories = ix.analyzer.ClassifyContent(doc.Content)
 
@@ -326,6 +329,7 @@ func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
 		IndexedAt:   time.Now(),
 
 		Language:   doc.Language,
+		Country:    doc.Country,
 		Categories: strings.Join(doc.Categories, ","),
 		Keywords:   strings.Join(doc.Keywords, ","),
 

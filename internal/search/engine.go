@@ -124,6 +124,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			Description:          desc,
 			Domain:               hit.Doc.Domain,
 			Language:             hit.Doc.Language,
+			Country:              hit.Doc.Country,
 			Score:                hit.Score,
 			OriginPeerID:         hit.Doc.OriginPeerID,
 			PageRankScore:        hit.Doc.PageRankScore,

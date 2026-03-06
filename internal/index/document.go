@@ -22,6 +22,7 @@ type IndexDocument struct {
 
 	// Metadata
 	Language   string `json:"language"`
+	Country    string `json:"country"` // ISO 3166-1 alpha-2
 	Categories string `json:"categories"` // comma-separated for Bleve
 	Keywords   string `json:"keywords"`   // comma-separated for Bleve
 

@@ -27,6 +27,7 @@ type Document struct {
 
 	// Metadata
 	Language    string   `json:"language,omitempty"`
+	Country     string   `json:"country,omitempty"` // ISO 3166-1 alpha-2 (e.g. "US", "DE")
 	Categories  []string `json:"categories,omitempty"`
 	Keywords    []string `json:"keywords,omitempty"`
 	OGTitle     string   `json:"og_title,omitempty"`

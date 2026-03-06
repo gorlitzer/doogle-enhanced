@@ -11,6 +11,7 @@ type ParsedQuery struct {
 	Phrases      []string // from "quoted strings"
 	SiteDomain   string   // from site:example.com
 	Language     string   // from lang:xx filter (empty = any)
+	Country      string   // from country:XX filter (empty = any)
 	ExcludeTerms []string // from -term (NOT operator)
 	OrGroups     [][]string          // groups of OR'd terms
 	InTitle      string              // from intitle:term
@@ -59,6 +60,7 @@ type SearchResult struct {
 	Description  string  `json:"description"`
 	Domain       string  `json:"domain"`
 	Language     string  `json:"language,omitempty"`
+	Country      string  `json:"country,omitempty"`
 	Score        float64 `json:"score"`
 	PeerID         string  `json:"peer_id,omitempty"`
 	PeerName       string  `json:"peer_name,omitempty"`

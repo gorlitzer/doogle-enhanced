@@ -9,6 +9,7 @@ import { renderIndexer } from './pages/indexer.js';
 import { renderNetwork } from './pages/network.js';
 import { renderDocs } from './pages/docs.js';
 import { renderAbout } from './pages/about.js';
+import { renderHowItWorks } from './pages/howitworks.js';
 import { renderWizard } from './pages/wizard.js';
 import { renderActions } from './pages/actions.js';
 import { renderTrust } from './pages/trust.js';
@@ -34,6 +35,7 @@ const routes = {
   'admin/profile': { render: renderProfile, layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
+  'howitworks':  { render: renderHowItWorks, layout: 'search' },
   'wizard':      { render: renderWizard, layout: 'search' },
 };
 
