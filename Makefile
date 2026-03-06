@@ -117,7 +117,7 @@ stop:
 	    i=0; while kill -0 "$$PID" 2>/dev/null && [ $$i -lt 15 ]; do sleep 1; i=$$((i+1)); done; \
 	    if kill -0 "$$PID" 2>/dev/null; then echo "Forcing kill"; kill -9 "$$PID"; fi; \
 	  fi; rm -f .doogle.pid; fi
-	@pkill -f '$(BIN_DIR)/$(BINARY)' 2>/dev/null || true
+	@killall $(BINARY) 2>/dev/null || true
 	@docker compose down 2>/dev/null || true
 	@echo "Stopped."
 
