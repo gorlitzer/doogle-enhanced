@@ -142,6 +142,7 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	docMapping.AddFieldMappingsAt("domain", keywordField)
 	docMapping.AddFieldMappingsAt("content_hash", keywordField)
 	docMapping.AddFieldMappingsAt("language", keywordField)
+	docMapping.AddFieldMappingsAt("country", keywordField)
 	docMapping.AddFieldMappingsAt("origin_peer_id", keywordField)
 
 	// --- Numeric fields ---
@@ -544,6 +545,7 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.Content = fieldString(fields, "content")
 	doc.ContentHash = fieldString(fields, "content_hash")
 	doc.Language = fieldString(fields, "language")
+	doc.Country = fieldString(fields, "country")
 	doc.Categories = fieldString(fields, "categories")
 	doc.Keywords = fieldString(fields, "keywords")
 	doc.Summary = fieldString(fields, "summary")

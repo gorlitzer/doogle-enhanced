@@ -1,7 +1,7 @@
 // Doogle v2 — Indexer Dashboard (Spotlight Diagram + document browser + detail modals)
 import { api, peerNames } from '../api.js';
 import { navGen } from '../nav-gen.js';
-import { showModal, scoreBar, cardSkeleton, escapeHtml, icon, getCSS, renderLineChart, timeAgo } from '../components.js';
+import { showModal, scoreBar, cardSkeleton, escapeHtml, icon, getCSS, renderLineChart, timeAgo, countryFlag, countryName, countryBadge } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 
 let activeTab = 'overview';
@@ -791,6 +791,7 @@ async function loadDocuments() {
             <tr>
               <th>Title</th>
               <th>Domain</th>
+              <th>Geo</th>
               <th>Origin</th>
               <th>Quality</th>
               <th>Spam</th>
@@ -811,6 +812,7 @@ async function loadDocuments() {
                   <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.title || d.url).slice(0, 60)}</a>
                 </td>
                 <td class="mono" style="font-size:0.8em">${escapeHtml(d.domain)}</td>
+                <td>${d.country ? `<span title="${escapeHtml(countryName(d.country))}">${countryFlag(d.country)}</span>` : '<span style="opacity:0.3">—</span>'}</td>
                 <td>${originBadge}</td>
                 <td><span class="badge badge-${qualColor(d.quality_score)}">${(d.quality_score || 0).toFixed(2)}</span></td>
                 <td><span class="badge badge-${d.spam_score > 0.3 ? 'red' : 'green'}">${(d.spam_score || 0).toFixed(2)}</span></td>
@@ -940,6 +942,8 @@ async function showDocDetail(id) {
         <span class="detail-value">${escapeHtml(doc.description)}</span>
         <span class="detail-label">Language</span>
         <span class="detail-value">${escapeHtml(doc.language || 'unknown')}</span>
+        <span class="detail-label">Country</span>
+        <span class="detail-value">${doc.country ? `${countryFlag(doc.country)} ${escapeHtml(countryName(doc.country))} (${escapeHtml(doc.country)})` : 'unknown'}</span>
         <span class="detail-label">Categories</span>
         <span class="detail-value">${escapeHtml(doc.categories || 'none')}</span>
         <span class="detail-label">Keywords</span>

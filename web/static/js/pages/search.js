@@ -1,6 +1,6 @@
 // Doogle v2 — Search Page (enhanced with detail modal + content warnings)
 import { api } from '../api.js';
-import { showModal, closeModal, escapeHtml, icon, timeAgo } from '../components.js';
+import { showModal, closeModal, escapeHtml, icon, timeAgo, countryFlag, countryName, countryBadge } from '../components.js';
 
 let currentPage = 1;
 let currentQuery = '';
@@ -12,7 +12,7 @@ function highlightTerms(escapedText, query) {
   if (!query) return escapedText;
   // Strip operator tokens to get bare content terms
   const stripped = query
-    .replace(/(?:site|lang|intitle|inurl|intext|filetype|has|after|before):\S+/gi, '')
+    .replace(/(?:site|lang|country|intitle|inurl|intext|filetype|has|after|before):\S+/gi, '')
     .replace(/-\S+/g, '')
     .replace(/\bOR\b/gi, '')
     .replace(/"/g, '');
@@ -50,6 +50,27 @@ export function renderSearch(container) {
           <option value="zh">Chinese</option>
           <option value="ja">Japanese</option>
         </select>
+        <select id="filter-country">
+          <option value="">Country: All</option>
+          <option value="US">🇺🇸 United States</option>
+          <option value="GB">🇬🇧 United Kingdom</option>
+          <option value="DE">🇩🇪 Germany</option>
+          <option value="FR">🇫🇷 France</option>
+          <option value="ES">🇪🇸 Spain</option>
+          <option value="IT">🇮🇹 Italy</option>
+          <option value="BR">🇧🇷 Brazil</option>
+          <option value="NL">🇳🇱 Netherlands</option>
+          <option value="RU">🇷🇺 Russia</option>
+          <option value="JP">🇯🇵 Japan</option>
+          <option value="CN">🇨🇳 China</option>
+          <option value="KR">🇰🇷 South Korea</option>
+          <option value="IN">🇮🇳 India</option>
+          <option value="AU">🇦🇺 Australia</option>
+          <option value="CA">🇨🇦 Canada</option>
+          <option value="SE">🇸🇪 Sweden</option>
+          <option value="PL">🇵🇱 Poland</option>
+          <option value="TR">🇹🇷 Turkey</option>
+        </select>
         <select id="filter-peer">
           <option value="">All peers</option>
           <option value="local">My docs only</option>
@@ -71,6 +92,7 @@ export function renderSearch(container) {
         <code>intitle:golang</code><span>Term in title</span>
         <code>filetype:pdf</code><span>File extension</span>
         <code>lang:en</code><span>Language filter</span>
+        <code>country:DE</code><span>Country filter</span>
         <code>after:2025-01</code><span>Date range</span>
       </div>
     </div>
@@ -137,8 +159,10 @@ async function doSearch(keepPage = false) {
   try {
     let query = q;
     const lang = document.getElementById('filter-lang').value;
+    const country = document.getElementById('filter-country').value;
     const peerFilter = document.getElementById('filter-peer').value;
     if (lang) query += ` lang:${lang}`;
+    if (country) query += ` country:${country}`;
     if (domain) query += ` site:${domain}`;
     if (peerFilter === 'local' && searchPeerID) query += ` peer:${searchPeerID}`;
 
@@ -287,6 +311,9 @@ function renderResult(r, index) {
   const domain = escapeHtml(r.domain || '');
   const crawlTime = r.crawled_at ? timeAgo(r.crawled_at) : '';
 
+  // Country flag
+  const flag = r.country ? countryFlag(r.country) : '';
+
   // Provenance
   const isLocal = r.origin_peer_id && r.origin_peer_id === searchPeerID;
   const provLabel = isLocal ? 'Anonymous Node' : (r.origin_peer_name || (r.origin_peer_id ? 'Anonymous Node' : ''));
@@ -335,6 +362,7 @@ function renderResult(r, index) {
         <div class="result-card-header-left">
           ${faviconHtml}
           <span class="result-domain">${domain}</span>
+          ${flag ? `<span class="result-country" title="${escapeHtml(countryName(r.country))}">${flag}</span>` : ''}
           ${crawlTime ? `<span class="result-time">${crawlTime}</span>` : ''}
         </div>
         <div class="result-card-header-right">
@@ -429,6 +457,7 @@ function showResultDetail(r) {
   const trustVal = ((r.quality_score || 0) + (r.eeat_score || 0) + (1 - (r.spam_score || 0))) / 3;
   const crawledAt = r.crawled_at ? new Date(r.crawled_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Unknown';
   const lang = r.language ? r.language.toUpperCase() : '';
+  const detailFlag = r.country ? `${countryFlag(r.country)} ${countryName(r.country)}` : '';
 
   // Provenance info
   const isLocal = r.origin_peer_id && r.origin_peer_id === searchPeerID;
@@ -485,6 +514,7 @@ function showResultDetail(r) {
             <span class="detail-sep">·</span>
             <span>${crawledAt}</span>
             ${lang ? `<span class="detail-sep">·</span><span>${lang}</span>` : ''}
+            ${detailFlag ? `<span class="detail-sep">·</span><span>${detailFlag}</span>` : ''}
           </div>
         </div>
         <div class="detail-overview-right">

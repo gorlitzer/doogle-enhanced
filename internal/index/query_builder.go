@@ -191,6 +191,13 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		boolQ.AddMust(langQ)
 	}
 
+	// Country filter: restrict to specific country code
+	if pq.Country != "" {
+		countryQ := bleve.NewTermQuery(pq.Country)
+		countryQ.SetField("country")
+		boolQ.AddMust(countryQ)
+	}
+
 	// ── Search dorks ──
 
 	// intitle: restrict to title field

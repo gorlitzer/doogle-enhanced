@@ -46,6 +46,45 @@ export function icon(name, size = 24, color = 'currentColor') {
 }
 
 // ============================================================
+// COUNTRY FLAG
+// ============================================================
+
+// countryFlag converts an ISO 3166-1 alpha-2 code to a flag emoji.
+// Returns empty string if code is invalid or empty.
+export function countryFlag(code) {
+  if (!code || code.length !== 2) return '';
+  const upper = code.toUpperCase();
+  const cp1 = 0x1F1E6 - 65 + upper.charCodeAt(0);
+  const cp2 = 0x1F1E6 - 65 + upper.charCodeAt(1);
+  return String.fromCodePoint(cp1, cp2);
+}
+
+// countryName returns a human-readable country name for common ISO codes.
+const _countryNames = {
+  US:'United States',GB:'United Kingdom',DE:'Germany',FR:'France',ES:'Spain',IT:'Italy',
+  PT:'Portugal',BR:'Brazil',NL:'Netherlands',RU:'Russia',JP:'Japan',CN:'China',KR:'South Korea',
+  IN:'India',AU:'Australia',CA:'Canada',MX:'Mexico',AR:'Argentina',SE:'Sweden',DK:'Denmark',
+  FI:'Finland',NO:'Norway',PL:'Poland',TR:'Turkey',SA:'Saudi Arabia',HU:'Hungary',RO:'Romania',
+  CZ:'Czechia',CH:'Switzerland',AT:'Austria',BE:'Belgium',IE:'Ireland',NZ:'New Zealand',
+  SG:'Singapore',HK:'Hong Kong',TW:'Taiwan',TH:'Thailand',ID:'Indonesia',MY:'Malaysia',
+  PH:'Philippines',VN:'Vietnam',ZA:'South Africa',EG:'Egypt',NG:'Nigeria',KE:'Kenya',
+  IL:'Israel',UA:'Ukraine',GR:'Greece',CO:'Colombia',CL:'Chile',PE:'Peru',
+};
+export function countryName(code) {
+  if (!code) return '';
+  return _countryNames[code.toUpperCase()] || code.toUpperCase();
+}
+
+// countryBadge renders a small flag + code badge.
+export function countryBadge(code, opts = {}) {
+  if (!code) return '';
+  const flag = countryFlag(code);
+  const name = countryName(code);
+  const size = opts.size || '0.85em';
+  return `<span class="country-badge" title="${name}" style="font-size:${size};display:inline-flex;align-items:center;gap:3px">${flag} <span style="opacity:0.8">${code.toUpperCase()}</span></span>`;
+}
+
+// ============================================================
 // MODAL
 // ============================================================
 let _modalEl = null;
