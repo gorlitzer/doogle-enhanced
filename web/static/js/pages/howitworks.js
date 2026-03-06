@@ -1046,9 +1046,6 @@ export function renderHowItWorks(container) {
                 ${layer.tech.map(t => `<span class="about-tech-badge" style="border-color:${layer.color};color:${layer.color}">${t}</span>`).join('')}
               </div>
 
-              <button class="btn btn-primary hiw-deep-dive-btn" data-deep-dive="${i}">
-                ${icon('bookOpen', 16)} Deep Dive — Full Technical Details
-              </button>
             </div>
           </section>
         `).join('')}
@@ -1087,16 +1084,6 @@ export function renderHowItWorks(container) {
 
   // Setup expand/collapse for layers
   setupLayerInteractions();
-
-  // Setup deep dive modals
-  document.querySelectorAll('.hiw-deep-dive-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = parseInt(btn.dataset.deepDive, 10);
-      const layer = layers[idx];
-      if (layer) showModal(layer.title, layer.modal, { width: '760px' });
-    });
-  });
 
   // Setup scroll reveal
   setupScrollReveal();

@@ -5742,13 +5742,6 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
   flex-wrap: wrap;
   margin: 12px 0;
 }
-.hiw-deep-dive-btn {
-  margin: 16px 0 20px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88em;
-}
 .hiw-flow-canvas-wrap {
   border-radius: 12px;
   background: var(--bg-card);
