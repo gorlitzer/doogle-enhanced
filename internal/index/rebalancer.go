@@ -95,6 +95,11 @@ func (r *Rebalancer) check(ctx context.Context) {
 	if len(added) > 0 {
 		r.rebalanceForNewNodes(ctx, added)
 	}
+
+	// When a node leaves, repair replica coverage for domains we hold
+	if len(removed) > 0 {
+		r.rebalanceForRemovedNodes(ctx, removed)
+	}
 }
 
 // rebalanceForNewNodes finds domains that should now be owned by new nodes
@@ -191,5 +196,111 @@ func (r *Rebalancer) rebalanceForNewNodes(ctx context.Context, newNodes []string
 
 	if totalTransferred > 0 {
 		log.Printf("rebalancer: total transferred %d documents", totalTransferred)
+	}
+}
+
+// rebalanceForRemovedNodes repairs replica coverage when peers leave the ring.
+// For each domain we still own, we push documents to any new owners that appeared
+// in the updated ring (replacing the dead node). We keep our local copies.
+func (r *Rebalancer) rebalanceForRemovedNodes(ctx context.Context, removedNodes []string) {
+	if r.transferFn == nil {
+		return
+	}
+
+	domains, err := r.store.ListDomains()
+	if err != nil {
+		log.Printf("rebalancer: list domains error: %v", err)
+		return
+	}
+
+	// For each domain we still own, find new owners that need the data
+	toRepair := make(map[string][]string) // peerID → list of domain names
+
+	for _, domain := range domains {
+		owners := r.shards.Owners(domain, r.replicationFactor)
+
+		// Only repair domains we still own — we're a surviving replica
+		weOwn := false
+		for _, o := range owners {
+			if o == r.selfID {
+				weOwn = true
+				break
+			}
+		}
+		if !weOwn {
+			continue
+		}
+
+		// The ring has already been updated (dead nodes removed).
+		// Push to all non-self owners so they have the data that
+		// the dead node was previously responsible for. Receivers deduplicate.
+		for _, o := range owners {
+			if o != r.selfID {
+				toRepair[o] = append(toRepair[o], domain)
+			}
+		}
+	}
+
+	if len(toRepair) == 0 {
+		return
+	}
+
+	// Deduplicate domain lists per peer
+	for peerID, peerDomains := range toRepair {
+		seen := make(map[string]bool, len(peerDomains))
+		unique := peerDomains[:0]
+		for _, d := range peerDomains {
+			if !seen[d] {
+				seen[d] = true
+				unique = append(unique, d)
+			}
+		}
+		toRepair[peerID] = unique
+	}
+
+	totalRepaired := 0
+	for peerID, peerDomains := range toRepair {
+		var docs []*IndexDocument
+		for _, domain := range peerDomains {
+			ids, err := r.store.ListIDsByDomain(domain)
+			if err != nil {
+				continue
+			}
+			for _, id := range ids {
+				doc, err := r.store.Get(id)
+				if err != nil || doc == nil {
+					continue
+				}
+				docs = append(docs, doc)
+			}
+		}
+
+		if len(docs) == 0 {
+			continue
+		}
+
+		batchSize := 50
+		for i := 0; i < len(docs); i += batchSize {
+			end := i + batchSize
+			if end > len(docs) {
+				end = len(docs)
+			}
+			batch := docs[i:end]
+
+			repaired, err := r.transferFn(ctx, peerID, batch)
+			if err != nil {
+				log.Printf("rebalancer: repair to %s failed: %v", peerID[:12], err)
+				break
+			}
+			totalRepaired += repaired
+		}
+
+		log.Printf("rebalancer: repaired %d domains (%d docs) to %s",
+			len(peerDomains), len(docs), peerID[:12])
+	}
+
+	if totalRepaired > 0 {
+		log.Printf("rebalancer: total repaired %d documents across %d peers",
+			totalRepaired, len(toRepair))
 	}
 }
