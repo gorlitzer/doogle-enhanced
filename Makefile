@@ -135,11 +135,7 @@ stop:
 	    i=0; while kill -0 "$$PID" 2>/dev/null && [ $$i -lt 15 ]; do sleep 1; i=$$((i+1)); done; \
 	    if kill -0 "$$PID" 2>/dev/null; then echo "    Force killing..."; kill -9 "$$PID"; fi; \
 	    echo "==> Stopped."; \
-	  else \
-	    echo "==> Not running (stale PID file removed)."; \
 	  fi; rm -f .doogle.pid; \
-	else \
-	  echo "==> Not running."; \
 	fi
 	@killall $(BINARY) 2>/dev/null || true
 	@docker compose down 2>/dev/null || true
