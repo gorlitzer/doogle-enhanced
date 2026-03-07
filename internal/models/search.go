@@ -128,6 +128,7 @@ type TrendsResponse struct {
 type NodeStatus struct {
 	PeerID         string    `json:"peer_id"`
 	NodeName       string    `json:"node_name,omitempty"`
+	NodeType       string    `json:"node_type,omitempty"`
 	Version        string    `json:"version,omitempty"`
 	Commit         string    `json:"commit,omitempty"`
 	BuildDate      string    `json:"build_date,omitempty"`
@@ -219,6 +220,28 @@ type LeaderboardResponse struct {
 	Explorers   []ExplorerStats `json:"explorers"`
 	TotalDocs   int             `json:"total_docs"`
 	LocalPeerID string          `json:"local_peer_id"`
+}
+
+// RelayStats holds stats for a single relay (light) node on the leaderboard.
+type RelayStats struct {
+	PeerID        string    `json:"peer_id"`
+	NodeName      string    `json:"node_name,omitempty"`
+	DocsHosted    int       `json:"docs_hosted"`
+	QueriesServed int64     `json:"queries_served"`
+	Uptime        string    `json:"uptime,omitempty"`
+	UptimeSeconds int64     `json:"uptime_seconds,omitempty"`
+	TrustScore    float64   `json:"trust_score"`
+	ConnectedPeers int      `json:"connected_peers"`
+	IsLocal       bool      `json:"is_local"`
+	FirstSeen     time.Time `json:"first_seen,omitempty"`
+	LastSeen      time.Time `json:"last_seen,omitempty"`
+}
+
+// RelayLeaderboardResponse is the API response for the relay node leaderboard.
+type RelayLeaderboardResponse struct {
+	Relays      []RelayStats `json:"relays"`
+	TotalDocs   int          `json:"total_docs"`
+	LocalPeerID string       `json:"local_peer_id"`
 }
 
 // DomainOwnership shows which domains this node owns in the shard ring.

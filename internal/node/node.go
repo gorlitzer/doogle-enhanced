@@ -91,6 +91,11 @@ type Node struct {
 	// Resource limit enforcement
 	crawlerPausedForLimits atomic.Bool
 
+	// Light node: queries served counter + peer relay info
+	queriesServed atomic.Int64
+	peerRelayInfo   map[string]relayInfo
+	peerRelayInfoMu sync.RWMutex
+
 	// Crawl coordination counters
 	forwardedTasks atomic.Int64
 	receivedTasks  atomic.Int64
@@ -98,6 +103,20 @@ type Node struct {
 	startedAt time.Time
 	ctx       context.Context
 	cancel    context.CancelFunc
+}
+
+// relayInfo tracks light-node stats learned from ShardCatalog broadcasts.
+type relayInfo struct {
+	PeerID        string
+	NodeName      string
+	DocCount      int
+	QueriesServed int64
+	LastSeen      time.Time
+}
+
+// IsLight returns true if this node is running in light mode.
+func (n *Node) IsLight() bool {
+	return n.cfg.LightNode
 }
 
 // New creates and initializes a Doogle node.
@@ -112,14 +131,24 @@ func New(cfg *Config) (*Node, error) {
 		slog.Info("node: running in low-resource (Eco) mode")
 	}
 
+	// Check for persisted light-node setting
+	if saved := LoadLightNode(cfg.Storage.DataDir); saved {
+		cfg.LightNode = true
+	}
+	if cfg.LightNode {
+		ApplyLightNodeDefaults(cfg)
+		slog.Info("node: running in light mode (search + relay only)")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	n := &Node{
-		cfg:       cfg,
-		peerNames: make(map[string]string),
-		startedAt: time.Now(),
-		ctx:       ctx,
-		cancel:    cancel,
+		cfg:           cfg,
+		peerNames:     make(map[string]string),
+		peerRelayInfo: make(map[string]relayInfo),
+		startedAt:     time.Now(),
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 
 	if err := n.init(); err != nil {
@@ -210,14 +239,17 @@ func (n *Node) init() error {
 	// 5-restore. Restore persisted peer names from previous runs.
 	n.loadPeerNames()
 
-	// 5a. Foundation stores
-	n.dedupStore = store.NewDedupStore(bs)
-	if n.cfg.Storage.SeenTTL > 0 {
-		n.dedupStore.SeenTTL = n.cfg.Storage.SeenTTL
+	// 5a. Foundation stores (crawl-only — skip for light nodes)
+	isLight := n.cfg.LightNode
+	if !isLight {
+		n.dedupStore = store.NewDedupStore(bs)
+		if n.cfg.Storage.SeenTTL > 0 {
+			n.dedupStore.SeenTTL = n.cfg.Storage.SeenTTL
+		}
+		n.urlStore = store.NewURLStore(bs, n.dedupStore)
+		n.linkStore = store.NewLinkStore(bs)
+		n.contentStore = store.NewContentStore(bs)
 	}
-	n.urlStore = store.NewURLStore(bs, n.dedupStore)
-	n.linkStore = store.NewLinkStore(bs)
-	n.contentStore = store.NewContentStore(bs)
 
 	genStore, err := store.NewGenerationStore(bs)
 	if err != nil {
@@ -327,7 +359,9 @@ func (n *Node) init() error {
 
 	// 9. Indexer + PageRank
 	n.indexer = indexer.New(bleveIdx, n.batchIndexer, n.genStore, n.badger)
-	n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
+	if !isLight {
+		n.pageRank = indexer.NewPageRankComputer(n.linkStore, bleveIdx, n.cfg.Index.PageRankInterval)
+	}
 
 	// 9a0. Wire intelligence subsystems into indexer
 	n.indexer.SetEntityStore(n.entityStore)
@@ -357,33 +391,37 @@ func (n *Node) init() error {
 		return int(c)
 	}
 
-	// 10. Incremental indexer
-	n.incremental = indexer.NewIncrementalIndexer(
-		bleveIdx,
-		n.contentStore,
-		n.genStore,
-		n.batchIndexer,
-		n.cfg.Index.IncrementalInterval,
-	)
-
-	// 11. Crawler with callback
-	n.scheduler = crawler.NewScheduler(n.urlStore, 10000)
-	if n.cfg.Storage.MaxQueueSize > 0 {
-		n.scheduler.SetMaxQueueSize(n.cfg.Storage.MaxQueueSize)
+	// 10. Incremental indexer (crawl-only — skip for light nodes)
+	if !isLight {
+		n.incremental = indexer.NewIncrementalIndexer(
+			bleveIdx,
+			n.contentStore,
+			n.genStore,
+			n.batchIndexer,
+			n.cfg.Index.IncrementalInterval,
+		)
 	}
-	n.crawler = crawler.New(crawler.Config{
-		Workers:           n.cfg.Crawler.Workers,
-		UserAgent:         n.cfg.Crawler.UserAgent,
-		RequestTimeout:    n.cfg.Crawler.RequestTimeout,
-		RateLimit:         n.cfg.Crawler.RateLimit,
-		MaxDepth:          n.cfg.Crawler.MaxDepth,
-		RespectRobots:     n.cfg.Crawler.RespectRobots,
-		EnableHeadless:    n.cfg.Crawler.EnableHeadless,
-		HeadlessThreshold: n.cfg.Crawler.HeadlessThreshold,
-		HeadlessTimeout:   n.cfg.Crawler.HeadlessTimeout,
-		MaxBodyBytes:      n.cfg.Crawler.MaxBodyBytes,
-		StatsStore:        n.urlStore,
-	}, n.scheduler, n.onDocumentCrawled)
+
+	// 11. Crawler with callback (crawl-only — skip for light nodes)
+	if !isLight {
+		n.scheduler = crawler.NewScheduler(n.urlStore, 10000)
+		if n.cfg.Storage.MaxQueueSize > 0 {
+			n.scheduler.SetMaxQueueSize(n.cfg.Storage.MaxQueueSize)
+		}
+		n.crawler = crawler.New(crawler.Config{
+			Workers:           n.cfg.Crawler.Workers,
+			UserAgent:         n.cfg.Crawler.UserAgent,
+			RequestTimeout:    n.cfg.Crawler.RequestTimeout,
+			RateLimit:         n.cfg.Crawler.RateLimit,
+			MaxDepth:          n.cfg.Crawler.MaxDepth,
+			RespectRobots:     n.cfg.Crawler.RespectRobots,
+			EnableHeadless:    n.cfg.Crawler.EnableHeadless,
+			HeadlessThreshold: n.cfg.Crawler.HeadlessThreshold,
+			HeadlessTimeout:   n.cfg.Crawler.HeadlessTimeout,
+			MaxBodyBytes:      n.cfg.Crawler.MaxBodyBytes,
+			StatsStore:        n.urlStore,
+		}, n.scheduler, n.onDocumentCrawled)
+	}
 
 	// 11b. Wire reputation-weighted search ranking (graduated tiers)
 	search.PeerTrustFn = n.trustManager.TrustScore
@@ -481,8 +519,10 @@ func (n *Node) init() error {
 
 	// 13. Register P2P protocol handlers
 	p2p.RegisterSearchProtocol(h, n.handlePeerSearch)
-	p2p.RegisterCrawlProtocol(h, n.handlePeerCrawlTask)
-	p2p.RegisterIndexProtocol(h, n.handlePeerIndexDoc)
+	if !isLight {
+		p2p.RegisterCrawlProtocol(h, n.handlePeerCrawlTask)
+		p2p.RegisterIndexProtocol(h, n.handlePeerIndexDoc)
+	}
 	p2p.RegisterShardProtocol(h, n.handleShardCatalog)
 	p2p.RegisterReplicateProtocol(h, n.handleReplicateRequest)
 	p2p.RegisterAntiEntropyProtocol(h, n.handleAntiEntropyRequest)
@@ -493,12 +533,16 @@ func (n *Node) init() error {
 	}
 
 	// 15. HTTP API
+	crawlSeedFn := n.routeSeedURL
+	if isLight {
+		crawlSeedFn = func(url string) {} // no-op for light nodes
+	}
 	deps := &api.Deps{
 		Search:       n.search,
 		StatusFn:     n.Status,
-		CrawlSeed:    n.routeSeedURL,
+		CrawlSeed:    crawlSeedFn,
 		CrawlerInfo:  n.CrawlerInfo,
-		CrawlerFeed:  n.crawler.RecentEvents,
+		CrawlerFeed:  func(afterSeq uint64) []models.CrawlEvent { if n.crawler != nil { return n.crawler.RecentEvents(afterSeq) }; return nil },
 		IndexerStats: n.IndexerStats,
 		PeersInfo:    n.PeersInfo,
 		IndexStore:   bleveIdx,
@@ -530,6 +574,9 @@ func (n *Node) init() error {
 			}
 		},
 	}
+	// Relay leaderboard
+	deps.RelayLeaderboardFn = n.RelayLeaderboard
+
 	// Intelligence deps (Phase 4)
 	deps.TrendsFn = func() *models.TrendsResponse {
 		return &models.TrendsResponse{
@@ -563,7 +610,14 @@ func (n *Node) init() error {
 	deps.GetLimitsFn = func() *api.LimitsResponse {
 		docCount, _ := n.bleveIdx.DocCount()
 		storageBytes := dirSize(n.cfg.Storage.DataDir)
-		queueSize := int64(n.scheduler.Pending())
+		var queueSize int64
+		if n.scheduler != nil {
+			queueSize = int64(n.scheduler.Pending())
+		}
+		var crawlerPaused bool
+		if n.crawler != nil {
+			crawlerPaused = n.crawler.IsPaused()
+		}
 		return &api.LimitsResponse{
 			MaxStorageBytes: n.cfg.Storage.MaxStorageBytes,
 			MaxDocuments:    n.cfg.Storage.MaxDocuments,
@@ -571,7 +625,7 @@ func (n *Node) init() error {
 			UsedStorage:     storageBytes,
 			UsedDocuments:   int64(docCount),
 			UsedQueue:       queueSize,
-			CrawlerPaused:   n.crawler.IsPaused(),
+			CrawlerPaused:   crawlerPaused,
 		}
 	}
 	deps.SetLimitsFn = func(req *api.LimitsRequest) error {
@@ -583,7 +637,9 @@ func (n *Node) init() error {
 		}
 		if req.MaxQueueSize != nil {
 			n.cfg.Storage.MaxQueueSize = *req.MaxQueueSize
-			n.scheduler.SetMaxQueueSize(*req.MaxQueueSize)
+			if n.scheduler != nil {
+				n.scheduler.SetMaxQueueSize(*req.MaxQueueSize)
+			}
 		}
 		return SaveLimits(dataDir, &ResourceLimits{
 			MaxStorageBytes: n.cfg.Storage.MaxStorageBytes,
@@ -633,17 +689,21 @@ func (n *Node) init() error {
 
 // Run starts all subsystems and blocks until context is cancelled.
 func (n *Node) Run() error {
-	// Start crawler
-	n.crawler.Start()
+	if !n.IsLight() {
+		// Start crawler
+		n.crawler.Start()
+	}
 
 	// Start batch indexer background flusher
 	n.batchIndexer.Start(n.ctx)
 
-	// Start PageRank background computation
-	n.pageRank.Start(n.ctx)
+	if !n.IsLight() {
+		// Start PageRank background computation
+		n.pageRank.Start(n.ctx)
 
-	// Start incremental re-scoring
-	n.incremental.Start(n.ctx)
+		// Start incremental re-scoring
+		n.incremental.Start(n.ctx)
+	}
 
 	// Start profile computer
 	n.profileComputer.Start(n.ctx)
@@ -672,9 +732,11 @@ func (n *Node) Run() error {
 	// Start hash ring rebalancer
 	n.rebalancer.Start(n.ctx)
 
-	// Start learn-to-rank trainer (retrains every 6 hours from click data)
-	ltrTrainer := search.NewLTRTrainer(n.clickStore, n.bleveIdx, n.badger, 6*time.Hour)
-	go ltrTrainer.Run(n.ctx.Done())
+	if !n.IsLight() {
+		// Start learn-to-rank trainer (retrains every 6 hours from click data)
+		ltrTrainer := search.NewLTRTrainer(n.clickStore, n.bleveIdx, n.badger, 6*time.Hour)
+		go ltrTrainer.Run(n.ctx.Done())
+	}
 
 	// Start gossip listeners
 	go n.gossipLoop()
@@ -710,8 +772,10 @@ func (n *Node) Run() error {
 	go n.discovery.StartFindingPeers(n.ctx)
 
 	// Add seed URLs (routed through domain ownership checks)
-	for _, seed := range n.cfg.SeedURLs {
-		n.routeSeedURL(seed)
+	if !n.IsLight() {
+		for _, seed := range n.cfg.SeedURLs {
+			n.routeSeedURL(seed)
+		}
 	}
 
 	// Start API server (blocks)
@@ -729,13 +793,19 @@ func (n *Node) Shutdown() {
 	n.apiServer.Shutdown(ctx)
 
 	// 3. save queued crawl tasks from memory to BadgerDB
-	n.scheduler.Drain()
+	if n.scheduler != nil {
+		n.scheduler.Drain()
+	}
 
 	// 4. persist crawled count
-	_ = n.urlStore.FlushCrawledCount()
+	if n.urlStore != nil {
+		_ = n.urlStore.FlushCrawledCount()
+	}
 
 	// 5. stop crawler workers + persist crawler stats
-	n.crawler.Stop()
+	if n.crawler != nil {
+		n.crawler.Stop()
+	}
 
 	// 6. final Bleve batch flush
 	n.batchIndexer.Stop()
@@ -767,9 +837,15 @@ func (n *Node) ShutdownForRestart() {
 	defer cancel()
 	n.apiServer.Shutdown(ctx)
 
-	n.scheduler.Drain()
-	_ = n.urlStore.FlushCrawledCount()
-	n.crawler.Stop()
+	if n.scheduler != nil {
+		n.scheduler.Drain()
+	}
+	if n.urlStore != nil {
+		_ = n.urlStore.FlushCrawledCount()
+	}
+	if n.crawler != nil {
+		n.crawler.Stop()
+	}
 	n.batchIndexer.Stop()
 	n.indexer.FlushStats()
 	n.gossip.Close()
@@ -796,9 +872,24 @@ func (n *Node) Status() *models.NodeStatus {
 
 	localDocs, peerDocs, _ := n.bleveIdx.CountByPeer(n.peerID.String())
 
+	nodeType := "full"
+	if n.IsLight() {
+		nodeType = "light"
+	}
+
+	var crawledURLs int64
+	if n.urlStore != nil {
+		crawledURLs = n.urlStore.CrawledCount()
+	}
+	var urlsInQueue int
+	if n.scheduler != nil {
+		urlsInQueue = n.scheduler.Pending()
+	}
+
 	status := &models.NodeStatus{
 		PeerID:         n.peerID.String(),
 		NodeName:       n.cfg.NodeName,
+		NodeType:       nodeType,
 		Version:        n.cfg.Version,
 		Commit:         n.cfg.Commit,
 		BuildDate:      n.cfg.BuildDate,
@@ -806,8 +897,8 @@ func (n *Node) Status() *models.NodeStatus {
 		ConnectedPeers: len(peerList),
 		PeerList:       peerList,
 		IndexedDocs:    int(docCount),
-		CrawledURLs:    n.urlStore.CrawledCount(),
-		URLsInQueue:    n.scheduler.Pending(),
+		CrawledURLs:    crawledURLs,
+		URLsInQueue:    urlsInQueue,
 		Uptime:         time.Since(n.startedAt).Round(time.Second).String(),
 		StartedAt:      n.startedAt,
 		LocalDocs:      localDocs,
@@ -833,6 +924,9 @@ func (n *Node) Status() *models.NodeStatus {
 
 // CrawlerInfo returns crawler configuration and stats for the admin API.
 func (n *Node) CrawlerInfo() *models.CrawlerInfo {
+	if n.IsLight() || n.crawler == nil {
+		return &models.CrawlerInfo{}
+	}
 	crawled, failed, active, jsRendered := n.crawler.Stats()
 	return &models.CrawlerInfo{
 		Workers:       n.cfg.Crawler.Workers,
@@ -893,7 +987,7 @@ func (n *Node) checkResourceLimits() (exceeded bool, reason string) {
 	}
 
 	// Check queue size
-	if cfg.MaxQueueSize > 0 {
+	if cfg.MaxQueueSize > 0 && n.scheduler != nil {
 		queueSize := int64(n.scheduler.Pending())
 		if queueSize >= cfg.MaxQueueSize {
 			return true, fmt.Sprintf("queue limit reached (%d/%d)", queueSize, cfg.MaxQueueSize)
@@ -923,7 +1017,7 @@ func (n *Node) checkResourceLimitsCheap() bool {
 		}
 	}
 
-	if cfg.MaxQueueSize > 0 {
+	if cfg.MaxQueueSize > 0 && n.scheduler != nil {
 		if int64(n.scheduler.Pending()) >= cfg.MaxQueueSize {
 			return true
 		}
@@ -1002,6 +1096,84 @@ func (n *Node) Leaderboard() (*models.LeaderboardResponse, error) {
 
 	return &models.LeaderboardResponse{
 		Explorers:   explorers,
+		TotalDocs:   totalDocs,
+		LocalPeerID: selfID,
+	}, nil
+}
+
+// RelayLeaderboard returns relay (light node) contribution rankings.
+func (n *Node) RelayLeaderboard() (*models.RelayLeaderboardResponse, error) {
+	selfID := n.peerID.String()
+	docCount, _ := n.bleveIdx.DocCount()
+
+	// Fetch trust data for enrichment
+	reps, _ := n.trustStore.AllReputations()
+	repMap := make(map[string]*models.PeerReputation, len(reps))
+	for i := range reps {
+		repMap[reps[i].PeerID] = &reps[i]
+	}
+
+	var relays []models.RelayStats
+	totalDocs := 0
+
+	// Add local node if it's a light node
+	if n.IsLight() {
+		dooglePeers := n.shards.AllMembers()
+		peerCount := len(dooglePeers) - 1
+		if peerCount < 0 {
+			peerCount = 0
+		}
+		rs := models.RelayStats{
+			PeerID:         selfID,
+			NodeName:       n.cfg.NodeName,
+			DocsHosted:     int(docCount),
+			QueriesServed:  n.queriesServed.Load(),
+			Uptime:         time.Since(n.startedAt).Round(time.Second).String(),
+			UptimeSeconds:  int64(time.Since(n.startedAt).Seconds()),
+			ConnectedPeers: peerCount,
+			IsLocal:        true,
+			TrustScore:     0.5,
+		}
+		if rep, ok := repMap[selfID]; ok {
+			rs.TrustScore = rep.TrustScore
+			rs.FirstSeen = rep.FirstSeen
+			rs.LastSeen = rep.LastSeen
+		}
+		relays = append(relays, rs)
+		totalDocs += rs.DocsHosted
+	}
+
+	// Add all known light node peers
+	n.peerRelayInfoMu.RLock()
+	for _, ri := range n.peerRelayInfo {
+		if ri.PeerID == selfID {
+			continue
+		}
+		rs := models.RelayStats{
+			PeerID:        ri.PeerID,
+			NodeName:      ri.NodeName,
+			DocsHosted:    ri.DocCount,
+			QueriesServed: ri.QueriesServed,
+			LastSeen:      ri.LastSeen,
+			TrustScore:    0.5,
+		}
+		if rep, ok := repMap[ri.PeerID]; ok {
+			rs.TrustScore = rep.TrustScore
+			rs.FirstSeen = rep.FirstSeen
+			rs.LastSeen = rep.LastSeen
+		}
+		relays = append(relays, rs)
+		totalDocs += rs.DocsHosted
+	}
+	n.peerRelayInfoMu.RUnlock()
+
+	// Sort by DocsHosted descending
+	sort.Slice(relays, func(i, j int) bool {
+		return relays[i].DocsHosted > relays[j].DocsHosted
+	})
+
+	return &models.RelayLeaderboardResponse{
+		Relays:      relays,
 		TotalDocs:   totalDocs,
 		LocalPeerID: selfID,
 	}, nil
@@ -1388,6 +1560,12 @@ func (n *Node) gossipLoop() {
 			}
 		}
 
+		// Light nodes relay gossip automatically via GossipSub mesh subscription
+		// but don't schedule any URLs for crawling.
+		if n.IsLight() {
+			continue
+		}
+
 		for _, u := range ann.URLs {
 			domain := urlutil.ExtractDomain(u)
 
@@ -1437,7 +1615,19 @@ func (n *Node) shardCatalogLoop() {
 		if catalog.NodeName != "" {
 			n.setPeerName(catalog.PeerID, catalog.NodeName)
 		}
-		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
+		// Track relay info for light nodes
+		if catalog.NodeType == "light" {
+			n.peerRelayInfoMu.Lock()
+			n.peerRelayInfo[catalog.PeerID] = relayInfo{
+				PeerID:        catalog.PeerID,
+				NodeName:      catalog.NodeName,
+				DocCount:      int(catalog.DocCount),
+				QueriesServed: catalog.QueriesServed,
+				LastSeen:      time.Now(),
+			}
+			n.peerRelayInfoMu.Unlock()
+		}
+		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "type", catalog.NodeType, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
 	}
 }
 
@@ -1468,11 +1658,17 @@ func (n *Node) shardCatalogPublisher() {
 // publishShardCatalog broadcasts this node's shard catalog to peers.
 func (n *Node) publishShardCatalog() {
 	docCount, _ := n.bleveIdx.DocCount()
+	nodeType := "full"
+	if n.IsLight() {
+		nodeType = "light"
+	}
 	catalog := &p2p.ShardCatalog{
-		PeerID:     n.peerID.String(),
-		NodeName:   n.cfg.NodeName,
-		DocCount:   docCount,
-		Generation: n.genStore.Current(),
+		PeerID:        n.peerID.String(),
+		NodeName:      n.cfg.NodeName,
+		NodeType:      nodeType,
+		DocCount:      docCount,
+		Generation:    n.genStore.Current(),
+		QueriesServed: n.queriesServed.Load(),
 	}
 	if err := n.gossip.PublishShardCatalog(n.ctx, catalog); err != nil {
 		slog.Error("node: shard catalog publish error", "err", err)
@@ -1482,6 +1678,7 @@ func (n *Node) publishShardCatalog() {
 // P2P handlers
 
 func (n *Node) handlePeerSearch(req *models.SearchRequest) (*models.SearchResponse, error) {
+	n.queriesServed.Add(1)
 	return n.localEng.Search(req)
 }
 
@@ -1503,7 +1700,19 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 	if catalog.NodeName != "" {
 		n.setPeerName(catalog.PeerID, catalog.NodeName)
 	}
-	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "docs", catalog.DocCount)
+	// Track relay info for light nodes
+	if catalog.NodeType == "light" {
+		n.peerRelayInfoMu.Lock()
+		n.peerRelayInfo[catalog.PeerID] = relayInfo{
+			PeerID:        catalog.PeerID,
+			NodeName:      catalog.NodeName,
+			DocCount:      int(catalog.DocCount),
+			QueriesServed: catalog.QueriesServed,
+			LastSeen:      time.Now(),
+		}
+		n.peerRelayInfoMu.Unlock()
+	}
+	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "type", catalog.NodeType, "docs", catalog.DocCount)
 	return nil
 }
 
@@ -1782,8 +1991,10 @@ func (n *Node) maintenanceLoop() {
 			}
 
 			// Prune expired dedup entries (TTL-based, just log the count)
-			if count, err := n.dedupStore.PruneExpired(); err == nil {
-				slog.Debug("maintenance: dedup store", "seen_count", count)
+			if n.dedupStore != nil {
+				if count, err := n.dedupStore.PruneExpired(); err == nil {
+					slog.Debug("maintenance: dedup store", "seen_count", count)
+				}
 			}
 
 			// Cleanup rate limiter expired entries
@@ -1800,26 +2011,30 @@ func (n *Node) maintenanceLoop() {
 			}
 
 			// Prune stale content records
-			maxAge := n.cfg.Storage.ContentMaxAge
-			if maxAge <= 0 {
-				maxAge = 30 * 24 * time.Hour
-			}
-			if pruned, err := n.contentStore.PruneStale(maxAge); err != nil {
-				slog.Error("maintenance: content prune error", "err", err)
-			} else if pruned > 0 {
-				slog.Info("maintenance: pruned stale content records", "count", pruned)
+			if n.contentStore != nil {
+				maxAge := n.cfg.Storage.ContentMaxAge
+				if maxAge <= 0 {
+					maxAge = 30 * 24 * time.Hour
+				}
+				if pruned, err := n.contentStore.PruneStale(maxAge); err != nil {
+					slog.Error("maintenance: content prune error", "err", err)
+				} else if pruned > 0 {
+					slog.Info("maintenance: pruned stale content records", "count", pruned)
+				}
 			}
 
 			// Resource limit enforcement — pause/resume crawler
-			exceeded, reason := n.checkResourceLimits()
-			if exceeded && !n.crawlerPausedForLimits.Load() {
-				slog.Warn("resource limit reached, pausing crawler", "reason", reason)
-				n.crawler.Pause()
-				n.crawlerPausedForLimits.Store(true)
-			} else if !exceeded && n.crawlerPausedForLimits.Load() {
-				slog.Info("resource limits OK, resuming crawler")
-				n.crawler.Resume()
-				n.crawlerPausedForLimits.Store(false)
+			if n.crawler != nil {
+				exceeded, reason := n.checkResourceLimits()
+				if exceeded && !n.crawlerPausedForLimits.Load() {
+					slog.Warn("resource limit reached, pausing crawler", "reason", reason)
+					n.crawler.Pause()
+					n.crawlerPausedForLimits.Store(true)
+				} else if !exceeded && n.crawlerPausedForLimits.Load() {
+					slog.Info("resource limits OK, resuming crawler")
+					n.crawler.Resume()
+					n.crawlerPausedForLimits.Store(false)
+				}
 			}
 		case <-n.ctx.Done():
 			return

@@ -9,6 +9,7 @@ import (
 
 const limitsFile = "limits.yaml"
 const lowResourceFile = "low_resource.yaml"
+const lightNodeFile = "light_node.yaml"
 
 // ResourceLimits holds configurable resource caps persisted to disk.
 type ResourceLimits struct {
@@ -58,6 +59,35 @@ func LoadLowResource(dataDir string) bool {
 		return false
 	}
 	return s.Enabled
+}
+
+type lightNodeSetting struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// LoadLightNode reads persisted light-node setting from {dataDir}/light_node.yaml.
+func LoadLightNode(dataDir string) bool {
+	data, err := os.ReadFile(filepath.Join(dataDir, lightNodeFile))
+	if err != nil {
+		return false
+	}
+	var s lightNodeSetting
+	if err := yaml.Unmarshal(data, &s); err != nil {
+		return false
+	}
+	return s.Enabled
+}
+
+// SaveLightNode persists light-node setting to {dataDir}/light_node.yaml.
+func SaveLightNode(dataDir string, enabled bool) error {
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(&lightNodeSetting{Enabled: enabled})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dataDir, lightNodeFile), data, 0600)
 }
 
 // SaveLowResource persists low-resource setting to {dataDir}/low_resource.yaml.
