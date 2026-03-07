@@ -532,10 +532,17 @@ func (a *Analyzer) DetectCountry(domain, language string) string {
 		}
 	}
 
-	// Fallback: infer from content language (only for non-generic TLDs)
+	// Fallback: infer from content language, but only for languages that
+	// map unambiguously to a single country (skip English, Spanish, French,
+	// Portuguese, Arabic — these are spoken across many countries).
 	if language != "" {
-		if country, ok := langToCountry[language]; ok {
-			return country
+		switch language {
+		case "en", "es", "fr", "pt", "ar":
+			// Too ambiguous — skip fallback
+		default:
+			if country, ok := langToCountry[language]; ok {
+				return country
+			}
 		}
 	}
 
