@@ -79,7 +79,11 @@ func main() {
 	})
 	slog.SetDefault(slog.New(handler))
 
-	slog.Info(fmt.Sprintf("Doogle %s — P2P Decentralized Search Engine", version))
+	nodeTypeLabel := "[full node]"
+	if cfg.LightNode {
+		nodeTypeLabel = "[light node]"
+	}
+	slog.Info(fmt.Sprintf("Doogle %s — P2P Decentralized Search Engine %s", version, nodeTypeLabel))
 	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "workers", cfg.Crawler.Workers, "replication", cfg.Index.ReplicationFactor, "log_level", cfg.LogLevel)
 
 	// Create and initialize the node

@@ -14,6 +14,7 @@ type Config struct {
 	NodeName    string        `yaml:"node_name"`
 	LogLevel    string        `yaml:"log_level"`
 	LowResource bool          `yaml:"low_resource"`
+	LightNode   bool          `yaml:"light_node"`
 	P2P         P2PConfig     `yaml:"p2p"`
 	API         APIConfig     `yaml:"api"`
 	Crawler     CrawlerConfig `yaml:"crawler"`
@@ -244,10 +245,12 @@ func ParseFlags(cfg *Config) {
 	flag.Int64Var(&cfg.Storage.MaxDocuments, "max-docs", cfg.Storage.MaxDocuments, "Max documents (0 = unlimited)")
 	flag.Int64Var(&cfg.Storage.MaxQueueSize, "max-queue", cfg.Storage.MaxQueueSize, "Max queue size (0 = unlimited)")
 	flag.BoolVar(&cfg.LowResource, "low-resource", cfg.LowResource, "Enable low-resource (Eco) mode for reduced memory/CPU usage")
+	flag.BoolVar(&cfg.LightNode, "light", cfg.LightNode, "Enable light node mode (search + relay only, no crawling)")
 	flag.Parse()
 
 	// Snapshot CLI-only flags before config file may overwrite them.
 	cliLowResource := cfg.LowResource
+	cliLightNode := cfg.LightNode
 
 	// If a config file was specified, reload
 	if configFile != "" {
@@ -256,9 +259,12 @@ func ParseFlags(cfg *Config) {
 		}
 	}
 
-	// Re-apply CLI flag if it was explicitly set
+	// Re-apply CLI flags if they were explicitly set
 	if cliLowResource {
 		cfg.LowResource = true
+	}
+	if cliLightNode {
+		cfg.LightNode = true
 	}
 
 	if bootstrap != "" {
@@ -307,6 +313,18 @@ func trimSpace(s string) string {
 		end--
 	}
 	return s[start:end]
+}
+
+// ApplyLightNodeDefaults sets light-node-appropriate limits (no crawling).
+func ApplyLightNodeDefaults(cfg *Config) {
+	cfg.Crawler.Workers = 0
+	cfg.Storage.MaxQueueSize = 0
+	if cfg.Storage.MaxStorageBytes == 0 || cfg.Storage.MaxStorageBytes > 500*1024*1024 {
+		cfg.Storage.MaxStorageBytes = 500 * 1024 * 1024 // 500 MB
+	}
+	if cfg.Storage.MaxDocuments == 0 || cfg.Storage.MaxDocuments > 10000 {
+		cfg.Storage.MaxDocuments = 10000
+	}
 }
 
 // ApplyLowResourceDefaults caps resource-heavy settings for low-spec devices.

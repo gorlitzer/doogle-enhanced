@@ -73,6 +73,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Get("/limits", GetLimitsHandler(deps))
 			r.Post("/limits", SetLimitsHandler(deps))
 			r.Get("/leaderboard", LeaderboardHandler(deps))
+			r.Get("/leaderboard/relay", RelayLeaderboardHandler(deps))
 			r.Get("/domains", DomainOwnershipHandler(deps))
 			r.Get("/profile", ProfileHandler(deps))
 			r.Get("/sysinfo", SystemInfoHandler(deps))

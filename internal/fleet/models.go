@@ -10,6 +10,7 @@ type WorkerStats struct {
 	ConnectedPeers int    `json:"connected_peers"`
 	Uptime         string `json:"uptime"`
 	Version        string `json:"version,omitempty"`
+	NodeType       string `json:"node_type,omitempty"`
 }
 
 // HeartbeatRequest is sent by workers to the coordinator.

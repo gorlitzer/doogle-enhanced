@@ -26,6 +26,11 @@ func (n *Node) initFleet() error {
 		return nil
 	}
 
+	// Light nodes cannot be fleet workers (they don't crawl).
+	if n.cfg.LightNode && role == "worker" {
+		return fmt.Errorf("light nodes cannot run as fleet workers (no crawl capability)")
+	}
+
 	switch role {
 	case "", "coordinator":
 		secret, err := fleet.LoadOrCreateSecret(n.cfg.Storage.DataDir, n.cfg.Fleet.FleetSecret)
@@ -129,13 +134,26 @@ func (n *Node) workerStats() fleet.WorkerStats {
 	if peerCount < 0 {
 		peerCount = 0
 	}
+	nodeType := "full"
+	if n.IsLight() {
+		nodeType = "light"
+	}
+	var crawledURLs int64
+	if n.urlStore != nil {
+		crawledURLs = n.urlStore.CrawledCount()
+	}
+	var urlsInQueue int
+	if n.scheduler != nil {
+		urlsInQueue = n.scheduler.Pending()
+	}
 	return fleet.WorkerStats{
 		IndexedDocs:    int(docCount),
-		CrawledURLs:    int(n.urlStore.CrawledCount()),
-		URLsInQueue:    n.scheduler.Pending(),
+		CrawledURLs:    int(crawledURLs),
+		URLsInQueue:    urlsInQueue,
 		ConnectedPeers: peerCount,
 		Uptime:         time.Since(n.startedAt).Round(time.Second).String(),
 		Version:        n.cfg.Version,
+		NodeType:       nodeType,
 	}
 }
 

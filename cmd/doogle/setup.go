@@ -37,65 +37,98 @@ func runSetup(args []string) {
 		}
 	}
 
-	// 2. Max storage
-	fmt.Print("Max Storage GB [2.0]: ")
+	// 2. Node type
+	fmt.Println("Node Type:")
+	fmt.Println("  1. Full Node (crawl + index + search)")
+	fmt.Println("  2. Light Node (search + relay only)")
+	fmt.Print("Choice [1]: ")
+	nodeTypeStr := readLine(reader)
+	isLight := nodeTypeStr == "2"
+
+	// Defaults depend on node type
+	defaultStorageGB := 2.0
+	defaultDocsK := 50
+	defaultQueueK := 100
+	defaultWorkers := 4
+	if isLight {
+		defaultStorageGB = 0.5
+		defaultDocsK = 10
+		defaultQueueK = 0
+		defaultWorkers = 0
+	}
+
+	// 3. Max storage
+	fmt.Printf("Max Storage GB [%.1f]: ", defaultStorageGB)
 	storageStr := readLine(reader)
-	storageGB := 2.0
+	storageGB := defaultStorageGB
 	if storageStr != "" {
 		if v, err := strconv.ParseFloat(storageStr, 64); err == nil && v >= 0 {
 			storageGB = v
 		}
 	}
 
-	// 3. Max documents
-	fmt.Print("Max Documents (thousands) [50]: ")
+	// 4. Max documents
+	fmt.Printf("Max Documents (thousands) [%d]: ", defaultDocsK)
 	docsStr := readLine(reader)
-	docsK := 50
+	docsK := defaultDocsK
 	if docsStr != "" {
 		if v, err := strconv.Atoi(docsStr); err == nil && v >= 0 {
 			docsK = v
 		}
 	}
 
-	// 4. Max queue
-	fmt.Print("Max Queue Size (thousands) [100]: ")
-	queueStr := readLine(reader)
-	queueK := 100
-	if queueStr != "" {
-		if v, err := strconv.Atoi(queueStr); err == nil && v >= 0 {
-			queueK = v
-		}
-	}
-
-	// 5. Workers
-	fmt.Print("Crawler Workers [4]: ")
-	workersStr := readLine(reader)
-	workers := 4
-	if workersStr != "" {
-		if v, err := strconv.Atoi(workersStr); err == nil && v >= 1 {
-			workers = v
-		}
-	}
-
-	// 6. Seed URLs
-	fmt.Println("Seed URLs (one per line, empty line to finish):")
+	var queueK int
+	var workers int
 	var seeds []string
-	for {
-		fmt.Print("  > ")
-		line := readLine(reader)
-		if line == "" {
-			break
+
+	if isLight {
+		queueK = 0
+		workers = 0
+	} else {
+		// 5. Max queue (full nodes only)
+		fmt.Printf("Max Queue Size (thousands) [%d]: ", defaultQueueK)
+		queueStr := readLine(reader)
+		queueK = defaultQueueK
+		if queueStr != "" {
+			if v, err := strconv.Atoi(queueStr); err == nil && v >= 0 {
+				queueK = v
+			}
 		}
-		if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
-			seeds = append(seeds, line)
-		} else {
-			fmt.Println("    (skipped — must start with http:// or https://)")
+
+		// 6. Workers (full nodes only)
+		fmt.Printf("Crawler Workers [%d]: ", defaultWorkers)
+		workersStr := readLine(reader)
+		workers = defaultWorkers
+		if workersStr != "" {
+			if v, err := strconv.Atoi(workersStr); err == nil && v >= 1 {
+				workers = v
+			}
+		}
+
+		// 7. Seed URLs (full nodes only)
+		fmt.Println("Seed URLs (one per line, empty line to finish):")
+		for {
+			fmt.Print("  > ")
+			line := readLine(reader)
+			if line == "" {
+				break
+			}
+			if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
+				seeds = append(seeds, line)
+			} else {
+				fmt.Println("    (skipped — must start with http:// or https://)")
+			}
 		}
 	}
 
 	// Save node name
 	if err := node.SaveNodeName(*dataDir, name); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save node name: %v\n", err)
+	}
+
+	// Save light node setting
+	if err := node.SaveLightNode(*dataDir, isLight); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save light node setting: %v\n", err)
 	}
 
 	// Save limits
@@ -109,21 +142,33 @@ func runSetup(args []string) {
 	}
 
 	// Summary
+	nodeTypeLabel := "Full Node"
+	if isLight {
+		nodeTypeLabel = "Light Node"
+	}
 	fmt.Println()
 	fmt.Println("=== Setup Complete ===")
 	fmt.Printf("  Node Name:    %s\n", name)
+	fmt.Printf("  Node Type:    %s\n", nodeTypeLabel)
 	fmt.Printf("  Data Dir:     %s\n", *dataDir)
 	fmt.Printf("  Max Storage:  %.1f GB\n", storageGB)
 	fmt.Printf("  Max Docs:     %dK\n", docsK)
-	fmt.Printf("  Max Queue:    %dK\n", queueK)
-	fmt.Printf("  Workers:      %d\n", workers)
+	if !isLight {
+		fmt.Printf("  Max Queue:    %dK\n", queueK)
+		fmt.Printf("  Workers:      %d\n", workers)
+	}
 	if len(seeds) > 0 {
 		fmt.Printf("  Seeds:        %d URLs\n", len(seeds))
 	}
 	fmt.Println()
 
 	// Build recommended start command
-	cmd := fmt.Sprintf("./bin/doogle --data-dir %s --workers %d", *dataDir, workers)
+	cmd := fmt.Sprintf("./bin/doogle --data-dir %s", *dataDir)
+	if isLight {
+		cmd += " --light"
+	} else {
+		cmd += fmt.Sprintf(" --workers %d", workers)
+	}
 	if len(seeds) > 0 {
 		cmd += " --seed " + strings.Join(seeds, ",")
 	}

@@ -113,6 +113,9 @@ export const api = {
   leaderboard() {
     return fetchJSON('/api/admin/leaderboard');
   },
+  relayLeaderboard() {
+    return fetchJSON('/api/admin/leaderboard/relay');
+  },
   domainOwnership() {
     return fetchJSON('/api/admin/domains');
   },

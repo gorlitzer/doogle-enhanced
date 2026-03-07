@@ -417,11 +417,15 @@ function renderDashboard(status, crawler, indexer, storage) {
   const version = s.version || '—';
   const commit = s.commit ? s.commit.slice(0, 7) : '—';
   const fleetBadge = s.fleet_role ? `<span class="sl-fleet-badge">${escapeHtml(s.fleet_role)}</span>` : '';
+  const nodeTypeBadge = s.node_type === 'light'
+    ? '<span class="sl-fleet-badge" style="background:var(--accent);color:var(--bg)">Light Node</span>'
+    : '<span class="sl-fleet-badge" style="opacity:0.6">Full Node</span>';
 
   const card1 = cardWrap('Node Identity', 'green', `
     <div class="sl-body-row" style="flex-wrap:wrap;gap:8px">
       <span class="sl-node-name">${escapeHtml(nodeName)}</span>
       <span class="sl-version-badge">v${escapeHtml(version)}</span>
+      ${nodeTypeBadge}
       ${fleetBadge}
     </div>
     <div class="sl-stat-row">

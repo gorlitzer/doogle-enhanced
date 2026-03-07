@@ -7,6 +7,7 @@ import { formatNum } from '../spotlight.js';
 /* ── State ── */
 let firstLoad = true;
 let particleSystem = null;
+let activeTab = 'explorers'; // 'explorers' | 'relays'
 
 /* ── Utilities ── */
 function getTheme() {
@@ -471,6 +472,107 @@ async function loadLeaderboard() {
   }
 }
 
+/* ── Relay Leaderboard ── */
+async function loadRelayLeaderboard() {
+  const gen = navGen();
+  try {
+    const data = await api.relayLeaderboard();
+    if (gen !== navGen()) return;
+    const content = document.getElementById('lb-content');
+    if (!content) return;
+
+    const relays = data.relays || [];
+    const localPeerID = data.local_peer_id || '';
+    const totalDocs = data.total_docs || 0;
+
+    if (relays.length === 0) {
+      content.innerHTML = `<div class="empty-state"><p>No relay (light) nodes detected yet. Start a light node with <code>--light</code> to appear here.</p></div>`;
+      return;
+    }
+
+    const heroHTML = `
+      <div class="lb-hero-strip">
+        <div class="lb-hero-stat">
+          ${icon('radio', 20, 'var(--text-muted)')}
+          <span class="lb-hero-value">${relays.length}</span>
+          <span class="lb-hero-label">Relays</span>
+        </div>
+        <div class="lb-hero-sep"></div>
+        <div class="lb-hero-stat">
+          ${icon('fileText', 20, 'var(--text-muted)')}
+          <span class="lb-hero-value">${totalDocs.toLocaleString()}</span>
+          <span class="lb-hero-label">Hosted Docs</span>
+        </div>
+      </div>
+    `;
+
+    const rows = relays.map((r, i) => {
+      const rank = i + 1;
+      const isLocal = r.peer_id === localPeerID;
+      const name = r.node_name || 'Anonymous Relay';
+      const localCls = isLocal ? ' lb-local-row' : '';
+      return `
+        <tr class="lb-row-anim${localCls}">
+          <td><span class="lb-rank-badge">${rank}</span></td>
+          <td>
+            ${escapeHtml(name)}
+            ${isLocal ? ' <span class="lb-you-badge lb-you-badge-sm">YOU</span>' : ''}
+          </td>
+          <td>${(r.docs_hosted || 0).toLocaleString()}</td>
+          <td>${(r.queries_served || 0).toLocaleString()}</td>
+          <td>${r.uptime || '—'}</td>
+          <td>${r.connected_peers || 0}</td>
+          <td>${trustBadge(r.trust_score)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const tableHTML = `
+      <div class="section">
+        <h3>All Relay Nodes</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Relay Name</th>
+                <th>Docs Hosted</th>
+                <th>Queries Served</th>
+                <th>Uptime</th>
+                <th>Peers</th>
+                <th>Trust</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    content.innerHTML = heroHTML + tableHTML;
+  } catch (err) {
+    const content = document.getElementById('lb-content');
+    if (content) {
+      content.innerHTML = `<div class="empty-state"><p>Failed to load relay leaderboard: ${escapeHtml(err.message)}</p></div>`;
+    }
+  }
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.lb-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  const content = document.getElementById('lb-content');
+  if (content) content.innerHTML = '<div class="loading">Loading...</div>';
+  if (tab === 'relays') {
+    loadRelayLeaderboard();
+  } else {
+    firstLoad = true;
+    loadLeaderboard();
+  }
+}
+
 /* ── Entry Point ── */
 export function renderLeaderboard(container) {
   // Destroy old particles on re-entry
@@ -480,14 +582,27 @@ export function renderLeaderboard(container) {
   }
   particleSystem = null;
   firstLoad = true;
+  activeTab = 'explorers';
 
   container.innerHTML = `
     <div class="page-header">
       <h2>WebExplorers Leaderboard</h2>
       <p>Peer contribution rankings</p>
     </div>
+    <div class="lb-tabs" style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="lb-tab-btn active" data-tab="explorers" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg-hover);cursor:pointer;color:var(--text);font-weight:600">WebExplorers</button>
+      <button class="lb-tab-btn" data-tab="relays" style="padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted)">Relays</button>
+    </div>
     <div id="lb-content"><div class="loading">Loading leaderboard...</div></div>
   `;
+
+  container.querySelectorAll('.lb-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
   loadLeaderboard();
-  window._pageInterval = setInterval(loadLeaderboard, 10000);
+  window._pageInterval = setInterval(() => {
+    if (activeTab === 'relays') loadRelayLeaderboard();
+    else loadLeaderboard();
+  }, 10000);
 }

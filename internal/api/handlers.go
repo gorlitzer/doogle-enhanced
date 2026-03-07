@@ -64,6 +64,9 @@ type Deps struct {
 	AuditTrailFn        func(limit int) []interface{}
 	VoteDocQuarantineFn func(url string, confirm bool) error
 
+	// Relay leaderboard (light nodes)
+	RelayLeaderboardFn func() (*models.RelayLeaderboardResponse, error)
+
 	// Resource limits
 	GetLimitsFn func() *LimitsResponse
 	SetLimitsFn func(*LimitsRequest) error
@@ -669,6 +672,22 @@ func LeaderboardHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		lb, err := deps.LeaderboardFn()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, lb)
+	}
+}
+
+// RelayLeaderboardHandler handles GET /api/admin/leaderboard/relay
+func RelayLeaderboardHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.RelayLeaderboardFn == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		lb, err := deps.RelayLeaderboardFn()
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
