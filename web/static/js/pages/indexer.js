@@ -3,6 +3,7 @@ import { api, peerNames } from '../api.js';
 import { navGen } from '../nav-gen.js';
 import { showModal, scoreBar, cardSkeleton, escapeHtml, icon, getCSS, renderLineChart, timeAgo, countryFlag, countryName, countryBadge } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
+import { isLiteMode } from '../lite-mode.js';
 
 let activeTab = 'overview';
 let docOffset = 0;
@@ -318,7 +319,7 @@ function applyIndexerDiagram(d) {
 
 function syncMobileView() {
   if (activeTab !== 'overview') return;
-  const isMobile = window.innerWidth < MOBILE_BP;
+  const isMobile = window.innerWidth < MOBILE_BP || isLiteMode();
   const canvasWrap = document.getElementById('indexer-canvas-wrap');
   const cardsWrap = document.getElementById('indexer-mobile-cards');
   const toggleEl = document.getElementById('indexer-view-toggle');

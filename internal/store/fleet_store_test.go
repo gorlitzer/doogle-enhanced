@@ -135,13 +135,13 @@ func TestFleetStore_Persistence(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write.
-	bs1, _ := NewBadgerStore(dir)
+	bs1, _ := NewBadgerStore(dir, false)
 	fs1 := NewFleetStore(bs1)
 	fs1.PutNode(&fleet.FleetNode{PeerID: "persistent-peer", Name: "survivor", Status: "online"})
 	bs1.Close()
 
 	// Re-open.
-	bs2, _ := NewBadgerStore(dir)
+	bs2, _ := NewBadgerStore(dir, false)
 	defer bs2.Close()
 	fs2 := NewFleetStore(bs2)
 

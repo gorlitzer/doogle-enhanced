@@ -40,6 +40,7 @@ type Crawler struct {
 	rateLimit      int
 	respectRobots  bool
 	workers        int
+	maxBodyBytes   int
 
 	// Stats persistence
 	statsStore StatsStore
@@ -48,6 +49,9 @@ type Crawler struct {
 	browser           *BrowserPool
 	enableHeadless    bool
 	headlessThreshold int
+
+	// Pause/resume
+	paused atomic.Bool
 
 	// Stats
 	totalCrawled  atomic.Int64
@@ -78,12 +82,18 @@ type Config struct {
 	EnableHeadless    bool
 	HeadlessThreshold int
 	HeadlessTimeout   time.Duration
+	MaxBodyBytes      int
 	StatsStore        StatsStore
 }
 
 // New creates a new crawler engine.
 func New(cfg Config, scheduler *Scheduler, onCrawled OnDocumentCrawled) *Crawler {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	maxBody := cfg.MaxBodyBytes
+	if maxBody <= 0 {
+		maxBody = 10 << 20 // default 10MB
+	}
 
 	c := &Crawler{
 		scheduler:         scheduler,
@@ -96,6 +106,7 @@ func New(cfg Config, scheduler *Scheduler, onCrawled OnDocumentCrawled) *Crawler
 		rateLimit:         cfg.RateLimit,
 		respectRobots:     cfg.RespectRobots,
 		workers:           cfg.Workers,
+		maxBodyBytes:      maxBody,
 		enableHeadless:    cfg.EnableHeadless,
 		headlessThreshold: cfg.HeadlessThreshold,
 		ctx:               ctx,
@@ -170,6 +181,25 @@ func (c *Crawler) Stats() (crawled, failed, active, jsRendered int64) {
 	return c.totalCrawled.Load(), c.totalFailed.Load(), c.activeWorkers.Load(), c.jsRendered.Load()
 }
 
+// Pause pauses the crawler. In-flight tasks finish normally.
+func (c *Crawler) Pause() {
+	if !c.paused.Swap(true) {
+		log.Println("crawler: paused")
+	}
+}
+
+// Resume resumes the crawler after a pause.
+func (c *Crawler) Resume() {
+	if c.paused.Swap(false) {
+		log.Println("crawler: resumed")
+	}
+}
+
+// IsPaused returns whether the crawler is currently paused.
+func (c *Crawler) IsPaused() bool {
+	return c.paused.Load()
+}
+
 // recordEvent appends a crawl event to the ring buffer.
 func (c *Crawler) recordEvent(ev models.CrawlEvent) {
 	ev.Seq = c.nextSeq.Add(1)
@@ -225,6 +255,16 @@ func (c *Crawler) worker(id int) {
 			log.Printf("crawler: worker %d stopped", id)
 			return
 		default:
+		}
+
+		// If paused, wait and retry
+		if c.paused.Load() {
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 		}
 
 		task := c.scheduler.TryNext()
@@ -382,7 +422,7 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "application/xhtml") {
 		if SupportedContentType(ct) {
 			// Read body and extract text from document
-			docBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+			docBody, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(c.maxBodyBytes)))
 			if readErr != nil {
 				return nil, nil, nil, fmt.Errorf("read doc body: %w", readErr)
 			}
@@ -412,7 +452,7 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 		return nil, nil, nil, fmt.Errorf("not HTML: %s", ct)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(c.maxBodyBytes)))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("read body: %w", err)
 	}

@@ -8,24 +8,53 @@
 //   light    — floating dust motes
 //   pride    — aurora borealis rainbow wave
 
+import { isLiteMode } from './lite-mode.js';
+
 let canvas = null;
 let ctx = null;
 let animId = null;
 let currentAnim = null;
 let resizeHandler = null;
 
+let liteActive = false;
+
 export function initBgAnimation() {
   canvas = document.getElementById('bg-canvas');
   if (!canvas) return;
   ctx = canvas.getContext('2d');
-  resize();
 
   resizeHandler = () => resize();
   window.addEventListener('resize', resizeHandler);
-  window.addEventListener('themechange', (e) => startAnimation(e.detail.theme));
+  window.addEventListener('themechange', (e) => {
+    // Don't start animations while lite mode is on
+    if (liteActive) return;
+    startAnimation(e.detail.theme);
+  });
 
-  const theme = document.documentElement.getAttribute('data-theme') || 'dracula';
-  startAnimation(theme);
+  liteActive = isLiteMode();
+  if (liteActive) {
+    canvas.style.display = 'none';
+  } else {
+    resize();
+    const theme = document.documentElement.getAttribute('data-theme') || 'dracula';
+    startAnimation(theme);
+  }
+
+  window.addEventListener('litemodechange', (e) => {
+    if (!canvas) return;
+    liteActive = e.detail.lite;
+    if (liteActive) {
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      if (currentAnim && currentAnim.cleanup) currentAnim.cleanup();
+      currentAnim = null;
+      canvas.style.display = 'none';
+    } else {
+      canvas.style.display = '';
+      resize();
+      const theme = document.documentElement.getAttribute('data-theme') || 'dracula';
+      startAnimation(theme);
+    }
+  });
 }
 
 function resize() {

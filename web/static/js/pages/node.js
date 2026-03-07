@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
 import { icon, getCSS, escapeHtml, renderLineChart } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
+import { isLiteMode } from '../lite-mode.js';
 
 // ── Spotlight Grid Config (gauge columns) ──
 const GRID_COMPONENTS = [
@@ -114,7 +115,7 @@ export function renderNode(container) {
 }
 
 function syncMobileView() {
-  const isMobile = window.innerWidth < MOBILE_BP;
+  const isMobile = window.innerWidth < MOBILE_BP || isLiteMode();
   const canvasWrap = document.getElementById('canvas-wrap');
   const cardsWrap = document.getElementById('mobile-cards-wrap');
   const toggleEl = document.getElementById('view-toggle');

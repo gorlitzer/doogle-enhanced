@@ -18,6 +18,7 @@ import { renderLeaderboard } from './pages/leaderboard.js';
 import { renderProfile } from './pages/profile.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
+import { initLiteMode, pollInterval } from './lite-mode.js';
 import { initTabIdentity, updateNodeIdentity } from './tab-identity.js';
 import { bumpNavGen } from './nav-gen.js';
 
@@ -142,12 +143,13 @@ function startStatusPolling() {
     }
   }
   poll();
-  statusInterval = setInterval(poll, 10000);
+  statusInterval = setInterval(poll, pollInterval(10000));
 }
 
 // Boot
 window.addEventListener('hashchange', render);
 window.addEventListener('DOMContentLoaded', () => {
+  initLiteMode();
   initTheme();
   createThemePicker();
   initBgAnimation();

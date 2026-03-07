@@ -11,14 +11,15 @@ import (
 
 // Config holds all node configuration.
 type Config struct {
-	NodeName string        `yaml:"node_name"`
-	LogLevel string        `yaml:"log_level"`
-	P2P      P2PConfig     `yaml:"p2p"`
-	API      APIConfig     `yaml:"api"`
-	Crawler  CrawlerConfig `yaml:"crawler"`
-	Index    IndexConfig   `yaml:"index"`
-	Storage  StorageConfig `yaml:"storage"`
-	Search   SearchConfig  `yaml:"search"`
+	NodeName    string        `yaml:"node_name"`
+	LogLevel    string        `yaml:"log_level"`
+	LowResource bool          `yaml:"low_resource"`
+	P2P         P2PConfig     `yaml:"p2p"`
+	API         APIConfig     `yaml:"api"`
+	Crawler     CrawlerConfig `yaml:"crawler"`
+	Index       IndexConfig   `yaml:"index"`
+	Storage     StorageConfig `yaml:"storage"`
+	Search      SearchConfig  `yaml:"search"`
 
 	Fleet FleetConfig `yaml:"fleet"`
 	Trust TrustConfig `yaml:"trust"`
@@ -66,6 +67,7 @@ type CrawlerConfig struct {
 	EnableHeadless    bool          `yaml:"enable_headless"`
 	HeadlessThreshold int           `yaml:"headless_threshold"`
 	HeadlessTimeout   time.Duration `yaml:"headless_timeout"`
+	MaxBodyBytes      int           `yaml:"max_body_bytes"`
 }
 
 // TrustConfig holds trust & safety settings, including per-node allowlist/denylist.
@@ -103,6 +105,11 @@ type StorageConfig struct {
 	SeenTTL        time.Duration `yaml:"seen_ttl"`
 	ContentMaxAge  time.Duration `yaml:"content_max_age"`
 	TrendRetention time.Duration `yaml:"trend_retention"`
+
+	// Resource limits (0 = unlimited)
+	MaxStorageBytes int64 `yaml:"max_storage_bytes"`
+	MaxDocuments    int64 `yaml:"max_documents"`
+	MaxQueueSize    int64 `yaml:"max_queue_size"`
 }
 
 type SearchConfig struct {
@@ -146,6 +153,7 @@ func DefaultConfig() *Config {
 			EnableHeadless:    false,
 			HeadlessThreshold: 500,
 			HeadlessTimeout:   30 * time.Second,
+			MaxBodyBytes:      10 * 1024 * 1024, // 10MB
 		},
 		Index: IndexConfig{
 			BleveDir:            "bleve",
@@ -161,12 +169,15 @@ func DefaultConfig() *Config {
 			ClusterCount:        20,
 		},
 		Storage: StorageConfig{
-			DataDir:        "./data/doogle",
-			BadgerDir:      "badger",
-			GCInterval:     5 * time.Minute,
-			SeenTTL:        7 * 24 * time.Hour,
-			ContentMaxAge:  30 * 24 * time.Hour,
-			TrendRetention: 168 * time.Hour,
+			DataDir:         "./data/doogle",
+			BadgerDir:       "badger",
+			GCInterval:      5 * time.Minute,
+			SeenTTL:         7 * 24 * time.Hour,
+			ContentMaxAge:   30 * 24 * time.Hour,
+			TrendRetention:  168 * time.Hour,
+			MaxStorageBytes: 2 * 1024 * 1024 * 1024, // 2 GB
+			MaxDocuments:    50000,
+			MaxQueueSize:    100000,
 		},
 		Search: SearchConfig{
 			MaxResults:         50,
@@ -229,13 +240,25 @@ func ParseFlags(cfg *Config) {
 	flag.StringVar(&cfg.Fleet.Role, "fleet-role", cfg.Fleet.Role, "Fleet role: coordinator (default), worker, standalone")
 	flag.StringVar(&cfg.Fleet.CoordinatorPeer, "fleet-coordinator", cfg.Fleet.CoordinatorPeer, "Coordinator multiaddr (worker mode)")
 	flag.StringVar(&cfg.Fleet.FleetSecret, "fleet-secret", cfg.Fleet.FleetSecret, "Fleet secret (hex, 64 chars)")
+	flag.Int64Var(&cfg.Storage.MaxStorageBytes, "max-storage", cfg.Storage.MaxStorageBytes, "Max storage in bytes (0 = unlimited)")
+	flag.Int64Var(&cfg.Storage.MaxDocuments, "max-docs", cfg.Storage.MaxDocuments, "Max documents (0 = unlimited)")
+	flag.Int64Var(&cfg.Storage.MaxQueueSize, "max-queue", cfg.Storage.MaxQueueSize, "Max queue size (0 = unlimited)")
+	flag.BoolVar(&cfg.LowResource, "low-resource", cfg.LowResource, "Enable low-resource (Eco) mode for reduced memory/CPU usage")
 	flag.Parse()
+
+	// Snapshot CLI-only flags before config file may overwrite them.
+	cliLowResource := cfg.LowResource
 
 	// If a config file was specified, reload
 	if configFile != "" {
 		if loaded, err := LoadConfig(configFile); err == nil {
 			*cfg = *loaded
 		}
+	}
+
+	// Re-apply CLI flag if it was explicitly set
+	if cliLowResource {
+		cfg.LowResource = true
 	}
 
 	if bootstrap != "" {
@@ -284,4 +307,12 @@ func trimSpace(s string) string {
 		end--
 	}
 	return s[start:end]
+}
+
+// ApplyLowResourceDefaults caps resource-heavy settings for low-spec devices.
+func ApplyLowResourceDefaults(cfg *Config) {
+	if cfg.Crawler.Workers > 2 {
+		cfg.Crawler.Workers = 2
+	}
+	cfg.Crawler.MaxBodyBytes = 2 * 1024 * 1024 // 2MB
 }

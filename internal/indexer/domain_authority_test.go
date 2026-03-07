@@ -9,7 +9,7 @@ import (
 func newTestDomainAuthorityStore(t *testing.T) *DomainAuthorityStore {
 	t.Helper()
 	dir := t.TempDir()
-	bs, err := store.NewBadgerStore(dir)
+	bs, err := store.NewBadgerStore(dir, false)
 	if err != nil {
 		t.Fatalf("failed to open badger: %v", err)
 	}
