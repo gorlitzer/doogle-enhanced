@@ -25,8 +25,8 @@ help:
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make status             Check if the node is running"
 	@echo "    make test               Run all tests"
-	@echo "    make clean              Remove build artifacts (bin/, dist/, logs, pid)"
-	@echo "    make nuke               Full reset: clean + delete crawl data + Go runtime"
+	@echo "    make clean              Stop node + remove build artifacts + crawl data"
+	@echo "    make nuke               Clean + delete local Go runtime"
 	@echo "    make release            Cross-compile binaries for all platforms to dist/"
 	@echo "    make checksums          Generate SHA-256 checksums for dist/ binaries"
 	@echo "    make patch              Tag + release: v0.1.0 → v0.1.1"
@@ -80,12 +80,14 @@ setup:
 	@echo "==> Setup complete. Run: make run"
 
 build:
+	@echo "==> Building $(VERSION)..."
 	@mkdir -p $(BIN_DIR)
 	@HASH=$$(find web/static -type f -not -name '.DS_Store' | LC_ALL=C sort | xargs cat | shasum -a 256 | cut -c1-16); \
 	  printf 'package web\n\nconst embedHash = "%s"\n' "$$HASH" > web/embed_hash.go.tmp; \
 	  cmp -s web/embed_hash.go.tmp web/embed_hash.go 2>/dev/null || mv web/embed_hash.go.tmp web/embed_hash.go; \
 	  rm -f web/embed_hash.go.tmp
-	$(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
+	@$(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
+	@echo "==> Built $(BIN_DIR)/$(BINARY) ($(VERSION))"
 
 run: build stop
 	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
@@ -118,7 +120,9 @@ run-only:
 	@echo ""
 
 test:
-	$(GO) test ./...
+	@echo "==> Running tests..."
+	@$(GO) test ./...
+	@echo "==> All tests passed."
 
 dev:
 	docker compose up --build
@@ -127,13 +131,18 @@ stop:
 	@if [ -f .doogle.pid ]; then \
 	  PID=$$(cat .doogle.pid); \
 	  if kill -0 "$$PID" 2>/dev/null; then \
-	    echo "Stopping PID $$PID..."; kill "$$PID"; \
+	    echo "==> Stopping Doogle (PID $$PID)..."; kill "$$PID"; \
 	    i=0; while kill -0 "$$PID" 2>/dev/null && [ $$i -lt 15 ]; do sleep 1; i=$$((i+1)); done; \
-	    if kill -0 "$$PID" 2>/dev/null; then echo "Forcing kill"; kill -9 "$$PID"; fi; \
-	  fi; rm -f .doogle.pid; fi
+	    if kill -0 "$$PID" 2>/dev/null; then echo "    Force killing..."; kill -9 "$$PID"; fi; \
+	    echo "==> Stopped."; \
+	  else \
+	    echo "==> Not running (stale PID file removed)."; \
+	  fi; rm -f .doogle.pid; \
+	else \
+	  echo "==> Not running."; \
+	fi
 	@killall $(BINARY) 2>/dev/null || true
 	@docker compose down 2>/dev/null || true
-	@echo "Stopped."
 
 status:
 	@if [ -f .doogle.pid ]; then \
@@ -163,13 +172,18 @@ status:
 	fi
 
 clean: stop
-	rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log data/
+	@echo "==> Removing build artifacts and crawl data..."
+	@rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log data/
+	@echo "==> Clean complete."
 
 nuke: clean
-	@echo "WARNING: This will also DELETE the local Go runtime."
+	@echo ""
+	@echo "WARNING: This will also DELETE the local Go runtime (.go/)."
+	@echo "You will need to run 'make setup' again."
 	@echo "Press Ctrl+C within 5 seconds to abort."
 	@sleep 5
-	rm -rf .go/
+	@rm -rf .go/
+	@echo "==> Nuke complete. Run 'make setup' to reinstall."
 
 release:
 	@echo "==> Cross-compiling $(VERSION) for all platforms..."
