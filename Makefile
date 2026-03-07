@@ -213,6 +213,7 @@ release:
 	GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-darwin-arm64  ./cmd/doogle
 	GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-linux-amd64   ./cmd/doogle
 	GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-linux-arm64   ./cmd/doogle
+	GOOS=android GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(DIST_DIR)/$(BINARY)-android-arm64 ./cmd/doogle
 	@echo "==> Binaries:"
 	@ls -lh $(DIST_DIR)/
 
