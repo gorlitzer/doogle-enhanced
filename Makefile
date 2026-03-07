@@ -1,4 +1,4 @@
-.PHONY: help setup build run run-only upgrade test dev stop stop-quiet status clean nuke release checksums patch minor major
+.PHONY: help setup build run run-only upgrade test dev stop stop-quiet status clean nuke release checksums patch minor major geoip
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -25,6 +25,7 @@ help:
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make status             Check if the node is running"
 	@echo "    make test               Run all tests"
+	@echo "    make geoip             Download GeoLite2-Country database for peer geolocation"
 	@echo "    make clean              Stop node + remove build artifacts + crawl data"
 	@echo "    make nuke               Clean + delete local Go runtime"
 	@echo "    make release            Cross-compile binaries for all platforms to dist/"
@@ -198,6 +199,12 @@ nuke: clean
 	@sleep 5
 	@rm -rf .go/
 	@echo "==> Nuke complete. Run 'make setup' to reinstall."
+
+geoip:
+	@mkdir -p data
+	@echo "==> Downloading GeoLite2-Country database..."
+	@curl -sL "https://git.io/GeoLite2-Country.mmdb" -o data/GeoLite2-Country.mmdb
+	@echo "==> GeoLite2-Country.mmdb downloaded to data/"
 
 release:
 	@echo "==> Cross-compiling $(VERSION) for all platforms..."

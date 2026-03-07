@@ -86,6 +86,60 @@ func TestShardCatalog_JSON(t *testing.T) {
 	}
 }
 
+func TestShardCatalog_CountryField(t *testing.T) {
+	catalog := ShardCatalog{
+		PeerID:   "QmTestPeer",
+		NodeName: "TestNode",
+		Country:  "DE",
+		DocCount: 42,
+	}
+
+	data, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded ShardCatalog
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Country != "DE" {
+		t.Fatalf("expected country DE, got %q", decoded.Country)
+	}
+}
+
+func TestShardCatalog_CountryOmitEmpty(t *testing.T) {
+	catalog := ShardCatalog{
+		PeerID:   "QmTestPeer",
+		DocCount: 10,
+	}
+
+	data, err := json.Marshal(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Country should be omitted when empty
+	raw := string(data)
+	if contains(raw, `"country"`) {
+		t.Fatalf("expected country to be omitted, got: %s", raw)
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && searchString(s, sub)
+}
+
+func searchString(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 // ---- ReplicateRequest serialization tests ----
 
 func TestReplicateRequest_JSON(t *testing.T) {

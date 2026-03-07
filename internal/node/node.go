@@ -22,6 +22,7 @@ import (
 	"github.com/doogle/doogle-v2/internal/api"
 	"github.com/doogle/doogle-v2/internal/crawler"
 	"github.com/doogle/doogle-v2/internal/fleet"
+	"github.com/doogle/doogle-v2/internal/geo"
 	"github.com/doogle/doogle-v2/internal/index"
 	"github.com/doogle/doogle-v2/internal/indexer"
 	"github.com/doogle/doogle-v2/internal/models"
@@ -96,6 +97,12 @@ type Node struct {
 	peerRelayInfo   map[string]relayInfo
 	peerRelayInfoMu sync.RWMutex
 
+	// Peer geolocation (GeoIP)
+	geoService  *geo.Service
+	peerGeo     map[string]string // peer ID → country code (ISO alpha-2)
+	peerGeoMu   sync.RWMutex
+	selfCountry string
+
 	// Crawl coordination counters
 	forwardedTasks atomic.Int64
 	receivedTasks  atomic.Int64
@@ -109,6 +116,7 @@ type Node struct {
 type relayInfo struct {
 	PeerID        string
 	NodeName      string
+	Country       string
 	DocCount      int
 	QueriesServed int64
 	LastSeen      time.Time
@@ -146,6 +154,7 @@ func New(cfg *Config) (*Node, error) {
 		cfg:           cfg,
 		peerNames:     make(map[string]string),
 		peerRelayInfo: make(map[string]relayInfo),
+		peerGeo:       make(map[string]string),
 		startedAt:     time.Now(),
 		ctx:           ctx,
 		cancel:        cancel,
@@ -214,12 +223,33 @@ func (n *Node) init() error {
 			slog.Debug("shard ring: added Doogle peer", "peer", pidStr[:12], "total", n.shards.NodeCount())
 			// Send our catalog directly so the peer learns our name immediately.
 			go n.sendCatalogToPeer(pid)
+			// Geolocate the peer from their multiaddrs (first-seen semantics).
+			if n.geoService != nil {
+				go func() {
+					if n.PeerGeo(pidStr) != "" {
+						return
+					}
+					addrs := h.Peerstore().Addrs(pid)
+					if country := n.geoService.CountryFromAddrs(addrs); country != "" {
+						n.setPeerGeo(pidStr, country)
+						slog.Debug("geo: peer geolocated", "peer", pidStr[:12], "country", country)
+					}
+				}()
+			}
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("discovery: %w", err)
 	}
 	n.discovery = disc
+
+	// 4a. Detect this node's country from its public addresses.
+	if n.geoService != nil {
+		n.selfCountry = n.geoService.SelfCountry(n.host)
+		if n.selfCountry != "" {
+			slog.Info("geo: detected node country", "country", n.selfCountry)
+		}
+	}
 
 	// 4. GossipSub (URL frontier + shard catalog)
 	gossip, err := p2p.NewGossip(n.ctx, h)
@@ -236,8 +266,18 @@ func (n *Node) init() error {
 	}
 	n.badger = bs
 
-	// 5-restore. Restore persisted peer names from previous runs.
+	// 5-restore. Restore persisted peer names and geo from previous runs.
 	n.loadPeerNames()
+	n.loadPeerGeo()
+
+	// 5-geo. Load GeoLite2 database for peer geolocation.
+	geoDBPath := filepath.Join(dataDir, "GeoLite2-Country.mmdb")
+	if geoSvc, err := geo.Open(geoDBPath); err == nil {
+		n.geoService = geoSvc
+		slog.Info("geo: loaded GeoLite2 database", "path", geoDBPath)
+	} else {
+		slog.Warn("geo: GeoLite2 database not found — peer geolocation disabled", "path", geoDBPath)
+	}
 
 	// 5a. Foundation stores (crawl-only — skip for light nodes)
 	isLight := n.cfg.LightNode
@@ -821,6 +861,11 @@ func (n *Node) Shutdown() {
 	// 9. close Bleve index
 	n.bleveIdx.Close()
 
+	// 9a. close GeoIP service
+	if n.geoService != nil {
+		n.geoService.Close()
+	}
+
 	// 10. close BadgerDB last (all other stores depend on it)
 	n.badger.Close()
 
@@ -852,6 +897,9 @@ func (n *Node) ShutdownForRestart() {
 	n.discovery.Close()
 	n.host.Close()
 	n.bleveIdx.Close()
+	if n.geoService != nil {
+		n.geoService.Close()
+	}
 	n.badger.Close()
 
 	slog.Info("node: shutdown for restart complete")
@@ -889,6 +937,7 @@ func (n *Node) Status() *models.NodeStatus {
 	status := &models.NodeStatus{
 		PeerID:         n.peerID.String(),
 		NodeName:       n.cfg.NodeName,
+		Country:        n.selfCountry,
 		NodeType:       nodeType,
 		Version:        n.cfg.Version,
 		Commit:         n.cfg.Commit,
@@ -1067,11 +1116,13 @@ func (n *Node) Leaderboard() (*models.LeaderboardResponse, error) {
 			IsLocal:  peerID == selfID,
 		}
 
-		// Node name
+		// Node name + country
 		if peerID == selfID {
 			es.NodeName = n.cfg.NodeName
+			es.Country = n.selfCountry
 		} else {
 			es.NodeName = n.PeerName(peerID)
+			es.Country = n.PeerGeo(peerID)
 		}
 
 		// Domain count
@@ -1126,6 +1177,7 @@ func (n *Node) RelayLeaderboard() (*models.RelayLeaderboardResponse, error) {
 		rs := models.RelayStats{
 			PeerID:         selfID,
 			NodeName:       n.cfg.NodeName,
+			Country:        n.selfCountry,
 			DocsHosted:     int(docCount),
 			QueriesServed:  n.queriesServed.Load(),
 			Uptime:         time.Since(n.startedAt).Round(time.Second).String(),
@@ -1152,6 +1204,7 @@ func (n *Node) RelayLeaderboard() (*models.RelayLeaderboardResponse, error) {
 		rs := models.RelayStats{
 			PeerID:        ri.PeerID,
 			NodeName:      ri.NodeName,
+			Country:       n.PeerGeo(ri.PeerID),
 			DocsHosted:    ri.DocCount,
 			QueriesServed: ri.QueriesServed,
 			LastSeen:      ri.LastSeen,
@@ -1246,6 +1299,7 @@ func (n *Node) PeersInfo() []models.PeerInfo {
 		result = append(result, models.PeerInfo{
 			PeerID:   pidStr,
 			NodeName: n.PeerName(pidStr),
+			Country:  n.PeerGeo(pidStr),
 			Addrs:    addrStrs,
 		})
 	}
@@ -1293,6 +1347,46 @@ func (n *Node) loadPeerNames() {
 	})
 }
 
+const peerGeoPrefix = "geo:"
+
+// setPeerGeo stores a peer's country in memory and persists it to BadgerDB.
+func (n *Node) setPeerGeo(peerID, country string) {
+	n.peerGeoMu.Lock()
+	n.peerGeo[peerID] = country
+	n.peerGeoMu.Unlock()
+	_ = n.badger.Set([]byte(peerGeoPrefix+peerID), []byte(country))
+}
+
+// PeerGeo returns the country code for a peer, or empty if unknown.
+func (n *Node) PeerGeo(id string) string {
+	n.peerGeoMu.RLock()
+	defer n.peerGeoMu.RUnlock()
+	return n.peerGeo[id]
+}
+
+// loadPeerGeo restores all persisted peer geo from BadgerDB into memory.
+func (n *Node) loadPeerGeo() {
+	prefix := []byte(peerGeoPrefix)
+	_ = n.badger.DB().View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := string(it.Item().Key())
+			peerID := key[len(peerGeoPrefix):]
+			_ = it.Item().Value(func(val []byte) error {
+				n.peerGeoMu.Lock()
+				n.peerGeo[peerID] = string(val)
+				n.peerGeoMu.Unlock()
+				return nil
+			})
+		}
+		return nil
+	})
+}
+
 // sendCatalogToPeer sends our shard catalog (including node name) directly
 // to a peer via the /doogle/shard/1.0.0 stream protocol. This bypasses
 // GossipSub so the remote peer learns our name immediately on connection.
@@ -1304,6 +1398,7 @@ func (n *Node) sendCatalogToPeer(pid peer.ID) {
 	catalog := &p2p.ShardCatalog{
 		PeerID:     n.peerID.String(),
 		NodeName:   n.cfg.NodeName,
+		Country:    n.selfCountry,
 		DocCount:   docCount,
 		Generation: n.genStore.Current(),
 	}
@@ -1615,12 +1710,17 @@ func (n *Node) shardCatalogLoop() {
 		if catalog.NodeName != "" {
 			n.setPeerName(catalog.PeerID, catalog.NodeName)
 		}
+		// Accept self-reported country if we haven't geolocated from IP yet.
+		if catalog.Country != "" && n.PeerGeo(catalog.PeerID) == "" {
+			n.setPeerGeo(catalog.PeerID, catalog.Country)
+		}
 		// Track relay info for light nodes
 		if catalog.NodeType == "light" {
 			n.peerRelayInfoMu.Lock()
 			n.peerRelayInfo[catalog.PeerID] = relayInfo{
 				PeerID:        catalog.PeerID,
 				NodeName:      catalog.NodeName,
+				Country:       catalog.Country,
 				DocCount:      int(catalog.DocCount),
 				QueriesServed: catalog.QueriesServed,
 				LastSeen:      time.Now(),
@@ -1666,6 +1766,7 @@ func (n *Node) publishShardCatalog() {
 		PeerID:        n.peerID.String(),
 		NodeName:      n.cfg.NodeName,
 		NodeType:      nodeType,
+		Country:       n.selfCountry,
 		DocCount:      docCount,
 		Generation:    n.genStore.Current(),
 		QueriesServed: n.queriesServed.Load(),
@@ -1700,12 +1801,17 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 	if catalog.NodeName != "" {
 		n.setPeerName(catalog.PeerID, catalog.NodeName)
 	}
+	// Accept self-reported country if we haven't geolocated from IP yet.
+	if catalog.Country != "" && n.PeerGeo(catalog.PeerID) == "" {
+		n.setPeerGeo(catalog.PeerID, catalog.Country)
+	}
 	// Track relay info for light nodes
 	if catalog.NodeType == "light" {
 		n.peerRelayInfoMu.Lock()
 		n.peerRelayInfo[catalog.PeerID] = relayInfo{
 			PeerID:        catalog.PeerID,
 			NodeName:      catalog.NodeName,
+			Country:       catalog.Country,
 			DocCount:      int(catalog.DocCount),
 			QueriesServed: catalog.QueriesServed,
 			LastSeen:      time.Now(),

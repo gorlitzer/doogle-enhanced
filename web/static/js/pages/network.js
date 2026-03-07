@@ -1,7 +1,7 @@
 // Doogle v2 — P2P Network with interactive graph visualization
 import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
-import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba } from '../components.js';
+import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba, countryBadge } from '../components.js';
 
 let graph = null;
 
@@ -164,6 +164,7 @@ async function loadNetwork() {
                     const id = typeof p === 'string' ? p : p.peer_id;
                     const addrs = typeof p === 'string' ? [] : (p.addrs || []);
                     const name = typeof p === 'string' ? '' : (p.node_name || '');
+                    const country = typeof p === 'string' ? '' : (p.country || '');
                     const rep = trustMap.get(id);
                     const trustScore = rep ? rep.trust_score : null;
                     const qCount = rep ? (rep.quarantine_count || 0) : 0;
@@ -171,7 +172,7 @@ async function loadNetwork() {
                     const tierColors = { trusted: 'green', warning: 'amber', throttled: 'amber', quarantined: 'red', excommunicado: 'purple', new: 'default' };
                     return `
                       <tr>
-                        <td>${escapeHtml(name || 'Anonymous Node')}</td>
+                        <td>${escapeHtml(name || 'Anonymous Node')} ${countryBadge(country)}</td>
                         <td class="mono" style="font-size:0.8em">${escapeHtml(id).slice(0, 24)}...</td>
                         <td>
                           ${trustScore !== null

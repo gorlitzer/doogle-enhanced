@@ -2,7 +2,7 @@
 // Toggle between Spotlight gauge columns and Architecture flow diagram
 import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
-import { icon, getCSS, escapeHtml, renderLineChart } from '../components.js';
+import { icon, getCSS, escapeHtml, renderLineChart, countryBadge } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
 import { isLiteMode } from '../lite-mode.js';
 
@@ -421,9 +421,11 @@ function renderDashboard(status, crawler, indexer, storage) {
     ? '<span class="sl-fleet-badge" style="background:var(--accent);color:var(--bg)">Light Node</span>'
     : '<span class="sl-fleet-badge" style="opacity:0.6">Full Node</span>';
 
+  const countryBadgeHtml = countryBadge(s.country, { size: '1em' });
   const card1 = cardWrap('Node Identity', 'green', `
     <div class="sl-body-row" style="flex-wrap:wrap;gap:8px">
       <span class="sl-node-name">${escapeHtml(nodeName)}</span>
+      ${countryBadgeHtml}
       <span class="sl-version-badge">v${escapeHtml(version)}</span>
       ${nodeTypeBadge}
       ${fleetBadge}

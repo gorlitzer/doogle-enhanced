@@ -12,7 +12,9 @@ require (
 	github.com/libp2p/go-libp2p v0.38.2
 	github.com/libp2p/go-libp2p-kad-dht v0.28.2
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
+	github.com/lmittmann/tint v1.1.3
 	github.com/multiformats/go-multiaddr v0.14.0
+	github.com/oschwald/maxminddb-golang v1.13.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -95,7 +97,6 @@ require (
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
 	github.com/libp2p/go-yamux/v4 v4.0.1 // indirect
 	github.com/libp2p/zeroconf/v2 v2.2.0 // indirect
-	github.com/lmittmann/tint v1.1.3 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.62 // indirect

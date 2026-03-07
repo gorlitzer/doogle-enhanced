@@ -1,7 +1,7 @@
 // Doogle v2 — WebExplorers Leaderboard (Visual Redesign)
 import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
-import { icon, getCSS, hexToRgba, escapeHtml } from '../components.js';
+import { icon, getCSS, hexToRgba, escapeHtml, countryBadge } from '../components.js';
 import { formatNum } from '../spotlight.js';
 
 /* ── State ── */
@@ -338,7 +338,7 @@ function renderPodium(explorers, localPeerID) {
     return `
       <div class="lb-podium-card ${m.cls}${localCls}" ${delay}>
         <div class="lb-medal ${m.sizeCls}" ${medalDelay}>${m.label}</div>
-        <div class="lb-name">${escapeHtml(name)}</div>
+        <div class="lb-name">${escapeHtml(name)} ${countryBadge(e.country)}</div>
         ${isLocal ? '<span class="lb-you-badge">YOU</span>' : ''}
         <div class="lb-ring-wrap">${ring}</div>
         <div class="lb-doc-count${goldCountCls}" data-target="${e.doc_count}">0</div>
@@ -374,7 +374,7 @@ function renderTable(explorers, localPeerID) {
       <tr class="lb-row-anim${localCls}" ${delay}>
         <td><span class="lb-rank-badge">${rank}</span></td>
         <td>
-          ${escapeHtml(name)}
+          ${escapeHtml(name)} ${countryBadge(e.country)}
           ${isLocal ? ' <span class="lb-you-badge lb-you-badge-sm">YOU</span>' : ''}
         </td>
         <td>
@@ -515,7 +515,7 @@ async function loadRelayLeaderboard() {
         <tr class="lb-row-anim${localCls}">
           <td><span class="lb-rank-badge">${rank}</span></td>
           <td>
-            ${escapeHtml(name)}
+            ${escapeHtml(name)} ${countryBadge(r.country)}
             ${isLocal ? ' <span class="lb-you-badge lb-you-badge-sm">YOU</span>' : ''}
           </td>
           <td>${(r.docs_hosted || 0).toLocaleString()}</td>

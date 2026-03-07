@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -121,6 +124,23 @@ func runSetup(args []string) {
 		}
 	}
 
+	// 8. GeoIP database download
+	geoDBPath := filepath.Join(*dataDir, "GeoLite2-Country.mmdb")
+	if _, err := os.Stat(geoDBPath); os.IsNotExist(err) {
+		fmt.Print("Download GeoIP database for peer geolocation? [Y/n]: ")
+		geoAnswer := readLine(reader)
+		if geoAnswer == "" || strings.HasPrefix(strings.ToLower(geoAnswer), "y") {
+			fmt.Print("  Downloading GeoLite2-Country.mmdb... ")
+			if err := downloadGeoIPDB(geoDBPath); err != nil {
+				fmt.Printf("failed: %v\n", err)
+			} else {
+				fmt.Println("done.")
+			}
+		}
+	} else {
+		fmt.Println("GeoIP database already present.")
+	}
+
 	// Save node name
 	if err := node.SaveNodeName(*dataDir, name); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save node name: %v\n", err)
@@ -178,4 +198,31 @@ func runSetup(args []string) {
 func readLine(reader *bufio.Reader) string {
 	line, _ := reader.ReadString('\n')
 	return strings.TrimSpace(line)
+}
+
+const geoIPDownloadURL = "https://git.io/GeoLite2-Country.mmdb"
+
+func downloadGeoIPDB(destPath string) error {
+	return downloadGeoIPDBFrom(geoIPDownloadURL, destPath)
+}
+
+func downloadGeoIPDBFrom(url, destPath string) error {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		return err
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	f, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, resp.Body)
+	return err
 }

@@ -128,6 +128,7 @@ type TrendsResponse struct {
 type NodeStatus struct {
 	PeerID         string    `json:"peer_id"`
 	NodeName       string    `json:"node_name,omitempty"`
+	Country        string    `json:"country,omitempty"`
 	NodeType       string    `json:"node_type,omitempty"`
 	Version        string    `json:"version,omitempty"`
 	Commit         string    `json:"commit,omitempty"`
@@ -207,6 +208,7 @@ type StorageInfo struct {
 type ExplorerStats struct {
 	PeerID     string    `json:"peer_id"`
 	NodeName   string    `json:"node_name,omitempty"`
+	Country    string    `json:"country,omitempty"`
 	DocCount   int       `json:"doc_count"`
 	TrustScore float64   `json:"trust_score"`
 	IsLocal    bool      `json:"is_local"`
@@ -226,6 +228,7 @@ type LeaderboardResponse struct {
 type RelayStats struct {
 	PeerID        string    `json:"peer_id"`
 	NodeName      string    `json:"node_name,omitempty"`
+	Country       string    `json:"country,omitempty"`
 	DocsHosted    int       `json:"docs_hosted"`
 	QueriesServed int64     `json:"queries_served"`
 	Uptime        string    `json:"uptime,omitempty"`
@@ -262,5 +265,6 @@ type DomainAssignment struct {
 type PeerInfo struct {
 	PeerID   string   `json:"peer_id"`
 	NodeName string   `json:"node_name,omitempty"`
+	Country  string   `json:"country,omitempty"`
 	Addrs    []string `json:"addrs"`
 }

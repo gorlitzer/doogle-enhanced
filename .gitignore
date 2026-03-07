@@ -13,6 +13,7 @@ vendor/
 data/
 *.db
 *.bolt
+*.mmdb
 
 # IDE
 .vscode/
