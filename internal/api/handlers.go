@@ -72,11 +72,17 @@ type Deps struct {
 	SysInfoFn        func() interface{}
 	SetLowResourceFn func(enabled bool) error
 
+	// Graceful restart (update + re-exec)
+	RestartFn func()
+
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
 	FleetGetNode  func(peerID string) *fleet.FleetNode
 	FleetProxy    func(ctx context.Context, peerID, method, path, query string, headers map[string]string, body []byte) (*p2p.ProxyResponseHeader, []byte, error)
 	FleetAPIToken string
+
+	// Fleet upgrade orchestration (coordinator only)
+	FleetUpgrade func(ctx context.Context, peerIDs []string, progressFn func(FleetUpgradeEvent)) error
 }
 
 // SearchHandler handles GET /api/search?q=...&page=...&size=...
@@ -1038,6 +1044,53 @@ func SetLowResourceHandler(deps *Deps) http.HandlerFunc {
 		} else {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 		}
+	}
+}
+
+// FleetUpgradeEvent is a progress event emitted during fleet-wide upgrades.
+type FleetUpgradeEvent struct {
+	PeerID    string `json:"peer_id,omitempty"`
+	PeerName  string `json:"peer_name,omitempty"`
+	Step      string `json:"step"`
+	Message   string `json:"message"`
+	Version   string `json:"version,omitempty"`
+	WorkerNum int    `json:"worker_num,omitempty"`
+	Total     int    `json:"total,omitempty"`
+}
+
+// UpdateAndRestartHandler handles POST /api/admin/update-restart.
+// It applies the update, writes the response, flushes, then schedules a restart.
+func UpdateAndRestartHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.RestartFn == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "restart not supported"})
+			return
+		}
+
+		current := deps.VersionInfo.Version
+		newVersion, err := updater.ApplyUpdate(current)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status":      "updated",
+			"old_version": current,
+			"new_version": newVersion,
+			"restarting":  true,
+		})
+
+		// Flush the response before restarting.
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+
+		// Schedule restart after a brief delay so the HTTP response is delivered.
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			deps.RestartFn()
+		}()
 	}
 }
 

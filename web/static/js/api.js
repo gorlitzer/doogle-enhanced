@@ -164,4 +164,7 @@ export const api = {
   setLowResource(enabled) {
     return postJSON('/api/admin/low-resource', { enabled });
   },
+  applyUpdateRestart() {
+    return postJSON('/api/admin/update-restart', {});
+  },
 };

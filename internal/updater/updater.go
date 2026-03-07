@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 )
 
 const (
@@ -32,27 +33,35 @@ type GHAsset struct {
 	URL  string `json:"url"`
 }
 
-// ResolveToken checks GITHUB_TOKEN env, then ~/.doogle/token file.
+// ResolveToken checks GITHUB_TOKEN env, ~/.doogle/token file, then gh CLI auth.
 func ResolveToken() (string, error) {
+	// 1. Environment variable
 	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
 		return strings.TrimSpace(t), nil
 	}
 
+	// 2. Token file
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	if err == nil {
+		tokenPath := filepath.Join(home, ".doogle", "token")
+		data, err := os.ReadFile(tokenPath)
+		if err == nil {
+			t := strings.TrimSpace(string(data))
+			if t != "" {
+				return t, nil
+			}
+		}
 	}
 
-	tokenPath := filepath.Join(home, ".doogle", "token")
-	data, err := os.ReadFile(tokenPath)
-	if err == nil {
-		t := strings.TrimSpace(string(data))
+	// 3. gh CLI (if installed and authenticated)
+	if out, err := exec.Command("gh", "auth", "token").Output(); err == nil {
+		t := strings.TrimSpace(string(out))
 		if t != "" {
 			return t, nil
 		}
 	}
 
-	return "", fmt.Errorf("no GitHub token found\n\nSet one of:\n  export GITHUB_TOKEN=ghp_...\n  echo 'ghp_...' > ~/.doogle/token")
+	return "", fmt.Errorf("no GitHub token found\n\nSet one of:\n  export GITHUB_TOKEN=ghp_...\n  echo 'ghp_...' > ~/.doogle/token\n  gh auth login")
 }
 
 // FetchLatestRelease gets the latest release from the GitHub API.
@@ -195,6 +204,21 @@ func crossDeviceReplace(newPath, oldPath string) error {
 	src.Close()
 	os.Remove(newPath)
 	return nil
+}
+
+// SelfRestart re-executes the current binary with the same arguments.
+// It resolves symlinks to find the real path, then calls syscall.Exec
+// which replaces the current process (does not return on success).
+func SelfRestart() error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot determine executable: %w", err)
+	}
+	execPath, err = filepath.EvalSymlinks(execPath)
+	if err != nil {
+		return fmt.Errorf("cannot resolve executable: %w", err)
+	}
+	return syscall.Exec(execPath, os.Args, os.Environ())
 }
 
 // ApplyUpdate runs the full update pipeline: fetch → find → download → verify → replace.
