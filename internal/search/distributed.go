@@ -79,6 +79,8 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		if localResp.Results[i].PeerName == "" && ds.LocalID != "" {
 			localResp.Results[i].PeerName = ds.LocalID[:min(12, len(ds.LocalID))] + "..."
 		}
+		// Resolve origin peer name
+		localResp.Results[i].OriginPeerName = ds.resolveOriginName(localResp.Results[i].OriginPeerID)
 	}
 
 	// Always re-rank local results with quality signals
@@ -120,6 +122,8 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 				if resp.Results[i].PeerName == "" {
 					resp.Results[i].PeerName = peerID.String()[:min(12, len(peerID.String()))] + "..."
 				}
+				// Resolve origin peer name
+				resp.Results[i].OriginPeerName = ds.resolveOriginName(resp.Results[i].OriginPeerID)
 			}
 			mu.Lock()
 			allResults = append(allResults, resp.Results...)
@@ -183,6 +187,22 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 	}
 
 	return resp, nil
+}
+
+// resolveOriginName resolves an origin peer ID to a human-readable name.
+func (ds *DistributedSearch) resolveOriginName(originPeerID string) string {
+	if originPeerID == "" {
+		return ds.LocalName
+	}
+	if originPeerID == ds.LocalID {
+		return ds.LocalName
+	}
+	if ds.PeerNameFn != nil {
+		if name := ds.PeerNameFn(originPeerID); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // selectTargetPeers determines which peers to query based on the search request.
