@@ -7,6 +7,7 @@
 //   pride    — rainbow particle fountain with wind interaction
 
 import { animateElement } from '../logo-animation.js';
+import { isLiteMode } from '../lite-mode.js';
 
 // ── Helpers ──────────────────────────────────────
 const isMobile = () => window.innerWidth < 768;
@@ -36,41 +37,74 @@ export function renderHome(container) {
   `;
 
   const canvas = document.getElementById('home-canvas');
-  const ctx = canvas.getContext('2d');
-  const mouse = { x: -1000, y: -1000, down: false, clickX: -1000, clickY: -1000, clickTime: 0 };
+  let cleanups = [];
   let animId = null;
   let currentAnimation = null;
-  let cleanups = [];
 
-  // ── Canvas resize ──────────────────────────────
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  // Lite mode: skip all canvas animations
+  const liteMode = isLiteMode();
+  if (liteMode) {
+    canvas.style.display = 'none';
   }
-  resize();
-  window.addEventListener('resize', resize);
-  cleanups.push(() => window.removeEventListener('resize', resize));
 
-  // ── Mouse / touch tracking ─────────────────────
-  function onMouseMove(e) { mouse.x = e.clientX; mouse.y = e.clientY; }
-  function onTouchMove(e) {
-    if (e.touches.length > 0) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }
+  if (!liteMode) {
+    const ctx = canvas.getContext('2d');
+    const mouse = { x: -1000, y: -1000, down: false, clickX: -1000, clickY: -1000, clickTime: 0 };
+
+    // ── Canvas resize ──────────────────────────────
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    cleanups.push(() => window.removeEventListener('resize', resize));
+
+    // ── Mouse / touch tracking ─────────────────────
+    function onMouseMove(e) { mouse.x = e.clientX; mouse.y = e.clientY; }
+    function onTouchMove(e) {
+      if (e.touches.length > 0) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; }
+    }
+    function onClick(e) {
+      mouse.clickX = e.clientX ?? e.touches?.[0]?.clientX ?? mouse.x;
+      mouse.clickY = e.clientY ?? e.touches?.[0]?.clientY ?? mouse.y;
+      mouse.clickTime = performance.now();
+    }
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('click', onClick);
+    canvas.addEventListener('touchend', onClick);
+    cleanups.push(() => {
+      canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('touchend', onClick);
+    });
+
+    // ── Start animation for current theme ──────────
+    function startAnim(theme) {
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      if (currentAnimation && currentAnimation.cleanup) currentAnimation.cleanup();
+      currentAnimation = null;
+
+      switch (theme) {
+        case 'dracula': currentAnimation = draculaSwarm(ctx, canvas, mouse, (id) => { animId = id; }); break;
+        case 'storm':   currentAnimation = stormFront(ctx, canvas, mouse, (id) => { animId = id; }); break;
+        case 'crt':     currentAnimation = crtDecode(ctx, canvas, mouse, (id) => { animId = id; }); break;
+        case 'modern':  currentAnimation = modernPolygons(ctx, canvas, mouse, (id) => { animId = id; }); break;
+        case 'light':   currentAnimation = lightFireflies(ctx, canvas, mouse, (id) => { animId = id; }); break;
+        case 'pride':   currentAnimation = prideFountain(ctx, canvas, mouse, (id) => { animId = id; }); break;
+        default:        currentAnimation = draculaSwarm(ctx, canvas, mouse, (id) => { animId = id; }); break;
+      }
+    }
+
+    function onThemeChange(e) { startAnim(e.detail.theme); }
+    window.addEventListener('themechange', onThemeChange);
+    cleanups.push(() => window.removeEventListener('themechange', onThemeChange));
+
+    // Start animation
+    startAnim(getTheme());
   }
-  function onClick(e) {
-    mouse.clickX = e.clientX ?? e.touches?.[0]?.clientX ?? mouse.x;
-    mouse.clickY = e.clientY ?? e.touches?.[0]?.clientY ?? mouse.y;
-    mouse.clickTime = performance.now();
-  }
-  canvas.addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('touchmove', onTouchMove, { passive: true });
-  canvas.addEventListener('click', onClick);
-  canvas.addEventListener('touchend', onClick);
-  cleanups.push(() => {
-    canvas.removeEventListener('mousemove', onMouseMove);
-    canvas.removeEventListener('touchmove', onTouchMove);
-    canvas.removeEventListener('click', onClick);
-    canvas.removeEventListener('touchend', onClick);
-  });
 
   // ── Keyboard: Enter/Space → search ─────────────
   function onKeyDown(e) {
@@ -83,30 +117,6 @@ export function renderHome(container) {
   }
   document.addEventListener('keydown', onKeyDown);
   cleanups.push(() => document.removeEventListener('keydown', onKeyDown));
-
-  // ── Start animation for current theme ──────────
-  function startAnim(theme) {
-    if (animId) { cancelAnimationFrame(animId); animId = null; }
-    if (currentAnimation && currentAnimation.cleanup) currentAnimation.cleanup();
-    currentAnimation = null;
-
-    switch (theme) {
-      case 'dracula': currentAnimation = draculaSwarm(ctx, canvas, mouse, (id) => { animId = id; }); break;
-      case 'storm':   currentAnimation = stormFront(ctx, canvas, mouse, (id) => { animId = id; }); break;
-      case 'crt':     currentAnimation = crtDecode(ctx, canvas, mouse, (id) => { animId = id; }); break;
-      case 'modern':  currentAnimation = modernPolygons(ctx, canvas, mouse, (id) => { animId = id; }); break;
-      case 'light':   currentAnimation = lightFireflies(ctx, canvas, mouse, (id) => { animId = id; }); break;
-      case 'pride':   currentAnimation = prideFountain(ctx, canvas, mouse, (id) => { animId = id; }); break;
-      default:        currentAnimation = draculaSwarm(ctx, canvas, mouse, (id) => { animId = id; }); break;
-    }
-  }
-
-  function onThemeChange(e) { startAnim(e.detail.theme); }
-  window.addEventListener('themechange', onThemeChange);
-  cleanups.push(() => window.removeEventListener('themechange', onThemeChange));
-
-  // ── Entrance choreography ──────────────────────
-  startAnim(getTheme());
 
   // Title animation at 300ms
   const titleEl = document.getElementById('home-title');

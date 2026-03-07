@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -85,6 +86,9 @@ type Node struct {
 	peerNames   map[string]string // peer ID → node name
 	peerNamesMu sync.RWMutex
 
+	// Resource limit enforcement
+	crawlerPausedForLimits atomic.Bool
+
 	// Crawl coordination counters
 	forwardedTasks atomic.Int64
 	receivedTasks  atomic.Int64
@@ -96,6 +100,16 @@ type Node struct {
 
 // New creates and initializes a Doogle node.
 func New(cfg *Config) (*Node, error) {
+	// Check for persisted low-resource setting
+	if saved := LoadLowResource(cfg.Storage.DataDir); saved {
+		cfg.LowResource = true
+	}
+
+	if cfg.LowResource {
+		ApplyLowResourceDefaults(cfg)
+		slog.Info("node: running in low-resource (Eco) mode")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	n := &Node{
@@ -131,6 +145,17 @@ func (n *Node) init() error {
 			n.cfg.NodeName = saved
 			slog.Info("node: restored name", "name", saved)
 		}
+	}
+
+	// 1c. Restore persisted resource limits
+	if saved := LoadLimits(dataDir); saved != nil {
+		n.cfg.Storage.MaxStorageBytes = saved.MaxStorageBytes
+		n.cfg.Storage.MaxDocuments = saved.MaxDocuments
+		n.cfg.Storage.MaxQueueSize = saved.MaxQueueSize
+		slog.Info("node: restored resource limits",
+			"max_storage", saved.MaxStorageBytes,
+			"max_docs", saved.MaxDocuments,
+			"max_queue", saved.MaxQueueSize)
 	}
 
 	// 2. libp2p host
@@ -174,7 +199,7 @@ func (n *Node) init() error {
 
 	// 5. Storage
 	badgerPath := filepath.Join(dataDir, n.cfg.Storage.BadgerDir)
-	bs, err := store.NewBadgerStore(badgerPath)
+	bs, err := store.NewBadgerStore(badgerPath, n.cfg.LowResource)
 	if err != nil {
 		return fmt.Errorf("badger: %w", err)
 	}
@@ -341,6 +366,9 @@ func (n *Node) init() error {
 
 	// 11. Crawler with callback
 	n.scheduler = crawler.NewScheduler(n.urlStore, 10000)
+	if n.cfg.Storage.MaxQueueSize > 0 {
+		n.scheduler.SetMaxQueueSize(n.cfg.Storage.MaxQueueSize)
+	}
 	n.crawler = crawler.New(crawler.Config{
 		Workers:           n.cfg.Crawler.Workers,
 		UserAgent:         n.cfg.Crawler.UserAgent,
@@ -351,6 +379,7 @@ func (n *Node) init() error {
 		EnableHeadless:    n.cfg.Crawler.EnableHeadless,
 		HeadlessThreshold: n.cfg.Crawler.HeadlessThreshold,
 		HeadlessTimeout:   n.cfg.Crawler.HeadlessTimeout,
+		MaxBodyBytes:      n.cfg.Crawler.MaxBodyBytes,
 		StatsStore:        n.urlStore,
 	}, n.scheduler, n.onDocumentCrawled)
 
@@ -528,9 +557,54 @@ func (n *Node) init() error {
 		}
 	}
 
+	// Resource limits deps
+	deps.GetLimitsFn = func() *api.LimitsResponse {
+		docCount, _ := n.bleveIdx.DocCount()
+		storageBytes := dirSize(n.cfg.Storage.DataDir)
+		queueSize := int64(n.scheduler.Pending())
+		return &api.LimitsResponse{
+			MaxStorageBytes: n.cfg.Storage.MaxStorageBytes,
+			MaxDocuments:    n.cfg.Storage.MaxDocuments,
+			MaxQueueSize:    n.cfg.Storage.MaxQueueSize,
+			UsedStorage:     storageBytes,
+			UsedDocuments:   int64(docCount),
+			UsedQueue:       queueSize,
+			CrawlerPaused:   n.crawler.IsPaused(),
+		}
+	}
+	deps.SetLimitsFn = func(req *api.LimitsRequest) error {
+		if req.MaxStorageBytes != nil {
+			n.cfg.Storage.MaxStorageBytes = *req.MaxStorageBytes
+		}
+		if req.MaxDocuments != nil {
+			n.cfg.Storage.MaxDocuments = *req.MaxDocuments
+		}
+		if req.MaxQueueSize != nil {
+			n.cfg.Storage.MaxQueueSize = *req.MaxQueueSize
+			n.scheduler.SetMaxQueueSize(*req.MaxQueueSize)
+		}
+		return SaveLimits(dataDir, &ResourceLimits{
+			MaxStorageBytes: n.cfg.Storage.MaxStorageBytes,
+			MaxDocuments:    n.cfg.Storage.MaxDocuments,
+			MaxQueueSize:    n.cfg.Storage.MaxQueueSize,
+		})
+	}
+
 	deps.VersionInfo.Version = n.cfg.Version
 	deps.VersionInfo.Commit = n.cfg.Commit
 	deps.VersionInfo.BuildDate = n.cfg.BuildDate
+
+	// System info + low-resource mode
+	deps.SysInfoFn = func() interface{} {
+		return DetectSystemResources(dataDir, n.cfg.LowResource)
+	}
+	deps.SetLowResourceFn = func(enabled bool) error {
+		// Persist setting — runtime config changes (BadgerDB caches, intervals)
+		// require a restart. Crawler settings take effect on next restart.
+		n.cfg.LowResource = enabled
+		slog.Info("low-resource (Eco) mode toggled via API", "enabled", enabled)
+		return SaveLowResource(dataDir, enabled)
+	}
 
 	// Wire fleet deps if coordinator.
 	if n.coordinator != nil {
@@ -566,8 +640,12 @@ func (n *Node) Run() error {
 	n.trustManager.StartDecayLoop(n.ctx)
 
 	// Start quarantine resolution loop (checks every 5 min for expired voting windows)
+	quarantineInterval := 5 * time.Minute
+	if n.cfg.LowResource {
+		quarantineInterval = 15 * time.Minute
+	}
 	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
+		ticker := time.NewTicker(quarantineInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -763,6 +841,59 @@ func (n *Node) StorageInfo() (*models.StorageInfo, error) {
 		FreeBytes:   freeSpace(dataDir),
 		DataDir:     dataDir,
 	}, nil
+}
+
+// checkResourceLimits checks all 3 resource limits including disk I/O.
+// Use in maintenance loop (runs every GCInterval).
+func (n *Node) checkResourceLimits() (exceeded bool, reason string) {
+	cfg := n.cfg.Storage
+
+	// Check document count
+	if cfg.MaxDocuments > 0 {
+		docCount, _ := n.bleveIdx.DocCount()
+		if int64(docCount) >= cfg.MaxDocuments {
+			return true, fmt.Sprintf("document limit reached (%d/%d)", docCount, cfg.MaxDocuments)
+		}
+	}
+
+	// Check queue size
+	if cfg.MaxQueueSize > 0 {
+		queueSize := int64(n.scheduler.Pending())
+		if queueSize >= cfg.MaxQueueSize {
+			return true, fmt.Sprintf("queue limit reached (%d/%d)", queueSize, cfg.MaxQueueSize)
+		}
+	}
+
+	// Check storage (disk I/O — only in maintenance loop)
+	if cfg.MaxStorageBytes > 0 {
+		totalBytes := dirSize(cfg.DataDir)
+		if totalBytes >= cfg.MaxStorageBytes {
+			return true, fmt.Sprintf("storage limit reached (%d/%d bytes)", totalBytes, cfg.MaxStorageBytes)
+		}
+	}
+
+	return false, ""
+}
+
+// checkResourceLimitsCheap checks only doc count + queue size (no disk I/O).
+// Safe to call on the hot path (per-document).
+func (n *Node) checkResourceLimitsCheap() bool {
+	cfg := n.cfg.Storage
+
+	if cfg.MaxDocuments > 0 {
+		docCount, _ := n.bleveIdx.DocCount()
+		if int64(docCount) >= cfg.MaxDocuments {
+			return true
+		}
+	}
+
+	if cfg.MaxQueueSize > 0 {
+		if int64(n.scheduler.Pending()) >= cfg.MaxQueueSize {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Leaderboard returns peer contribution rankings.
@@ -977,6 +1108,11 @@ func (n *Node) sendCatalogToPeer(pid peer.ID) {
 
 // onDocumentCrawled is called by the crawler when a page is fetched.
 func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) {
+	// Check resource limits (cheap — no disk I/O)
+	if n.checkResourceLimitsCheap() {
+		return
+	}
+
 	// Track content changes for incremental reindexing
 	if n.contentStore != nil && doc.ContentHash != "" {
 		if n.contentStore.HasChanged(doc.URL, doc.ContentHash) {
@@ -1580,12 +1716,27 @@ func (n *Node) maintenanceLoop() {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
+	if n.cfg.LowResource {
+		interval = 15 * time.Minute
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	memCheckCounter := 0
 	for {
 		select {
 		case <-ticker.C:
+			// Self-monitoring: check heap every ~4 maintenance cycles to avoid frequent STW pauses
+			memCheckCounter++
+			if memCheckCounter%4 == 0 && !n.cfg.LowResource {
+				var m runtime.MemStats
+				runtime.ReadMemStats(&m)
+				heapMB := m.HeapInuse / 1024 / 1024
+				if heapMB > 500 {
+					slog.Warn("high memory usage detected, consider --low-resource", "heap_mb", heapMB)
+				}
+			}
+
 			// BadgerDB value log GC — run in a loop to reclaim multiple vlog files per cycle
 			for {
 				if err := n.badger.RunGC(); err != nil {
@@ -1621,6 +1772,18 @@ func (n *Node) maintenanceLoop() {
 				slog.Error("maintenance: content prune error", "err", err)
 			} else if pruned > 0 {
 				slog.Info("maintenance: pruned stale content records", "count", pruned)
+			}
+
+			// Resource limit enforcement — pause/resume crawler
+			exceeded, reason := n.checkResourceLimits()
+			if exceeded && !n.crawlerPausedForLimits.Load() {
+				slog.Warn("resource limit reached, pausing crawler", "reason", reason)
+				n.crawler.Pause()
+				n.crawlerPausedForLimits.Store(true)
+			} else if !exceeded && n.crawlerPausedForLimits.Load() {
+				slog.Info("resource limits OK, resuming crawler")
+				n.crawler.Resume()
+				n.crawlerPausedForLimits.Store(false)
 			}
 		case <-n.ctx.Done():
 			return

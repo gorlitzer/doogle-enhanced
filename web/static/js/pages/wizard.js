@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
 import { icon, showModal, closeModal } from '../components.js';
 import { animateElement } from '../logo-animation.js';
+import { isLiteMode, setLiteMode } from '../lite-mode.js';
 
 let currentStep = 0;
 let cleanupDoogleAnim = null;
@@ -1541,7 +1542,7 @@ const CATEGORY_GROUPS = [
 const CATEGORIES = CATEGORY_GROUPS.flatMap(g => g.categories);
 
 function getStepLabels() {
-  return ['Welcome', 'Identity', 'Role', 'Focus', 'Settings', 'Launch'];
+  return ['Welcome', 'Identity', 'Role', 'Focus', 'Settings', 'Limits', 'Performance', 'Launch'];
 }
 
 const DEPTH_DESCRIPTIONS = [
@@ -1734,7 +1735,9 @@ function renderStep() {
     case 'Role':     renderRoleStep(body); break;
     case 'Focus':    renderFocus(body); break;
     case 'Settings': renderSettings(body); break;
-    case 'Launch':   renderLaunch(body); break;
+    case 'Limits':      renderLimitsStep(body); break;
+    case 'Performance': renderPerformanceStep(body); break;
+    case 'Launch':      renderLaunch(body); break;
   }
 }
 
@@ -1767,6 +1770,7 @@ function renderWelcome(el) {
         <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('network', 14, 'var(--accent)')} Fleet Role</span>
         <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('globe', 14, 'var(--accent)')} Topics</span>
         <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('cpu', 14, 'var(--accent)')} Settings</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('database', 14, 'var(--accent)')} Limits</span>
         <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;font-size:0.84em;color:var(--text-secondary)">${icon('zap', 14, 'var(--accent)')} Launch</span>
       </div>
 
@@ -2461,7 +2465,186 @@ function workersDesc(n) {
   return 'Maximum — heavy resource usage';
 }
 
-// ─── Step 4: Launch & Watch ───────────────────────────
+// ─── Step: Resource Limits ────────────────────────────
+let limitsState = { storage: 2, docs: 50, queue: 100 };
+
+async function renderLimitsStep(el) {
+  // Try to load current limits from API
+  try {
+    const lim = await api.limits();
+    if (lim) {
+      if (lim.max_storage_bytes > 0) limitsState.storage = lim.max_storage_bytes / (1024 * 1024 * 1024);
+      if (lim.max_documents > 0) limitsState.docs = lim.max_documents / 1000;
+      if (lim.max_queue_size > 0) limitsState.queue = lim.max_queue_size / 1000;
+    }
+  } catch { /* use defaults */ }
+
+  el.innerHTML = `
+    <div class="wizard-settings">
+      <h2>Resource Limits</h2>
+      <p class="wizard-subtitle">Set caps on how much your node stores. The crawler will automatically pause when limits are reached and resume when space frees up. Set to 0 for unlimited.</p>
+
+      <div class="wizard-setting">
+        <label>Max Storage: <strong id="limit-storage-val">${limitsState.storage} GB</strong></label>
+        <input type="range" min="0.5" max="10" step="0.5" value="${limitsState.storage}" id="wizard-limit-storage">
+        <span class="wizard-setting-desc" id="limit-storage-desc">${storageDesc(limitsState.storage)}</span>
+      </div>
+
+      <div class="wizard-setting">
+        <label>Max Documents: <strong id="limit-docs-val">${limitsState.docs}K</strong></label>
+        <input type="range" min="5" max="200" step="5" value="${limitsState.docs}" id="wizard-limit-docs">
+        <span class="wizard-setting-desc" id="limit-docs-desc">${docsDesc(limitsState.docs)}</span>
+      </div>
+
+      <div class="wizard-info-note">
+        ${icon('alertTriangle', 16)} Limits are saved immediately and persist across restarts. You can change them anytime from the Actions page.
+      </div>
+    </div>
+  `;
+
+  document.getElementById('wizard-limit-storage').addEventListener('input', e => {
+    limitsState.storage = parseFloat(e.target.value);
+    document.getElementById('limit-storage-val').textContent = limitsState.storage + ' GB';
+    document.getElementById('limit-storage-desc').textContent = storageDesc(limitsState.storage);
+  });
+
+  document.getElementById('wizard-limit-docs').addEventListener('input', e => {
+    limitsState.docs = parseInt(e.target.value);
+    document.getElementById('limit-docs-val').textContent = limitsState.docs + 'K';
+    document.getElementById('limit-docs-desc').textContent = docsDesc(limitsState.docs);
+  });
+
+  // Save limits when navigating away — deferred because renderNav() creates #wizard-next after renderStep()
+  setTimeout(() => {
+    const nextBtn = document.getElementById('wizard-next');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', async () => {
+        try {
+          await api.setLimits({
+            max_storage_bytes: Math.round(limitsState.storage * 1024 * 1024 * 1024),
+            max_documents: limitsState.docs * 1000,
+            max_queue_size: limitsState.queue * 1000,
+          });
+        } catch { /* continue anyway */ }
+      }, { once: true });
+    }
+  }, 0);
+}
+
+function storageDesc(gb) {
+  if (gb <= 1) return 'Minimal — good for testing';
+  if (gb <= 3) return 'Standard — suitable for most nodes';
+  if (gb <= 6) return 'Large — extensive crawling';
+  return 'Very large — heavy-duty node';
+}
+
+function docsDesc(k) {
+  if (k <= 10) return 'Small index — quick searches';
+  if (k <= 50) return 'Standard — good balance of coverage and speed';
+  if (k <= 100) return 'Large — broad web coverage';
+  return 'Very large — comprehensive indexing';
+}
+
+// ─── Step: Performance (Eco Mode + Lite Mode) ────────
+let perfState = { ecoMode: false, liteMode: false };
+
+async function renderPerformanceStep(el) {
+  // Fetch system info from backend
+  let sysinfo = null;
+  try {
+    sysinfo = await api.sysinfo();
+    perfState.ecoMode = sysinfo.low_resource || false;
+  } catch { /* use defaults */ }
+
+  perfState.liteMode = isLiteMode();
+
+  // Auto-check lite mode if eco mode is on
+  if (perfState.ecoMode && !perfState.liteMode) {
+    perfState.liteMode = true;
+  }
+
+  const recommended = sysinfo?.recommended === 'low-resource';
+  const cpuCores = sysinfo?.cpu_cores || '?';
+  const ramMB = sysinfo?.total_memory_mb || 0;
+  const ramLabel = ramMB >= 1024 ? (ramMB / 1024).toFixed(1) + ' GB' : ramMB + ' MB';
+  const freeMB = sysinfo?.free_space_mb || 0;
+  const freeLabel = freeMB >= 1024 ? (freeMB / 1024).toFixed(1) + ' GB' : freeMB + ' MB';
+
+  const recText = recommended
+    ? 'Your device has limited resources. We recommend <strong>Eco Mode</strong> for smooth 24/7 operation. This reduces memory usage by ~80% and keeps things lightweight.'
+    : 'Your device has plenty of resources. <strong>Standard Mode</strong> gives you the full experience with all features.';
+
+  el.innerHTML = `
+    <div class="wizard-settings">
+      <h2>Performance</h2>
+      <p class="wizard-subtitle">Optimize Doogle for your hardware.</p>
+
+      <div class="wizard-info-note" style="margin-bottom:16px">
+        ${icon('cpu', 16)} <strong>Your System:</strong> ${cpuCores} CPU cores, ${ramLabel} RAM, ${freeLabel} free disk
+      </div>
+
+      <div class="wizard-info-note" style="margin-bottom:20px">
+        ${icon('zap', 16)} ${recText}
+        ${recommended ? `<span style="display:inline-block;margin-top:4px;padding:2px 8px;border-radius:4px;background:var(--accent);color:var(--bg);font-size:0.8em;font-weight:600">Recommended: Eco Mode</span>` : ''}
+      </div>
+
+      <div class="wizard-setting" style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <label class="wizard-toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="wizard-eco-mode" ${perfState.ecoMode ? 'checked' : ''} style="accent-color:var(--accent);width:18px;height:18px">
+          <span><strong>Eco Mode</strong> — Reduce memory and CPU usage</span>
+        </label>
+      </div>
+
+      <details style="margin-bottom:20px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;color:var(--text-secondary);font-size:0.88em">
+        <summary style="cursor:pointer;font-weight:600;color:var(--text)">What does Eco Mode do?</summary>
+        <ul style="margin:8px 0 0 16px;line-height:1.7">
+          <li>Reduces database memory from ~48MB to ~6MB</li>
+          <li>Limits page downloads to 2MB instead of 10MB</li>
+          <li>Slows background maintenance (less CPU usage)</li>
+          <li>Caps crawler workers at 2</li>
+        </ul>
+      </details>
+
+      <div class="wizard-setting" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding-top:12px;border-top:1px solid var(--border)">
+        <label class="wizard-toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="wizard-lite-mode" ${perfState.liteMode ? 'checked' : ''} style="accent-color:var(--accent);width:18px;height:18px">
+          <span><strong>Lite Mode</strong> — Disable animations and visual effects for faster page loads</span>
+        </label>
+      </div>
+      <p class="wizard-setting-desc" style="margin-left:28px;font-size:0.85em;color:var(--text-secondary)">
+        Turns off background animations, particle effects, and fancy graphs. Search and all controls still work normally.
+      </p>
+    </div>
+  `;
+
+  document.getElementById('wizard-eco-mode').addEventListener('change', e => {
+    perfState.ecoMode = e.target.checked;
+    // Auto-enable lite mode when eco mode is on
+    if (perfState.ecoMode && !document.getElementById('wizard-lite-mode').checked) {
+      document.getElementById('wizard-lite-mode').checked = true;
+      perfState.liteMode = true;
+    }
+  });
+
+  document.getElementById('wizard-lite-mode').addEventListener('change', e => {
+    perfState.liteMode = e.target.checked;
+  });
+
+  // Save settings when navigating away — deferred because renderNav() creates #wizard-next after renderStep()
+  setTimeout(() => {
+    const nextBtn = document.getElementById('wizard-next');
+    if (nextBtn) {
+      nextBtn.addEventListener('click', async () => {
+        try {
+          await api.setLowResource(perfState.ecoMode);
+        } catch { /* continue anyway */ }
+        setLiteMode(perfState.liteMode);
+      }, { once: true });
+    }
+  }, 0);
+}
+
+// ─── Step: Launch & Watch ────────────────────────────
 async function renderLaunch(el) {
   const seeds = getAllSelectedSeeds();
   const topicNames = CATEGORIES.filter(c => c.subcategories.some(s => selectedSubs.has(s.id))).map(c => c.name);

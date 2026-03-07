@@ -2,6 +2,7 @@
 import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
 import { icon, showModal, closeModal } from '../components.js';
+import { isLiteMode, setLiteMode } from '../lite-mode.js';
 
 export function renderActions(container) {
   container.innerHTML = `
@@ -100,6 +101,50 @@ export function renderActions(container) {
                 </button>
               </div>
               <div id="node-id-result" class="action-result"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resource Limits -->
+      <div class="actions-section" id="limits-section">
+        <div class="actions-section-header">
+          ${icon('database', 20, 'var(--blue)')}
+          <h3>Resource Limits</h3>
+        </div>
+        <div class="actions-grid">
+          <div class="action-card" style="grid-column:1/-1">
+            <div class="action-card-header">
+              <div class="action-icon">${icon('database', 24, 'var(--blue)')}</div>
+              <div>
+                <strong>Storage & Crawl Limits</strong>
+                <p>Set caps on storage, documents, and queue size. The crawler auto-pauses when limits are reached.</p>
+              </div>
+            </div>
+            <div class="action-card-body" id="limits-body">
+              <div class="wizard-loading">Loading limits...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance -->
+      <div class="actions-section" id="performance-section">
+        <div class="actions-section-header">
+          ${icon('zap', 20, 'var(--green)')}
+          <h3>Performance</h3>
+        </div>
+        <div class="actions-grid">
+          <div class="action-card" style="grid-column:1/-1">
+            <div class="action-card-header">
+              <div class="action-icon">${icon('cpu', 24, 'var(--green)')}</div>
+              <div>
+                <strong>System Resources & Eco Mode</strong>
+                <p>Monitor your system and toggle resource-saving modes.</p>
+              </div>
+            </div>
+            <div class="action-card-body" id="performance-body">
+              <div class="wizard-loading">Loading system info...</div>
             </div>
           </div>
         </div>
@@ -243,6 +288,8 @@ export function renderActions(container) {
 
   setupHandlers();
   loadCurrentName();
+  loadLimits();
+  loadPerformance();
 }
 
 async function loadCurrentName() {
@@ -528,6 +575,120 @@ function showDeleteConfirmation() {
   });
 }
 
+// ---- Resource Limits ----
+
+async function loadLimits() {
+  const body = document.getElementById('limits-body');
+  if (!body) return;
+  try {
+    const lim = await api.limits();
+    renderLimitsUI(body, lim);
+  } catch {
+    body.innerHTML = '<span class="badge badge-red">Failed to load limits</span>';
+  }
+}
+
+function renderLimitsUI(body, lim) {
+  const pctStorage = lim.max_storage_bytes > 0 ? Math.min(100, (lim.used_storage / lim.max_storage_bytes) * 100) : 0;
+  const pctDocs = lim.max_documents > 0 ? Math.min(100, (lim.used_documents / lim.max_documents) * 100) : 0;
+  const pctQueue = lim.max_queue_size > 0 ? Math.min(100, (lim.used_queue / lim.max_queue_size) * 100) : 0;
+
+  const pausedBadge = lim.crawler_paused
+    ? '<span class="badge badge-red" style="margin-bottom:12px">Crawler paused (limit reached)</span>'
+    : '';
+
+  body.innerHTML = `
+    ${pausedBadge}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+      <div>
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">
+          Storage: ${formatBytesLimits(lim.used_storage)} / ${lim.max_storage_bytes > 0 ? formatBytesLimits(lim.max_storage_bytes) : 'unlimited'}
+        </label>
+        <div style="background:var(--bg-secondary);border-radius:4px;height:8px;overflow:hidden">
+          <div style="background:${barColor(pctStorage)};height:100%;width:${pctStorage}%;transition:width 0.3s"></div>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">
+          Documents: ${lim.used_documents.toLocaleString()} / ${lim.max_documents > 0 ? lim.max_documents.toLocaleString() : 'unlimited'}
+        </label>
+        <div style="background:var(--bg-secondary);border-radius:4px;height:8px;overflow:hidden">
+          <div style="background:${barColor(pctDocs)};height:100%;width:${pctDocs}%;transition:width 0.3s"></div>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">
+          Queue: ${lim.used_queue.toLocaleString()} / ${lim.max_queue_size > 0 ? lim.max_queue_size.toLocaleString() : 'unlimited'}
+        </label>
+        <div style="background:var(--bg-secondary);border-radius:4px;height:8px;overflow:hidden">
+          <div style="background:${barColor(pctQueue)};height:100%;width:${pctQueue}%;transition:width 0.3s"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end">
+      <div>
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">Max Storage (GB)</label>
+        <input type="number" id="limit-storage-input" class="action-input" min="0" step="0.5"
+          value="${lim.max_storage_bytes > 0 ? (lim.max_storage_bytes / (1024*1024*1024)).toFixed(1) : 0}"
+          style="width:100%">
+      </div>
+      <div>
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">Max Documents</label>
+        <input type="number" id="limit-docs-input" class="action-input" min="0" step="1000"
+          value="${lim.max_documents}" style="width:100%">
+      </div>
+      <div>
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">Max Queue Size</label>
+        <input type="number" id="limit-queue-input" class="action-input" min="0" step="1000"
+          value="${lim.max_queue_size}" style="width:100%">
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;justify-content:flex-end">
+      <button class="btn btn-primary" id="save-limits-btn">
+        <span class="btn-label">Save Limits</span>
+      </button>
+    </div>
+    <div id="limits-result" class="action-result"></div>
+  `;
+
+  document.getElementById('save-limits-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('save-limits-btn');
+    const result = document.getElementById('limits-result');
+    const storageGB = parseFloat(document.getElementById('limit-storage-input').value) || 0;
+    const maxDocs = parseInt(document.getElementById('limit-docs-input').value) || 0;
+    const maxQueue = parseInt(document.getElementById('limit-queue-input').value) || 0;
+
+    setLoading(btn, true, 'Saving...');
+    try {
+      const updated = await api.setLimits({
+        max_storage_bytes: Math.round(storageGB * 1024 * 1024 * 1024),
+        max_documents: maxDocs,
+        max_queue_size: maxQueue,
+      });
+      result.innerHTML = '<span class="badge badge-green">Limits saved</span>';
+      setTimeout(() => { result.innerHTML = ''; }, 3000);
+      // Re-render with updated data
+      renderLimitsUI(body, updated);
+    } catch (err) {
+      result.innerHTML = `<span class="badge badge-red">Error: ${escapeHtml(err.message)}</span>`;
+    }
+    setLoading(btn, false, 'Save Limits');
+  });
+}
+
+function formatBytesLimits(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function barColor(pct) {
+  if (pct >= 90) return 'var(--red)';
+  if (pct >= 70) return 'var(--amber, var(--yellow, orange))';
+  return 'var(--green)';
+}
+
 // ---- Helpers ----
 
 function setLoading(btn, loading, text) {
@@ -573,4 +734,77 @@ function escapeHtml(s) {
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
+}
+
+// ---- Performance (Eco Mode + Lite Mode) ----
+
+async function loadPerformance() {
+  const body = document.getElementById('performance-body');
+  if (!body) return;
+
+  let sysinfo = null;
+  try {
+    sysinfo = await api.sysinfo();
+  } catch {
+    body.innerHTML = '<p style="color:var(--text-secondary)">Could not load system info.</p>';
+    return;
+  }
+
+  const cpuCores = sysinfo.cpu_cores || '?';
+  const ramMB = sysinfo.total_memory_mb || 0;
+  const ramLabel = ramMB >= 1024 ? (ramMB / 1024).toFixed(1) + ' GB' : ramMB + ' MB';
+  const freeMB = sysinfo.free_space_mb || 0;
+  const freeLabel = freeMB >= 1024 ? (freeMB / 1024).toFixed(1) + ' GB' : freeMB + ' MB';
+  const recommended = sysinfo.recommended === 'low-resource';
+  const ecoOn = sysinfo.low_resource || false;
+  const liteOn = isLiteMode();
+
+  body.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px">
+      <div style="flex:1;min-width:120px;padding:10px;border:1px solid var(--border);border-radius:6px;text-align:center">
+        <div style="font-size:0.78em;color:var(--text-secondary)">CPU Cores</div>
+        <div style="font-size:1.4em;font-weight:700;color:var(--accent)">${cpuCores}</div>
+      </div>
+      <div style="flex:1;min-width:120px;padding:10px;border:1px solid var(--border);border-radius:6px;text-align:center">
+        <div style="font-size:0.78em;color:var(--text-secondary)">Total RAM</div>
+        <div style="font-size:1.4em;font-weight:700;color:var(--accent)">${ramLabel}</div>
+      </div>
+      <div style="flex:1;min-width:120px;padding:10px;border:1px solid var(--border);border-radius:6px;text-align:center">
+        <div style="font-size:0.78em;color:var(--text-secondary)">Free Disk</div>
+        <div style="font-size:1.4em;font-weight:700;color:var(--accent)">${freeLabel}</div>
+      </div>
+    </div>
+
+    ${recommended ? `<div style="margin-bottom:12px"><span style="padding:3px 10px;border-radius:4px;background:var(--amber);color:var(--bg);font-size:0.82em;font-weight:600">Recommended: Eco Mode</span></div>` : ''}
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="actions-eco-mode" ${ecoOn ? 'checked' : ''} style="accent-color:var(--accent);width:18px;height:18px">
+        <span><strong>Eco Mode</strong> — Reduced memory (~6MB vs ~48MB), slower maintenance, capped workers</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="actions-lite-mode" ${liteOn ? 'checked' : ''} style="accent-color:var(--accent);width:18px;height:18px">
+        <span><strong>Lite Mode</strong> — Disable animations and visual effects</span>
+      </label>
+    </div>
+    <div id="perf-result" class="action-result" style="margin-top:8px"></div>
+  `;
+
+  document.getElementById('actions-eco-mode').addEventListener('change', async (e) => {
+    const result = document.getElementById('perf-result');
+    try {
+      await api.setLowResource(e.target.checked);
+      result.innerHTML = '<span class="badge badge-green">Eco Mode ' + (e.target.checked ? 'enabled' : 'disabled') + ' (some changes require restart)</span>';
+    } catch (err) {
+      result.innerHTML = '<span class="badge badge-red">Error: ' + escapeHtml(err.message) + '</span>';
+    }
+    setTimeout(() => { result.innerHTML = ''; }, 4000);
+  });
+
+  document.getElementById('actions-lite-mode').addEventListener('change', (e) => {
+    setLiteMode(e.target.checked);
+    const result = document.getElementById('perf-result');
+    result.innerHTML = '<span class="badge badge-green">Lite Mode ' + (e.target.checked ? 'enabled' : 'disabled') + '</span>';
+    setTimeout(() => { result.innerHTML = ''; }, 3000);
+  });
 }

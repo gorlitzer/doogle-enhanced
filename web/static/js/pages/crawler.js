@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { navGen } from '../nav-gen.js';
 import { icon, renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
 import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
+import { isLiteMode } from '../lite-mode.js';
 
 // ============================================================
 // GAUGE VIEW — Spotlight grid columns with rich gauges
@@ -122,7 +123,7 @@ export function renderCrawler(container) {
 
 function syncMobileView() {
   if (activeTab !== 'architecture') return;
-  const isMobile = window.innerWidth < MOBILE_BP;
+  const isMobile = window.innerWidth < MOBILE_BP || isLiteMode();
   const canvasWrap = document.getElementById('canvas-wrap');
   const cardsWrap = document.getElementById('mobile-cards-wrap');
   const toggleEl = document.getElementById('view-toggle');

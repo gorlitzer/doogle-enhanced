@@ -13,7 +13,7 @@ import (
 func newTestBadger(t *testing.T) *BadgerStore {
 	t.Helper()
 	dir := t.TempDir()
-	bs, err := NewBadgerStore(dir)
+	bs, err := NewBadgerStore(dir, false)
 	if err != nil {
 		t.Fatalf("NewBadgerStore: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestDedupStore_Persistence(t *testing.T) {
 	dir := t.TempDir()
 
 	// Open, write, close
-	bs1, err := NewBadgerStore(dir)
+	bs1, err := NewBadgerStore(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestDedupStore_Persistence(t *testing.T) {
 	bs1.Close()
 
 	// Re-open, verify
-	bs2, err := NewBadgerStore(dir)
+	bs2, err := NewBadgerStore(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestGenerationStore_Persistence(t *testing.T) {
 	dir := t.TempDir()
 
 	// Open, increment, close
-	bs1, _ := NewBadgerStore(dir)
+	bs1, _ := NewBadgerStore(dir, false)
 	gs1, _ := NewGenerationStore(bs1)
 	gs1.Increment() // 1
 	gs1.Increment() // 2
@@ -219,7 +219,7 @@ func TestGenerationStore_Persistence(t *testing.T) {
 	bs1.Close()
 
 	// Re-open, verify
-	bs2, _ := NewBadgerStore(dir)
+	bs2, _ := NewBadgerStore(dir, false)
 	defer bs2.Close()
 	gs2, _ := NewGenerationStore(bs2)
 

@@ -11,9 +11,10 @@ import (
 
 // Scheduler manages the URL frontier — which URLs to crawl next.
 type Scheduler struct {
-	urlStore *store.URLStore
-	pending  chan *models.CrawlTask
-	mu       sync.Mutex
+	urlStore     *store.URLStore
+	pending      chan *models.CrawlTask
+	maxQueueSize int64
+	mu           sync.Mutex
 }
 
 // NewScheduler creates a scheduler with the given buffer size.
@@ -24,12 +25,25 @@ func NewScheduler(urlStore *store.URLStore, bufferSize int) *Scheduler {
 	}
 }
 
+// SetMaxQueueSize sets the maximum queue size. 0 = unlimited.
+func (s *Scheduler) SetMaxQueueSize(max int64) {
+	s.mu.Lock()
+	s.maxQueueSize = max
+	s.mu.Unlock()
+}
+
 // Schedule adds a URL to the crawl queue if not already seen.
 func (s *Scheduler) Schedule(task *models.CrawlTask) bool {
 	normalized := urlutil.Normalize(task.URL)
 	if s.urlStore.HasSeen(normalized) {
 		return false
 	}
+
+	// Reject if queue is at capacity
+	if s.maxQueueSize > 0 && int64(s.Pending()) >= s.maxQueueSize {
+		return false
+	}
+
 	s.urlStore.MarkSeen(normalized)
 
 	// Try non-blocking send, fall back to persistent queue

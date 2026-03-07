@@ -64,6 +64,14 @@ type Deps struct {
 	AuditTrailFn        func(limit int) []interface{}
 	VoteDocQuarantineFn func(url string, confirm bool) error
 
+	// Resource limits
+	GetLimitsFn func() *LimitsResponse
+	SetLimitsFn func(*LimitsRequest) error
+
+	// System info + low-resource mode
+	SysInfoFn        func() interface{}
+	SetLowResourceFn func(enabled bool) error
+
 	// Fleet management (coordinator only)
 	FleetSummary  func() *fleet.FleetSummary
 	FleetGetNode  func(peerID string) *fleet.FleetNode
@@ -939,6 +947,97 @@ func AuditTrailHandler(deps *Deps) http.HandlerFunc {
 		}
 		entries := deps.AuditTrailFn(limit)
 		writeJSON(w, http.StatusOK, map[string]interface{}{"entries": entries})
+	}
+}
+
+// LimitsResponse is returned by GET /api/admin/limits.
+type LimitsResponse struct {
+	MaxStorageBytes int64 `json:"max_storage_bytes"`
+	MaxDocuments    int64 `json:"max_documents"`
+	MaxQueueSize    int64 `json:"max_queue_size"`
+	UsedStorage     int64 `json:"used_storage"`
+	UsedDocuments   int64 `json:"used_documents"`
+	UsedQueue       int64 `json:"used_queue"`
+	CrawlerPaused   bool  `json:"crawler_paused"`
+}
+
+// LimitsRequest is accepted by POST /api/admin/limits.
+type LimitsRequest struct {
+	MaxStorageBytes *int64 `json:"max_storage_bytes"`
+	MaxDocuments    *int64 `json:"max_documents"`
+	MaxQueueSize    *int64 `json:"max_queue_size"`
+}
+
+// GetLimitsHandler handles GET /api/admin/limits
+func GetLimitsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.GetLimitsFn == nil {
+			writeJSON(w, http.StatusOK, map[string]string{})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.GetLimitsFn())
+	}
+}
+
+// SetLimitsHandler handles POST /api/admin/limits
+func SetLimitsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.SetLimitsFn == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not supported"})
+			return
+		}
+		var req LimitsRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if err := deps.SetLimitsFn(&req); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		// Return updated state
+		if deps.GetLimitsFn != nil {
+			writeJSON(w, http.StatusOK, deps.GetLimitsFn())
+		} else {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+		}
+	}
+}
+
+// SystemInfoHandler handles GET /api/admin/sysinfo
+func SystemInfoHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.SysInfoFn == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not supported"})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.SysInfoFn())
+	}
+}
+
+// SetLowResourceHandler handles POST /api/admin/low-resource
+func SetLowResourceHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.SetLowResourceFn == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not supported"})
+			return
+		}
+		var req struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if err := deps.SetLowResourceFn(req.Enabled); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if deps.SysInfoFn != nil {
+			writeJSON(w, http.StatusOK, deps.SysInfoFn())
+		} else {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+		}
 	}
 }
 

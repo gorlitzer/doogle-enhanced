@@ -5760,3 +5760,16 @@ td.mono { font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; }
 /* ---- Country flag in search results ---- */
 .result-country { font-size: 0.9em; cursor: default; }
 .country-badge { white-space: nowrap; }
+
+/* ---- Lite Mode: kill heavy animations and canvases, keep micro-interactions ---- */
+[data-lite="true"] *,
+[data-lite="true"] *::before,
+[data-lite="true"] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+[data-lite="true"] canvas.bg-canvas,
+[data-lite="true"] .spotlight-diagram canvas,
+[data-lite="true"] #home-canvas {
+  display: none !important;
+}

@@ -2,6 +2,7 @@
 // Applies themes, manages picker UI, CRT overlay, and persistence.
 
 import { themes } from './themes.js';
+import { isLiteMode, setLiteMode } from './lite-mode.js';
 
 const STORAGE_KEY = 'doogle-theme';
 let currentTheme = 'dracula';
@@ -67,6 +68,8 @@ export function createThemePicker() {
     `;
   }).join('');
 
+  const liteChecked = isLiteMode() ? 'checked' : '';
+
   picker.innerHTML = `
     <button class="theme-picker-btn" title="Switch theme">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -83,6 +86,10 @@ export function createThemePicker() {
     </button>
     <div class="theme-picker-dropdown">
       ${optionsHtml}
+      <label class="theme-picker-lite" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border);cursor:pointer;font-size:0.85em;color:var(--text-secondary)">
+        <input type="checkbox" id="lite-mode-toggle" ${liteChecked} style="accent-color:var(--accent)">
+        <span>Lite Mode</span>
+      </label>
     </div>
   `;
 
@@ -123,6 +130,19 @@ export function createThemePicker() {
       dropdown.classList.remove('open');
     });
   });
+
+  // Lite mode toggle
+  const liteToggle = picker.querySelector('#lite-mode-toggle');
+  if (liteToggle) {
+    liteToggle.addEventListener('change', (e) => {
+      e.stopPropagation();
+      setLiteMode(liteToggle.checked);
+    });
+    // Sync checkbox when lite mode is toggled from elsewhere (wizard, actions page)
+    window.addEventListener('litemodechange', (e) => {
+      liteToggle.checked = e.detail.lite;
+    });
+  }
 
   // Close on outside click
   document.addEventListener('click', () => {

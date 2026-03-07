@@ -48,6 +48,9 @@ func main() {
 		case "restore":
 			runRestore(os.Args[2:])
 			return
+		case "setup":
+			runSetup(os.Args[2:])
+			return
 		}
 	}
 

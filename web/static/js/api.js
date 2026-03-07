@@ -152,4 +152,16 @@ export const api = {
   auditTrail(limit = 50) {
     return fetchJSON(`/api/admin/trust/audit?limit=${limit}`);
   },
+  limits() {
+    return fetchJSON('/api/admin/limits');
+  },
+  setLimits(obj) {
+    return postJSON('/api/admin/limits', obj);
+  },
+  sysinfo() {
+    return fetchJSON('/api/admin/sysinfo');
+  },
+  setLowResource(enabled) {
+    return postJSON('/api/admin/low-resource', { enabled });
+  },
 };
