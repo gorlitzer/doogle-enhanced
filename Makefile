@@ -1,4 +1,4 @@
-.PHONY: help setup build run run-only upgrade test dev stop status clean nuke release checksums patch minor major
+.PHONY: help setup build run run-only upgrade test dev stop stop-quiet status clean nuke release checksums patch minor major
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -89,7 +89,7 @@ build:
 	@$(GO) build -ldflags "$(LDFLAGS)" -trimpath -o $(BIN_DIR)/$(BINARY) ./cmd/doogle
 	@echo "==> Built $(BIN_DIR)/$(BINARY) ($(VERSION))"
 
-run: build stop
+run: build stop-quiet
 	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
 	@echo ""
 	@echo "  Doogle is running! (PID $$(cat .doogle.pid))"
@@ -135,6 +135,24 @@ stop:
 	    i=0; while kill -0 "$$PID" 2>/dev/null && [ $$i -lt 15 ]; do sleep 1; i=$$((i+1)); done; \
 	    if kill -0 "$$PID" 2>/dev/null; then echo "    Force killing..."; kill -9 "$$PID"; fi; \
 	    echo "==> Stopped."; \
+	  else \
+	    echo "==> Nothing running (stale PID file removed)."; \
+	  fi; rm -f .doogle.pid; \
+	else \
+	  echo "==> Nothing running."; \
+	fi
+	@killall $(BINARY) 2>/dev/null || true
+	@docker compose down 2>/dev/null || true
+
+# Silent variant used by run/clean to avoid noise.
+stop-quiet:
+	@if [ -f .doogle.pid ]; then \
+	  PID=$$(cat .doogle.pid); \
+	  if kill -0 "$$PID" 2>/dev/null; then \
+	    echo "==> Stopping Doogle (PID $$PID)..."; kill "$$PID"; \
+	    i=0; while kill -0 "$$PID" 2>/dev/null && [ $$i -lt 15 ]; do sleep 1; i=$$((i+1)); done; \
+	    if kill -0 "$$PID" 2>/dev/null; then kill -9 "$$PID"; fi; \
+	    echo "==> Stopped."; \
 	  fi; rm -f .doogle.pid; \
 	fi
 	@killall $(BINARY) 2>/dev/null || true
@@ -167,7 +185,7 @@ status:
 	  echo ""; \
 	fi
 
-clean: stop
+clean: stop-quiet
 	@echo "==> Removing build artifacts and crawl data..."
 	@rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log data/
 	@echo "==> Clean complete."
