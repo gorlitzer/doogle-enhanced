@@ -1,6 +1,6 @@
 # Binaries
 bin/
-doogle
+/doogle
 *.exe
 *.dll
 *.so
