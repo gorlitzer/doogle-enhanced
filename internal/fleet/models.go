@@ -4,11 +4,12 @@ import "time"
 
 // WorkerStats contains runtime statistics from a worker node.
 type WorkerStats struct {
-	IndexedDocs    int `json:"indexed_docs"`
-	CrawledURLs    int `json:"crawled_urls"`
-	URLsInQueue    int `json:"urls_in_queue"`
-	ConnectedPeers int `json:"connected_peers"`
+	IndexedDocs    int    `json:"indexed_docs"`
+	CrawledURLs    int    `json:"crawled_urls"`
+	URLsInQueue    int    `json:"urls_in_queue"`
+	ConnectedPeers int    `json:"connected_peers"`
 	Uptime         string `json:"uptime"`
+	Version        string `json:"version,omitempty"`
 }
 
 // HeartbeatRequest is sent by workers to the coordinator.

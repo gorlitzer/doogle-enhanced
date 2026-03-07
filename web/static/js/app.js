@@ -120,7 +120,7 @@ function startStatusPolling() {
       // Update sidebar wizard status icon.
       const wizardLink = document.getElementById('sidebar-wizard');
       if (wizardLink) {
-        const done = !!localStorage.getItem('doogle_wizard_dismissed') || s.indexed_docs > 0;
+        const done = s.indexed_docs > 0 || !!localStorage.getItem('doogle_wizard_dismissed');
         const dot = done
           ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle" title="Setup complete"></span>'
           : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);margin-right:6px;vertical-align:middle" title="Setup pending"></span>';
@@ -129,8 +129,15 @@ function startStatusPolling() {
 
       if (firstPoll) {
         firstPoll = false;
-        // Fresh node (no data at all) — clear stale wizard dismissal from previous runs.
-        if (s.indexed_docs === 0 && s.crawled_urls === 0) {
+        // Detect a fresh/nuked node: zero indexed docs and node started
+        // recently (under 2 minutes). crawled_urls can race ahead of
+        // indexed_docs so it is not a reliable signal.
+        const uptimeSec = s.started_at
+          ? (Date.now() - new Date(s.started_at).getTime()) / 1000
+          : Infinity;
+        const isFreshNode = s.indexed_docs === 0 && uptimeSec < 120;
+
+        if (isFreshNode) {
           localStorage.removeItem('doogle_wizard_dismissed');
         }
         if (s.indexed_docs === 0 && !localStorage.getItem('doogle_wizard_dismissed')) {

@@ -1,4 +1,4 @@
-.PHONY: help setup build run upgrade test dev stop status clean nuke release checksums patch minor major
+.PHONY: help setup build run run-only upgrade test dev stop status clean nuke release checksums patch minor major
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -20,7 +20,7 @@ help:
 	@echo "    make build              Compile binary to bin/"
 	@echo "    make run                Build + stop old process + launch node detached"
 	@echo "    make run ARGS='...'     Pass extra flags (run ./bin/doogle --help for all flags)"
-	@echo "    make upgrade            Pull latest code + rebuild + restart node"
+	@echo "    make upgrade            Download latest release binary + restart node"
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make status             Check if the node is running"
@@ -98,10 +98,24 @@ run: build stop
 	@echo ""
 
 upgrade:
-	@echo "==> Pulling latest..."
-	git pull
-	@echo "==> Rebuilding + restarting..."
-	$(MAKE) run
+	@if [ -x ./$(BIN_DIR)/$(BINARY) ]; then \
+		echo "==> Checking for updates..."; \
+		./$(BIN_DIR)/$(BINARY) update && $(MAKE) stop run-only; \
+	else \
+		echo "==> No binary found — building from source..."; \
+		git pull; \
+		$(MAKE) run; \
+	fi
+
+run-only:
+	@nohup ./$(BIN_DIR)/$(BINARY) $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
+	@echo ""
+	@echo "  Doogle upgraded and running! (PID $$(cat .doogle.pid))"
+	@echo ""
+	@echo "    Open:   http://localhost:7002"
+	@echo "    Logs:   tail -f doogle.log"
+	@echo "    Stop:   make stop"
+	@echo ""
 
 test:
 	$(GO) test ./...
@@ -149,13 +163,13 @@ status:
 	fi
 
 clean: stop
-	rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log
+	rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log data/
 
 nuke: clean
-	@echo "WARNING: This will DELETE all crawl data and the local Go runtime."
+	@echo "WARNING: This will also DELETE the local Go runtime."
 	@echo "Press Ctrl+C within 5 seconds to abort."
 	@sleep 5
-	rm -rf data/ .go/
+	rm -rf .go/
 
 release:
 	@echo "==> Cross-compiling $(VERSION) for all platforms..."

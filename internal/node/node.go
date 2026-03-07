@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -27,6 +28,7 @@ import (
 	"github.com/doogle/doogle-v2/internal/p2p"
 	"github.com/doogle/doogle-v2/internal/search"
 	"github.com/doogle/doogle-v2/internal/store"
+	"github.com/doogle/doogle-v2/internal/updater"
 	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
@@ -606,12 +608,22 @@ func (n *Node) init() error {
 		return SaveLowResource(dataDir, enabled)
 	}
 
+	// Wire restart function for update-restart endpoint.
+	deps.RestartFn = func() {
+		n.ShutdownForRestart()
+		if err := updater.SelfRestart(); err != nil {
+			slog.Error("self-restart failed", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	// Wire fleet deps if coordinator.
 	if n.coordinator != nil {
 		deps.FleetSummary = n.coordinator.Summary
 		deps.FleetGetNode = n.coordinator.GetNode
 		deps.FleetProxy = n.fleetProxyHTTP
 		deps.FleetAPIToken = n.fleetAPIToken
+		deps.FleetUpgrade = n.fleetUpgrade
 	}
 
 	n.apiServer = api.NewServer(n.cfg.API.Bind, n.cfg.API.Port, deps)
@@ -743,6 +755,30 @@ func (n *Node) Shutdown() {
 	n.badger.Close()
 
 	slog.Info("node: shutdown complete")
+}
+
+// ShutdownForRestart performs the same graceful shutdown as Shutdown but
+// returns instead of calling os.Exit, so the caller can re-exec the binary.
+func (n *Node) ShutdownForRestart() {
+	slog.Info("node: shutting down for restart")
+	n.cancel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	n.apiServer.Shutdown(ctx)
+
+	n.scheduler.Drain()
+	_ = n.urlStore.FlushCrawledCount()
+	n.crawler.Stop()
+	n.batchIndexer.Stop()
+	n.indexer.FlushStats()
+	n.gossip.Close()
+	n.discovery.Close()
+	n.host.Close()
+	n.bleveIdx.Close()
+	n.badger.Close()
+
+	slog.Info("node: shutdown for restart complete")
 }
 
 // Status returns the current node status.

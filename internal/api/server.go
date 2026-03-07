@@ -82,6 +82,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Delete("/data", DeleteDataHandler(deps))
 			r.Get("/update-check", UpdateCheckHandler(deps))
 			r.Post("/update", UpdateApplyHandler(deps))
+			r.Post("/update-restart", UpdateAndRestartHandler(deps))
 		})
 
 		// Fleet endpoints (only if coordinator)
@@ -91,6 +92,8 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 				r.Get("/nodes", FleetNodesHandler(deps))
 				r.Get("/nodes/{peerID}", FleetNodeDetailHandler(deps))
 				r.HandleFunc("/nodes/{peerID}/proxy/*", FleetProxyHandler(deps))
+				r.Get("/versions", FleetVersionsHandler(deps))
+				r.Post("/upgrade", FleetUpgradeHandler(deps))
 			})
 		}
 	})
