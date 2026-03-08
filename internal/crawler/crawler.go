@@ -50,6 +50,10 @@ type Crawler struct {
 	enableHeadless    bool
 	headlessThreshold int
 
+	// Sitemap discovery
+	sitemapFetcher *SitemapFetcher
+	sitemapChecked sync.Map // domain → bool
+
 	// Pause/resume
 	paused atomic.Bool
 
@@ -112,6 +116,8 @@ func New(cfg Config, scheduler *Scheduler, onCrawled OnDocumentCrawled) *Crawler
 		ctx:               ctx,
 		cancel:            cancel,
 	}
+
+	c.sitemapFetcher = NewSitemapFetcher(cfg.UserAgent)
 
 	// Load persisted stats from previous session
 	if cfg.StatsStore != nil {
@@ -245,6 +251,44 @@ func (c *Crawler) AddSeed(rawURL string) {
 	}
 }
 
+// DiscoverSitemap discovers and schedules URLs from a domain's sitemap.xml.
+// Only runs once per domain.
+func (c *Crawler) DiscoverSitemap(domain string) {
+	if _, loaded := c.sitemapChecked.LoadOrStore(domain, true); loaded {
+		return // already checked
+	}
+
+	robotsSitemaps := c.robots.GetSitemaps(domain, c.userAgent)
+	urls := c.sitemapFetcher.DiscoverAndParse(domain, robotsSitemaps)
+	if len(urls) == 0 {
+		return
+	}
+
+	scheduled := 0
+	for _, u := range urls {
+		if u.Loc == "" {
+			continue
+		}
+		normalized := urlutil.Normalize(u.Loc)
+		if !urlutil.ShouldCrawl(normalized) {
+			continue
+		}
+		task := &models.CrawlTask{
+			URL:       normalized,
+			Domain:    domain,
+			Depth:     1,
+			Priority:  3, // lower priority than direct links
+			CreatedAt: time.Now(),
+		}
+		if c.scheduler.Schedule(task) {
+			scheduled++
+		}
+	}
+	if scheduled > 0 {
+		log.Printf("crawler: discovered %d URLs from sitemap for %s", scheduled, domain)
+	}
+}
+
 func (c *Crawler) worker(id int) {
 	defer c.wg.Done()
 	log.Printf("crawler: worker %d started", id)
@@ -297,6 +341,11 @@ func (c *Crawler) processTask(workerID int, task *models.CrawlTask) {
 		if err == nil && !c.robots.IsAllowed(domain, parsedURL.Path, c.userAgent) {
 			log.Printf("worker %d: blocked by robots.txt: %s", workerID, task.URL)
 			return
+		}
+
+		// Apply Crawl-delay from robots.txt
+		if crawlDelay := c.robots.GetCrawlDelay(domain, c.userAgent); crawlDelay > 0 {
+			c.rateLimiter.SetDomainDelay(domain, crawlDelay)
 		}
 	}
 
@@ -413,6 +462,14 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 	}
 	defer resp.Body.Close()
 
+	// Handle 429 Too Many Requests and 503 Service Unavailable with Retry-After
+	if resp.StatusCode == 429 || resp.StatusCode == 503 {
+		retryDelay := parseRetryAfter(resp.Header.Get("Retry-After"))
+		domain := urlutil.ExtractDomain(rawURL)
+		c.rateLimiter.SetDomainDelay(domain, retryDelay)
+		return nil, nil, nil, fmt.Errorf("HTTP %d (backoff %s)", resp.StatusCode, retryDelay)
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, nil, nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
@@ -465,9 +522,16 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 	// Extract metadata, headings, and images BEFORE content extraction,
 	// because ExtractContent mutates the DOM by removing nav/header/footer/etc.
 	ogTitle, ogDesc, canonical, metaKeywords := ExtractMetadata(goDoc)
+
+	// Extract robot directives from <meta name="robots"> and X-Robots-Tag header
+	robotsMeta := ExtractRobotsMeta(goDoc)
+	if xrt := resp.Header.Get("X-Robots-Tag"); xrt != "" {
+		MergeXRobotsTag(&robotsMeta, xrt)
+	}
+
 	headings := ExtractHeadings(goDoc)
 	images := ExtractImages(goDoc, rawURL)
-	links, discoveredURLs := ExtractLinks(goDoc, rawURL)
+	links, discoveredURLs := ExtractLinks(goDoc, rawURL, robotsMeta.NoFollow)
 	structuredData := ExtractStructuredData(goDoc)
 
 	// ExtractContent removes script/style/nav/header/footer — call last
@@ -476,9 +540,17 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 	// Enrich images with surrounding context for image search
 	enrichImageContext(images, content)
 
+	// Canonical enforcement: if canonical differs, index under canonical URL
+	docURL := rawURL
+	docID := models.DocumentID(rawURL)
+	if canonical != "" && urlutil.Normalize(canonical) != urlutil.Normalize(rawURL) {
+		docURL = canonical
+		docID = models.DocumentID(canonical)
+	}
+
 	doc := &models.Document{
-		ID:             models.DocumentID(rawURL),
-		URL:            rawURL,
+		ID:             docID,
+		URL:            docURL,
 		Domain:         urlutil.ExtractDomain(rawURL),
 		Title:          title,
 		Description:    description,
@@ -491,7 +563,11 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 		CrawledAt:      time.Now(),
 		OGTitle:        ogTitle,
 		OGDesc:         ogDesc,
-		Canonical:       canonical,
+		Canonical:      canonical,
+		NoIndex:        robotsMeta.NoIndex,
+		NoFollow:       robotsMeta.NoFollow,
+		RobotsMeta:     robotsMeta.Raw,
+		XRobotsTag:     resp.Header.Get("X-Robots-Tag"),
 		IsHTTPS:        strings.HasPrefix(rawURL, "https://"),
 		StructuredData: structuredData,
 		SchemaType:     PrimarySchemaType(structuredData),
@@ -520,17 +596,29 @@ func (c *Crawler) fetchHeadless(rawURL string) (*models.Document, []string, erro
 
 	// Same extraction pipeline as fetchHTTP
 	ogTitle, ogDesc, canonical, metaKeywords := ExtractMetadata(goDoc)
+
+	// Extract robot directives from <meta name="robots"> (no X-Robots-Tag in headless)
+	robotsMeta := ExtractRobotsMeta(goDoc)
+
 	headings := ExtractHeadings(goDoc)
 	images := ExtractImages(goDoc, rawURL)
-	links, discoveredURLs := ExtractLinks(goDoc, rawURL)
+	links, discoveredURLs := ExtractLinks(goDoc, rawURL, robotsMeta.NoFollow)
 	structuredData := ExtractStructuredData(goDoc)
 	title, description, content := ExtractContent(goDoc, rawURL)
 
 	enrichImageContext(images, content)
 
+	// Canonical enforcement
+	docURL := rawURL
+	docID := models.DocumentID(rawURL)
+	if canonical != "" && urlutil.Normalize(canonical) != urlutil.Normalize(rawURL) {
+		docURL = canonical
+		docID = models.DocumentID(canonical)
+	}
+
 	doc := &models.Document{
-		ID:             models.DocumentID(rawURL),
-		URL:            rawURL,
+		ID:             docID,
+		URL:            docURL,
 		Domain:         urlutil.ExtractDomain(rawURL),
 		Title:          title,
 		Description:    description,
@@ -543,7 +631,10 @@ func (c *Crawler) fetchHeadless(rawURL string) (*models.Document, []string, erro
 		CrawledAt:      time.Now(),
 		OGTitle:        ogTitle,
 		OGDesc:         ogDesc,
-		Canonical:       canonical,
+		Canonical:      canonical,
+		NoIndex:        robotsMeta.NoIndex,
+		NoFollow:       robotsMeta.NoFollow,
+		RobotsMeta:     robotsMeta.Raw,
 		IsHTTPS:        strings.HasPrefix(rawURL, "https://"),
 		StructuredData: structuredData,
 		SchemaType:     PrimarySchemaType(structuredData),
@@ -556,4 +647,53 @@ func (c *Crawler) fetchHeadless(rawURL string) (*models.Document, []string, erro
 	doc.ComputeHash()
 
 	return doc, discoveredURLs, nil
+}
+
+// parseRetryAfter parses a Retry-After header value (seconds or HTTP-date).
+// Returns a duration between 1s and 5min, defaulting to 30s on parse failure.
+func parseRetryAfter(header string) time.Duration {
+	const (
+		defaultBackoff = 30 * time.Second
+		maxBackoff     = 5 * time.Minute
+	)
+
+	if header == "" {
+		return defaultBackoff
+	}
+
+	header = strings.TrimSpace(header)
+
+	// Try parsing as integer seconds
+	var n int
+	if _, err := fmt.Sscanf(header, "%d", &n); err == nil {
+		d := time.Duration(n) * time.Second
+		if d < time.Second {
+			d = time.Second
+		}
+		if d > maxBackoff {
+			d = maxBackoff
+		}
+		return d
+	}
+
+	// Try parsing as HTTP-date (RFC 7231)
+	for _, layout := range []string{
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC850,
+		time.ANSIC,
+	} {
+		if t, err := time.Parse(layout, header); err == nil {
+			d := time.Until(t)
+			if d < time.Second {
+				d = time.Second
+			}
+			if d > maxBackoff {
+				d = maxBackoff
+			}
+			return d
+		}
+	}
+
+	return defaultBackoff
 }

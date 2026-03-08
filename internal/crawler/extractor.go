@@ -235,8 +235,79 @@ func enrichImageContext(images []models.Image, content string) {
 	}
 }
 
+// RobotsDirectives holds parsed meta robots / X-Robots-Tag directives.
+type RobotsDirectives struct {
+	NoIndex  bool
+	NoFollow bool
+	Raw      string // original content value
+}
+
+// ExtractRobotsMeta parses <meta name="robots"> and <meta name="doogle"> tags.
+func ExtractRobotsMeta(doc *goquery.Document) RobotsDirectives {
+	var d RobotsDirectives
+	doc.Find(`meta[name]`).Each(func(_ int, s *goquery.Selection) {
+		name := strings.ToLower(s.AttrOr("name", ""))
+		if name != "robots" && name != "doogle" {
+			return
+		}
+		content := strings.ToLower(strings.TrimSpace(s.AttrOr("content", "")))
+		if content == "" {
+			return
+		}
+		if d.Raw == "" {
+			d.Raw = content
+		} else {
+			d.Raw += ", " + content
+		}
+		if content == "none" {
+			d.NoIndex = true
+			d.NoFollow = true
+			return
+		}
+		for _, tok := range strings.Split(content, ",") {
+			tok = strings.TrimSpace(tok)
+			switch tok {
+			case "noindex":
+				d.NoIndex = true
+			case "nofollow":
+				d.NoFollow = true
+			}
+		}
+	})
+	return d
+}
+
+// MergeXRobotsTag merges X-Robots-Tag header value into existing directives.
+func MergeXRobotsTag(d *RobotsDirectives, header string) {
+	if header == "" {
+		return
+	}
+	lower := strings.ToLower(header)
+	if d.Raw == "" {
+		d.Raw = lower
+	} else {
+		d.Raw += ", " + lower
+	}
+	if lower == "none" {
+		d.NoIndex = true
+		d.NoFollow = true
+		return
+	}
+	for _, tok := range strings.Split(lower, ",") {
+		tok = strings.TrimSpace(tok)
+		switch tok {
+		case "noindex":
+			d.NoIndex = true
+		case "nofollow":
+			d.NoFollow = true
+		}
+	}
+}
+
 // ExtractLinks discovers all links from the document and categorizes them.
-func ExtractLinks(doc *goquery.Document, baseURLStr string) (links []models.Link, discoveredURLs []string) {
+// If pageNoFollow is true, all links are marked NoFollow (page-level meta robots).
+// URLs are still discovered for crawling — nofollow only affects PageRank.
+func ExtractLinks(doc *goquery.Document, baseURLStr string, pageNoFollow bool) (links []models.Link, discoveredURLs []string) {
 	baseURL, err := url.Parse(baseURLStr)
 	if err != nil {
 		return
@@ -273,7 +344,7 @@ func ExtractLinks(doc *goquery.Document, baseURLStr string) (links []models.Link
 		text := strings.TrimSpace(s.Text())
 
 		rel, _ := s.Attr("rel")
-		noFollow := strings.Contains(strings.ToLower(rel), "nofollow")
+		noFollow := pageNoFollow || strings.Contains(strings.ToLower(rel), "nofollow")
 
 		links = append(links, models.Link{
 			URL:        absURL,

@@ -20,6 +20,7 @@ type domainLimit struct {
 	windowStart  time.Time
 	maxRequests  int
 	windowSize   time.Duration
+	crawlDelay   time.Duration // from robots.txt Crawl-delay
 }
 
 // NewRateLimiter creates a rate limiter with the given global delay between requests.
@@ -28,6 +29,21 @@ func NewRateLimiter(globalDelay time.Duration) *RateLimiter {
 		limits:      make(map[string]*domainLimit),
 		globalDelay: globalDelay,
 	}
+}
+
+// SetDomainDelay sets a per-domain crawl delay (e.g. from robots.txt Crawl-delay or Retry-After).
+func (rl *RateLimiter) SetDomainDelay(domain string, delay time.Duration) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	limit, exists := rl.limits[domain]
+	if !exists {
+		limit = &domainLimit{
+			windowStart: time.Now(),
+		}
+		rl.limits[domain] = limit
+	}
+	limit.crawlDelay = delay
 }
 
 // Wait blocks until it's safe to make a request to the given domain.
@@ -65,12 +81,16 @@ func (rl *RateLimiter) Wait(domain string, maxRequests int, window time.Duration
 		}
 	}
 
-	// Global delay between requests
+	// Per-request delay: max(globalDelay, crawlDelay)
+	delay := rl.globalDelay
+	if limit.crawlDelay > delay {
+		delay = limit.crawlDelay
+	}
 	if !limit.lastRequest.IsZero() {
 		elapsed := now.Sub(limit.lastRequest)
-		if elapsed < rl.globalDelay {
+		if elapsed < delay {
 			rl.mu.Unlock()
-			time.Sleep(rl.globalDelay - elapsed)
+			time.Sleep(delay - elapsed)
 			rl.mu.Lock()
 		}
 	}

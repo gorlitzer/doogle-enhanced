@@ -1430,13 +1430,28 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 	// Stamp origin: this document was crawled by us
 	doc.OriginPeerID = n.peerID.String()
 
-	// Index the document locally
-	if err := n.indexer.Index(doc); err != nil {
-		slog.Error("node: index error", "err", err)
+	// Enforce robot directives (noindex / nofollow)
+	// noindex only         → skip indexing + replication + gossip, still record links and schedule URLs
+	// nofollow only        → index normally, links discovered but don't pass PageRank
+	// noindex + nofollow   → skip indexing, don't record links, don't schedule URLs
+	skipIndex := doc.NoIndex
+	skipLinks := doc.NoIndex && doc.NoFollow
+
+	if skipIndex {
+		slog.Info("node: noindex directive, skipping index/replication", "url", doc.URL, "robots_meta", doc.RobotsMeta)
 	}
 
-	// Record link graph edges
-	n.recordLinks(doc)
+	// Index the document locally (unless noindex)
+	if !skipIndex {
+		if err := n.indexer.Index(doc); err != nil {
+			slog.Error("node: index error", "err", err)
+		}
+	}
+
+	// Record link graph edges (unless noindex+nofollow)
+	if !skipLinks {
+		n.recordLinks(doc)
+	}
 
 	// Track trend data
 	if n.trendStore != nil {
@@ -1445,35 +1460,42 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 
 	n.urlStore.IncrementCrawled()
 
-	// Replicate to shard owners if we're in a multi-node setup
-	n.replicateDocument(doc)
+	// Discover sitemap for new domains (async, non-blocking)
+	go n.crawler.DiscoverSitemap(doc.Domain)
 
-	// Schedule discovered URLs (route through domain ownership)
-	for _, u := range discoveredURLs {
-		domain := urlutil.ExtractDomain(u)
+	// Replicate to shard owners if we're in a multi-node setup (unless noindex)
+	if !skipIndex {
+		n.replicateDocument(doc)
+	}
 
-		// Skip URLs blocked by operator filter
-		if !n.urlFilter.IsEmpty() && !n.urlFilter.IsAllowed(u, domain) {
-			continue
-		}
+	// Schedule discovered URLs (unless noindex+nofollow)
+	if !skipLinks {
+		for _, u := range discoveredURLs {
+			domain := urlutil.ExtractDomain(u)
 
-		task := &models.CrawlTask{
-			URL:       u,
-			Domain:    domain,
-			Depth:     doc.Depth + 1,
-			Priority:  doc.Depth + 2,
-			SourceURL: doc.URL,
-			CreatedAt: time.Now(),
-		}
-		if n.shouldCrawlLocally(domain) {
-			n.scheduler.Schedule(task)
-		} else {
-			n.forwardCrawlTask(task)
+			// Skip URLs blocked by operator filter
+			if !n.urlFilter.IsEmpty() && !n.urlFilter.IsAllowed(u, domain) {
+				continue
+			}
+
+			task := &models.CrawlTask{
+				URL:       u,
+				Domain:    domain,
+				Depth:     doc.Depth + 1,
+				Priority:  doc.Depth + 2,
+				SourceURL: doc.URL,
+				CreatedAt: time.Now(),
+			}
+			if n.shouldCrawlLocally(domain) {
+				n.scheduler.Schedule(task)
+			} else {
+				n.forwardCrawlTask(task)
+			}
 		}
 	}
 
-	// Broadcast discovered URLs to peers (with proof-of-work)
-	if len(discoveredURLs) > 0 {
+	// Broadcast discovered URLs to peers (unless noindex — don't gossip forbidden content)
+	if !skipIndex && len(discoveredURLs) > 0 {
 		ann := &models.URLAnnouncement{
 			URLs:      discoveredURLs,
 			SourceURL: doc.URL,

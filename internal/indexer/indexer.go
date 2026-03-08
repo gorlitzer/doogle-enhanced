@@ -155,6 +155,12 @@ func (ix *Indexer) Stats() *models.IndexerInfo {
 
 // Index processes a crawled document through the full pipeline.
 func (ix *Indexer) Index(doc *models.Document) error {
+	// 0. Safety net: refuse to index documents with noindex directive
+	if doc.NoIndex {
+		log.Printf("indexer: noindex directive, refusing to index %s", doc.URL)
+		return nil
+	}
+
 	// 1. Skip empty content
 	if len(doc.Content) == 0 && len(doc.Title) == 0 {
 		ix.emptySkipped.Add(1)

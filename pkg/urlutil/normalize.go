@@ -47,6 +47,24 @@ func Normalize(rawURL string) string {
 	// Remove fragment
 	parsed.Fragment = ""
 
+	// Strip tracking parameters and sort query params
+	if parsed.RawQuery != "" {
+		params := parsed.Query()
+		changed := false
+		for key := range params {
+			if isTrackingParam(key) {
+				delete(params, key)
+				changed = true
+			}
+		}
+		if changed || len(params) > 0 {
+			parsed.RawQuery = params.Encode() // Encode() sorts keys
+		}
+		if len(params) == 0 {
+			parsed.RawQuery = ""
+		}
+	}
+
 	// Remove trailing slash for non-root paths
 	if parsed.Path != "/" && strings.HasSuffix(parsed.Path, "/") {
 		parsed.Path = strings.TrimRight(parsed.Path, "/")
@@ -56,6 +74,36 @@ func Normalize(rawURL string) string {
 	}
 
 	return parsed.String()
+}
+
+// trackingParams is the set of exact-match query parameter names to strip.
+var trackingParams = map[string]bool{
+	"fbclid":  true,
+	"gclid":   true,
+	"msclkid": true,
+	"mc_cid":  true,
+	"mc_eid":  true,
+	"_ga":     true,
+	"_gl":     true,
+	"zanpid":  true,
+	"dclid":   true,
+}
+
+// trackingPrefixes are query parameter prefixes to strip (e.g. utm_source).
+var trackingPrefixes = []string{"utm_"}
+
+// isTrackingParam returns true if the query parameter is a known tracking param.
+func isTrackingParam(key string) bool {
+	lower := strings.ToLower(key)
+	if trackingParams[lower] {
+		return true
+	}
+	for _, prefix := range trackingPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // ShouldCrawl returns true if the URL is worth crawling (http/https, no binary extensions).

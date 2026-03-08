@@ -33,6 +33,10 @@ type Document struct {
 	OGTitle     string   `json:"og_title,omitempty"`
 	OGDesc      string   `json:"og_description,omitempty"`
 	Canonical   string   `json:"canonical,omitempty"`
+	NoIndex     bool     `json:"noindex,omitempty"`
+	NoFollow    bool     `json:"nofollow,omitempty"`
+	RobotsMeta  string   `json:"robots_meta,omitempty"`
+	XRobotsTag  string   `json:"x_robots_tag,omitempty"`
 	IsHTTPS     bool     `json:"is_https"`
 
 	// Quality scores (set by indexer)
