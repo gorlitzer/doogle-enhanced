@@ -24,16 +24,6 @@ Single Go binary. Run it, connect to peers, become part of a distributed search 
 
 ## Quick Start
 
-### Install (binary)
-
-```bash
-GITHUB_TOKEN=ghp_... sh install.sh
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for token setup and detailed instructions.
-
-### Build from source
-
 ```bash
 git clone https://github.com/gorlitzer/doogle-enhanced.git
 cd doogle-enhanced
