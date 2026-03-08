@@ -47,6 +47,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2'   # Terminal
 doogle-v2/
 ├── cmd/doogle/main.go          # Entry point — node mode + search subcommand
 ├── internal/                   # Private packages (not importable by external code)
+│   ├── geo/                    # GeoIP peer geolocation (GeoLite2-Country)
 │   ├── node/                   # Orchestrator — wires all subsystems together
 │   │   ├── node.go             # Node struct, init(), Run(), Shutdown(), Status()
 │   │   ├── config.go           # Config types, YAML loading, CLI flag parsing
@@ -159,6 +160,10 @@ doogle-v2/
 ---
 
 ## Package Overview
+
+### `internal/geo` — Peer Geolocation
+
+Provides GeoIP lookups using the MaxMind GeoLite2-Country database. The `GeoService` resolves peer IP addresses to ISO 3166-1 country codes, which are displayed as country flags in the leaderboard, network topology, and node overview UI. The database file is downloaded via `make geoip`.
 
 ### `internal/node` — The Orchestrator
 

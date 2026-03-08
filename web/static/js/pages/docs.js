@@ -1469,6 +1469,14 @@ const testedPlatforms = [
       { device: 'Windows (native)', os: 'Windows 10/11', arch: 'amd64', status: 'untested', notes: 'Go supports Windows. Needs testing — help wanted!' },
     ],
   },
+  {
+    os: 'Android',
+    icon: 'radio',
+    color: 'var(--amber)',
+    devices: [
+      { device: 'Termux', os: 'Android 10+', arch: 'arm64', status: 'untested', notes: 'Binary available via make release. Not yet tested on a device — help wanted!' },
+    ],
+  },
 ];
 
 function renderPlatforms(el) {
@@ -1539,6 +1547,7 @@ function renderPlatforms(el) {
             <tr><td>linux</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Most common server/desktop target</td></tr>
             <tr><td>linux</td><td>arm64</td><td><span class="badge badge-amber">untested</span></td><td>Raspberry Pi 4/5, ARM servers</td></tr>
             <tr><td>windows</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Native Windows build</td></tr>
+            <tr><td>android</td><td>arm64</td><td><span class="badge badge-amber">untested</span></td><td>Termux on Android — binary available, not yet tested</td></tr>
           </tbody>
         </table>
       </div>

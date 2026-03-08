@@ -79,8 +79,9 @@ The node orchestrator creates subsystems in this exact order:
     11a. search.NewEntityCardDetector()  Entity query detection → knowledge cards
 12. search.NewDistributedSearch()  Fan-out + merge
 13. Register P2P handlers      Search, Crawl, Index stream protocols
-14. initFleet()                Fleet coordinator/worker setup (if fleet role != standalone)
-15. api.NewServer()            HTTP API + embedded web UI
+14. geo.NewGeoService()        Load GeoLite2-Country database for peer geolocation
+15. initFleet()                Fleet coordinator/worker setup (if fleet role != standalone)
+16. api.NewServer()            HTTP API + embedded web UI
 ```
 
 ### Runtime (`node.Run()`)
@@ -110,6 +111,17 @@ The node orchestrator creates subsystems in this exact order:
 11. bleveIdx.Close()         → flush and close index
 12. badger.Close()           → flush and close database (last, all stores depend on it)
 ```
+
+---
+
+## Node Types
+
+Doogle supports two node modes:
+
+- **Full node** (default): Runs all subsystems — crawling, indexing, search, relay, and P2P networking. Requires ~1-2 GB RAM depending on index size and worker count.
+- **Light node** (`--light`): Search and relay only. Connects to the P2P network, forwards search queries to full nodes, and relays gossip. Does not crawl or index. Uses ~50 MB RAM — suitable for edge devices, phones (via Termux), or users who only need search access.
+
+Light nodes participate in the DHT and GossipSub like full nodes, so they contribute to network connectivity and URL propagation even without crawling.
 
 ---
 

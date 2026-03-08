@@ -122,6 +122,8 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - Automatic peer discovery via IPFS public DHT — zero config, no manual bootstrap needed
 - mDNS for zero-config LAN discovery
 - GossipSub for URL frontier broadcast — peers check domain ownership before crawling, forwarding non-owned URLs to the responsible node
+- Peer geolocation via GeoLite2-Country database — country flags in leaderboard, network, and node UI
+- Light node mode (`--light`): search + relay only, no crawling or indexing — ideal for low-resource devices
 - NAT traversal via UPnP/NAT-PMP and hole punching
 - Custom protocols: `/doogle/search/1.0.0`, `/doogle/crawl/1.0.0`, `/doogle/index/1.0.0`, `/doogle/replicate/1.0.0`, `/doogle/antientropy/1.0.0`, `/doogle/fleet/heartbeat/1.0.0`, `/doogle/fleet/proxy/1.0.0`
 
@@ -240,6 +242,7 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
 | macOS | Intel x64 | Verified |
 | Linux (Ubuntu/Debian) | x64 / arm64 | Planned |
 | Windows 10/11 | x64 | Planned |
+| Android (Termux) | arm64 | Untested |
 
 ---
 
@@ -325,6 +328,7 @@ Flags:
   --mdns               Enable mDNS LAN discovery (default: true)
   --dht-discovery      Enable DHT peer discovery via IPFS bootstrap (default: true)
   --headless           Enable headless browser rendering (default: false)
+  --light              Light node mode: search + relay only, no crawl/index (default: false)
   --log-level LEVEL    Log level: debug, info, warn, error (default: info)
   --fleet-role ROLE    Fleet mode: coordinator (default), worker, standalone
   --fleet-coordinator  Coordinator multiaddr (required for workers)
@@ -380,6 +384,7 @@ make test                       # run all tests
 make dev                        # Docker foreground on :7002 (Ctrl+C to stop)
 make clean                      # remove build artifacts (bin/, dist/, logs, pid)
 make nuke                       # full reset: clean + delete crawl data + Go runtime
+make geoip                      # download GeoLite2-Country database
 make release                    # cross-compile for all platforms to dist/
 make checksums                  # generate SHA-256 checksums
 make patch                      # tag + release: v0.1.0 → v0.1.1
@@ -457,6 +462,7 @@ doogle-v2/
 ├── cmd/doogle/main.go             Entry point + CLI search subcommand
 ├── internal/
 │   ├── node/                      Orchestrator, config, identity, rate limiter, audit trail, URL filter
+│   ├── geo/                       GeoIP peer geolocation (GeoLite2-Country)
 │   ├── p2p/                       libp2p host, DHT, GossipSub, protocols, proof-of-work
 │   ├── crawler/                   Worker pool, scheduler, rate limiter, structured data, PDF extraction
 │   ├── indexer/                   Quality scoring, dedup, PageRank, domain authority, content verification, NER, summarization
@@ -641,11 +647,11 @@ url_filter:
 ### Phase 5 — Ecosystem
 - [ ] Browser extension (address bar search, optional query obfuscation via P2P)
 - [ ] Mobile client (read-only, connects to remote Doogle node)
-- [ ] Light nodes (~50 MB RAM, relay-only, proxy queries, optional single crawl worker)
+- [x] Light nodes (~50 MB RAM, search + relay only, proxy queries to full nodes via `--light`)
 - [ ] Incentive layer (reputation + credit for uptime/crawl contribution — not a blockchain)
 - [ ] Governance (community proposals, node operator voting on network parameters)
 - [ ] Plugin system (pluggable analyzers, scorers, content extractors)
-- [ ] Multi-platform releases (goreleaser: Linux, macOS, Windows, amd64 + arm64)
+- [x] Multi-platform releases (Linux, macOS, Windows, Android/arm64 — amd64 + arm64)
 - [x] Automatic peer discovery via IPFS public DHT (zero-config onboarding)
 - [ ] Public bootstrap network (maintained Doogle-specific entry nodes)
 

@@ -22,7 +22,7 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 ## Requirements
 
 - **Go 1.22+** (for building from source)
-- **OS:** Linux, macOS, or Windows
+- **OS:** Linux, macOS, Windows, or Android (via Termux)
 - **Ports:** One port for libp2p (default `7001` TCP+UDP), one for the HTTP API (default `7002`)
 - **Disk:** ~100MB minimum; grows with the number of indexed pages
 - **RAM:** ~128MB minimum; scales with crawl worker count and index size
@@ -85,6 +85,14 @@ Multiple seeds:
 ```bash
 ./bin/doogle --port 5001 --api-port 9090
 ```
+
+### Light Node
+
+```bash
+./bin/doogle --light
+```
+
+A light node connects to the P2P network and relays search queries to full nodes, but does not crawl or index content. This keeps resource usage low (~50 MB RAM) — ideal for edge devices or when you only need search access.
 
 ### Custom Data Directory
 
@@ -208,6 +216,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--mdns` | `true` | Enable mDNS for LAN peer discovery |
 | `--dht-discovery` | `true` | Enable automatic peer discovery via IPFS public DHT |
 | `--headless` | `false` | Enable headless browser rendering for JS-heavy pages |
+| `--light` | `false` | Light node mode: search + relay only, no crawling or indexing |
 | `--log-level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `--fleet-role` | `standalone` | Fleet mode: `standalone`, `coordinator`, `worker` |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |

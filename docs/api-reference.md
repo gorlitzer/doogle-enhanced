@@ -235,6 +235,7 @@ curl http://localhost:7002/api/status
 | `addrs` | []string | Multiaddrs this node is listening on (share these with other nodes) |
 | `connected_peers` | int | Number of currently connected peers |
 | `peer_list` | []string | Peer IDs of connected nodes |
+| `country` | string | ISO 3166-1 alpha-2 country code of this node (from GeoIP, e.g. `"US"`, `"DE"`) |
 | `indexed_docs` | int | Number of documents in the local Bleve index |
 | `crawled_urls` | int | Total URLs crawled since startup |
 | `urls_in_queue` | int | URLs waiting to be crawled |
@@ -433,6 +434,7 @@ curl http://localhost:7002/api/admin/leaderboard
 | `explorers[].doc_count` | int | Number of documents contributed |
 | `explorers[].trust_score` | float | Peer trust score (0.0-1.0) |
 | `explorers[].is_local` | bool | Whether this entry represents the local node |
+| `explorers[].country` | string | ISO 3166-1 alpha-2 country code (from GeoIP, e.g. `"US"`, `"JP"`) |
 | `explorers[].domain_count` | int | Number of unique domains covered |
 | `total_docs` | int | Total documents across all peers |
 | `local_peer_id` | string | This node's peer ID (for highlighting in the UI) |
@@ -593,7 +595,8 @@ curl http://localhost:7002/api/admin/peers
   {
     "peer_id": "12D3KooWAbc...",
     "node_name": "Tokyo-Relay-01",
-    "addrs": ["/ip4/203.0.113.10/tcp/7001"]
+    "addrs": ["/ip4/203.0.113.10/tcp/7001"],
+    "country": "JP"
   }
 ]
 ```

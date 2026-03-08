@@ -197,11 +197,11 @@ const techStack = [
 ];
 
 const limitations = [
-  { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard. Light nodes (planned) will bypass this by proxying to full nodes.', badge: 'by design' },
+  { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard. Light nodes proxy queries to full nodes, keeping resource usage low.', badge: 'by design' },
   { title: 'Limited binary format support', desc: 'PDF text extraction is supported. Other binary formats (DOCX, PPTX) are not yet parsed or indexed.', badge: 'partial' },
   { title: 'No login-gated content', desc: 'Pages behind authentication walls cannot be crawled. Only publicly accessible content is indexed.', badge: 'by design' },
   { title: 'Rate-limited by politeness', desc: 'Strict per-domain rate limiting and robots.txt compliance means some sites crawl slowly. This is intentional.', badge: 'by design' },
-  { title: 'Full nodes only (for now)', desc: 'Every node currently runs all subsystems (~1-2 GB RAM). Light node mode for edge devices is planned — relay-only, ~50 MB.', badge: 'planned' },
+  { title: 'Light nodes are relay-only', desc: 'Light nodes (--light) search and relay but do not crawl or index. They depend on full nodes for content.', badge: 'by design' },
   { title: 'No dark web crawling (yet)', desc: '.onion and I2P crawling is on the roadmap (Phase 3). Requires Tor/I2P integration, SOCKS5 proxy support, and content safety layers.', badge: 'planned' },
   { title: 'No P2P anonymity layer', desc: 'Peers currently see each other\'s IPs. Optional libp2p-over-Tor transport is planned to hide peer identities.', badge: 'planned' },
   { title: 'Language coverage varies', desc: '15 language stemmers are available via lang: filter, but stemmer quality varies. English has the best results; other languages are functional but less tuned.', badge: 'by design' },
@@ -651,12 +651,12 @@ function renderRoadmap(el) {
     {
       name: 'Phase 5 — Ecosystem',
       status: 'planned', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 0,
+      progress: 30,
       items: [
         'Browser extension, mobile client',
-        'Light nodes (~50 MB RAM, relay-only)',
-        'Plugin system, multi-platform releases',
-        'Public Doogle-specific bootstrap network, community governance',
+        '<strong>Done:</strong> Light nodes (--light flag, search + relay, no crawl/index)',
+        '<strong>Done:</strong> Multi-platform releases (Linux, macOS, Windows, Android/arm64)',
+        'Plugin system, public Doogle-specific bootstrap network, community governance',
       ],
     },
   ];
