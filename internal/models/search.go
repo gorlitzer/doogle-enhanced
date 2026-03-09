@@ -86,6 +86,8 @@ type SearchResult struct {
 	DomainAuthorityScore float64 `json:"domain_authority_score,omitempty"`
 	URLQualityScore      float64 `json:"url_quality_score,omitempty"`
 	VectorSimilarity     float64 `json:"vector_similarity,omitempty"`
+	PerfScore            float64 `json:"perf_score,omitempty"`
+	MobileScore          float64 `json:"mobile_score,omitempty"`
 
 	// Trust: true if this document is under quarantine review (24h voting window)
 	Quarantined       bool   `json:"quarantined,omitempty"`

@@ -36,7 +36,7 @@ const pipelineSteps = [
   {
     icon: 'cpu', title: 'Analyze', color: 'var(--purple)',
     eli5: 'Doogle figures out what the page is about — is it about cats? Coding? Pizza recipes?',
-    detail: 'Readability-style content extraction (Arc90 algorithm) pulls clean body text. Duplicate detection, link graph, and URL quality analysis.',
+    detail: 'Readability-style content extraction (Arc90 algorithm) pulls clean body text. TTFB + performance + mobile metrics. Duplicate detection, link graph, and URL quality analysis.',
     modal: `<p>Every crawled document goes through content analysis:</p>
       <ul>
         <li><strong>Readability Extraction</strong> — Arc90-style algorithm scores block elements (div, article, section) by paragraph count, text length, and class/ID signals to find the main content area, stripping boilerplate</li>
@@ -50,13 +50,14 @@ const pipelineSteps = [
   {
     icon: 'star', title: 'Score', color: 'var(--amber)',
     eli5: 'Doogle gives the page a report card — is it well-written? Trustworthy? Useful?',
-    detail: '12-signal scoring with optional ML learn-to-rank. Hand-tuned weights used until 200+ click pairs enable gradient-boosted model training.',
-    modal: `<p>Quality scoring combines 12 signals into a weighted score:</p>
+    detail: '28-feature neural-style scoring: 12 base quality signals + 14 query-document interaction features + CTR/dwell/mobile/performance signals. ML learn-to-rank auto-trains from click data every 6h.',
+    modal: `<p>Quality scoring combines <strong>28 features</strong> across three categories:</p>
+      <h4>12 Base Signals (index-time)</h4>
       <ul>
         <li><strong>E-E-A-T</strong> (15%) — expertise, experience, authority, trust</li>
         <li><strong>Quality</strong> (10%) — content depth, heading structure, media richness</li>
         <li><strong>PageRank</strong> (15%) — graph-based link authority (<a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">Wikipedia</a>)</li>
-        <li><strong>Domain Authority</strong> (10%) — site-level reputation: avg PageRank, avg quality, backlink domains</li>
+        <li><strong>Domain Authority</strong> (10%) — site-level reputation: avg PageRank, avg quality, backlink domains + behavioral CTR/dwell</li>
         <li><strong>Readability</strong> (8%) — Flesch-Kincaid score</li>
         <li><strong>Citation</strong> (8%) — references to/from other sources</li>
         <li><strong>Freshness</strong> (8%) — graduated decay with time-sensitive vs evergreen half-lives</li>
@@ -66,7 +67,18 @@ const pipelineSteps = [
         <li><strong>Link</strong> (5%) — inbound/outbound link structure</li>
         <li><strong>Author Credibility</strong> (5%) — author expertise signals</li>
       </ul>
-      <p>These signals are combined into a <strong>StaticScore</strong> at index time: <code>(0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code></p>`,
+      <h4>14 Query-Document Interaction Features (query-time)</h4>
+      <ul>
+        <li><strong>Term Overlap</strong> — title, body, heading, URL term coverage</li>
+        <li><strong>Exact Match</strong> — query substring in title</li>
+        <li><strong>TF-IDF Similarity</strong> — cosine similarity of query/document embeddings</li>
+        <li><strong>Term Proximity</strong> — average distance between query terms in content</li>
+        <li><strong>IDF-Weighted Overlap</strong> — rare query terms in document</li>
+        <li><strong>CTR Score</strong> — position-debiased click-through rate × dwell quality</li>
+        <li><strong>Performance Score</strong> — Core Web Vitals (TTFB, page size, resources)</li>
+        <li><strong>Mobile Score</strong> — viewport meta, responsive CSS, touch-friendliness</li>
+      </ul>
+      <p>These features are combined into a <strong>StaticScore</strong> at index time: <code>(0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code>, then refined at query time by the neural LTR model.</p>`,
   },
   {
     icon: 'shield', title: 'Filter Spam', color: 'var(--red)',
@@ -92,11 +104,11 @@ const pipelineSteps = [
   {
     icon: 'search', title: 'Search', color: 'var(--accent)',
     eli5: 'You ask a question, and Doogle looks through its filing cabinet super fast to find the best answers.',
-    detail: 'Hybrid BM25+vector search with RRF fusion. Intent classification, synonym expansion, entity cards, learn-to-rank ML model, and multilingual semantic matching.',
+    detail: 'Hybrid BM25+vector search with RRF fusion. 28-feature neural-style LTR with CTR/dwell signals. Intent classification, synonym expansion, entity cards, and multilingual semantic matching.',
     modal: `<p>The search pipeline parses your query into structured components:</p>
       <ul>
         <li><strong>Hybrid Search</strong> — BM25 (Bleve) + TF-IDF vector similarity merged via Reciprocal Rank Fusion (RRF, k=60)</li>
-        <li><strong>Learn-to-Rank</strong> — gradient-boosted ML model (when trained) replaces hand-tuned weights with click-trained ranking</li>
+        <li><strong>28-Feature Neural LTR</strong> — gradient-boosted ML model with query-document interaction features, CTR/dwell signals, performance and mobile scores — auto-trains from click data every 6h</li>
         <li><strong>Entity Cards</strong> — NER-extracted entities appear as knowledge graph cards above search results</li>
         <li><strong>Multilingual Matching</strong> — cross-lingual dictionary projection enables searching in 9 languages</li>
         <li><strong>Intent Classification</strong> — navigational, informational, transactional, or local — adjusts ranking weights per query</li>
@@ -139,8 +151,8 @@ const capabilities = [
       <p>Monitoring: the admin dashboard shows forwarded/received task counts per node, owned domains, and a full domain ownership map at <code>/api/admin/domains</code>.</p>` },
   { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered search with intent classification, synonym expansion, spelling correction, boolean operators, search dorks, 15 language stemmers, domain diversity, and passage snippets.',
     modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. The pipeline: parse query → classify intent (navigational/informational/transactional/local) → expand synonyms (100+ pairs) → build Bleve query tree → match → intent-aware re-rank → domain diversity (max 2 per domain in top 10) → passage-based snippets with highlights → spelling suggestion ("Did you mean?").</p><p>Field boosts: title (5x), URL text (3x), headings (2x), description (1.5x), content (1x). Boolean operators, search dorks, phrase matching, fuzzy matching, <code>site:</code> and <code>lang:</code> filters (15 language stemmers).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
-  { icon: 'star', title: 'Quality Scoring (12 Signals)', desc: '12 weighted scoring signals: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
-    modal: `<p>12-signal scoring evaluates pages across multiple dimensions, mirroring Google's quality rater guidelines and insights from the Yandex ranking factor leak. Signals include E-E-A-T (15%), quality (10%), PageRank (15%), domain authority (10%), URL quality (5%), readability (8%), citation (8%), freshness (8%), relevance (6%), SEO (5%), link structure (5%), and author credibility (5%). Domain authority aggregates site-level reputation from avg PageRank, avg quality, and backlink domains.</p>` },
+  { icon: 'star', title: 'Neural-Style Ranking (28 Features)', desc: '12 base quality signals + 14 query-document interaction features + CTR/dwell/mobile/performance signals. Gradient-boosted LTR model auto-trains from click data.',
+    modal: `<p>28-feature neural-style ranking evaluates pages across multiple dimensions, mirroring Google's quality rater guidelines. <strong>12 base signals</strong>: E-E-A-T (15%), quality (10%), PageRank (15%), domain authority (10%), URL quality (5%), readability (8%), citation (8%), freshness (8%), relevance (6%), SEO (5%), link structure (5%), and author credibility (5%). <strong>14 interaction features</strong>: term overlap (title/body/heading/URL), exact title match, TF-IDF cosine similarity, term proximity, IDF-weighted overlap, CTR score, mobile score, and performance score. Domain authority blends structural signals with behavioral CTR/dwell data when available.</p>` },
   { icon: 'cpu', title: 'Content Analysis', desc: 'Readability-style main content extraction (Arc90 algorithm) plus rich metadata: headings, links, images, OG tags, canonical URLs.',
     modal: `<p>Every crawled document goes through Readability-style content extraction: block elements (div, article, section) are scored by paragraph count, text length, comma density, and class/ID signals to isolate the main content area. Boilerplate (sidebars, navs, footers, ads) is stripped. Also extracts: title, meta description, headings (H1-H6), outbound links (internal/external, nofollow), images with alt text, Open Graph tags, and canonical URLs. URL quality signals score path depth, slug readability, and tracking parameter presence.</p>` },
   { icon: 'shield', title: 'Spam Detection', desc: 'Keyword stuffing detection, cloaking analysis, and quality threshold filtering to keep the index clean.',

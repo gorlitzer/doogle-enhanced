@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -111,4 +112,196 @@ func (cs *ClickStore) TotalClickPairs() int {
 		total += n * (n - 1) / 2
 	}
 	return total
+}
+
+// RecordImpression increments the impression count for a query-URL pair.
+func (cs *ClickStore) RecordImpression(query, url string, position int) error {
+	key := fmt.Sprintf("click_imp:%s:%s", query, url)
+	cs.incrUint64(key)
+	return nil
+}
+
+// RecordDwell records cumulative dwell time for a query-URL pair.
+func (cs *ClickStore) RecordDwell(query, url string, dwellMs int64) error {
+	// Increment cumulative dwell time
+	sumKey := fmt.Sprintf("click_dwell:%s:%s", query, url)
+	cs.addUint64(sumKey, uint64(dwellMs))
+
+	// Increment dwell event count
+	countKey := fmt.Sprintf("click_dwell_n:%s:%s", query, url)
+	cs.incrUint64(countKey)
+	return nil
+}
+
+// RecordPogoStick increments the pogo-stick count for a query-URL pair.
+func (cs *ClickStore) RecordPogoStick(query, url string) error {
+	key := fmt.Sprintf("click_pogo:%s:%s", query, url)
+	cs.incrUint64(key)
+	return nil
+}
+
+// CTR returns the position-debiased click-through rate for a query-URL pair.
+func (cs *ClickStore) CTR(query, url string) float64 {
+	clicks := cs.GetClickCount(query, url)
+	impressions := cs.getUint64(fmt.Sprintf("click_imp:%s:%s", query, url))
+	if impressions == 0 {
+		return 0
+	}
+	rawCTR := float64(clicks) / float64(impressions)
+
+	// Position bias correction: examProb(pos) = 1.0 / (1.0 + 0.5 * ln(pos + 1))
+	posKey := fmt.Sprintf("click_pos:%s:%s", query, url)
+	pos := cs.getUint64(posKey)
+	if pos == 0 {
+		pos = 1
+	}
+	examProb := 1.0 / (1.0 + 0.5*math.Log(float64(pos)+1))
+	if examProb < 0.01 {
+		examProb = 0.01
+	}
+	return rawCTR / examProb
+}
+
+// AvgDwellSeconds returns the average dwell time in seconds for a query-URL pair.
+func (cs *ClickStore) AvgDwellSeconds(query, url string) float64 {
+	sumMs := cs.getUint64(fmt.Sprintf("click_dwell:%s:%s", query, url))
+	count := cs.getUint64(fmt.Sprintf("click_dwell_n:%s:%s", query, url))
+	if count == 0 {
+		return 0
+	}
+	return float64(sumMs) / float64(count) / 1000.0
+}
+
+// PogoStickRate returns the fraction of clicks that resulted in a pogo-stick.
+func (cs *ClickStore) PogoStickRate(query, url string) float64 {
+	clicks := cs.GetClickCount(query, url)
+	if clicks == 0 {
+		return 0
+	}
+	pogo := cs.getUint64(fmt.Sprintf("click_pogo:%s:%s", query, url))
+	return float64(pogo) / float64(clicks)
+}
+
+// DomainCTR returns the aggregate CTR across all query-URL pairs for a domain.
+func (cs *ClickStore) DomainCTR(domain string) float64 {
+	var totalClicks, totalImpressions uint64
+
+	_ = cs.db.Scan([]byte("click_imp:"), func(key, val []byte) bool {
+		k := string(key)
+		rest := strings.TrimPrefix(k, "click_imp:")
+		idx := strings.Index(rest, ":")
+		if idx <= 0 {
+			return true
+		}
+		url := rest[idx+1:]
+		if extractDomainFromURL(url) == domain {
+			if len(val) >= 8 {
+				totalImpressions += binary.BigEndian.Uint64(val)
+			}
+			// Get corresponding clicks
+			query := rest[:idx]
+			totalClicks += cs.GetClickCount(query, url)
+		}
+		return true
+	})
+
+	if totalImpressions == 0 {
+		return 0
+	}
+	return float64(totalClicks) / float64(totalImpressions)
+}
+
+// DomainAvgDwell returns the average dwell time in seconds across all query-URL pairs for a domain.
+func (cs *ClickStore) DomainAvgDwell(domain string) float64 {
+	var totalMs, totalCount uint64
+
+	_ = cs.db.Scan([]byte("click_dwell:"), func(key, val []byte) bool {
+		k := string(key)
+		if strings.HasPrefix(k, "click_dwell_n:") {
+			return true
+		}
+		rest := strings.TrimPrefix(k, "click_dwell:")
+		idx := strings.Index(rest, ":")
+		if idx <= 0 {
+			return true
+		}
+		url := rest[idx+1:]
+		if extractDomainFromURL(url) == domain {
+			if len(val) >= 8 {
+				totalMs += binary.BigEndian.Uint64(val)
+			}
+			query := rest[:idx]
+			totalCount += cs.getUint64(fmt.Sprintf("click_dwell_n:%s:%s", query, url))
+		}
+		return true
+	})
+
+	if totalCount == 0 {
+		return 0
+	}
+	return float64(totalMs) / float64(totalCount) / 1000.0
+}
+
+// DomainSearchVolume returns the total number of impressions for a domain.
+func (cs *ClickStore) DomainSearchVolume(domain string) int64 {
+	var total int64
+	_ = cs.db.Scan([]byte("click_imp:"), func(key, val []byte) bool {
+		k := string(key)
+		rest := strings.TrimPrefix(k, "click_imp:")
+		idx := strings.Index(rest, ":")
+		if idx <= 0 {
+			return true
+		}
+		url := rest[idx+1:]
+		if extractDomainFromURL(url) == domain && len(val) >= 8 {
+			total += int64(binary.BigEndian.Uint64(val))
+		}
+		return true
+	})
+	return total
+}
+
+// --- helpers ---
+
+func (cs *ClickStore) incrUint64(key string) {
+	cs.addUint64(key, 1)
+}
+
+func (cs *ClickStore) addUint64(key string, delta uint64) {
+	var current uint64
+	if data, err := cs.db.Get([]byte(key)); err == nil && len(data) >= 8 {
+		current = binary.BigEndian.Uint64(data)
+	}
+	current += delta
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, current)
+	_ = cs.db.Set([]byte(key), buf)
+}
+
+func (cs *ClickStore) getUint64(key string) uint64 {
+	data, err := cs.db.Get([]byte(key))
+	if err != nil || len(data) < 8 {
+		return 0
+	}
+	return binary.BigEndian.Uint64(data)
+}
+
+// extractDomainFromURL extracts the domain from a URL string.
+func extractDomainFromURL(rawURL string) string {
+	// Simple extraction: find :// then next /
+	idx := strings.Index(rawURL, "://")
+	if idx < 0 {
+		return rawURL
+	}
+	rest := rawURL[idx+3:]
+	if end := strings.IndexByte(rest, '/'); end > 0 {
+		rest = rest[:end]
+	}
+	// Remove port
+	if end := strings.LastIndexByte(rest, ':'); end > 0 {
+		rest = rest[:end]
+	}
+	// Remove www. prefix
+	rest = strings.TrimPrefix(rest, "www.")
+	return rest
 }

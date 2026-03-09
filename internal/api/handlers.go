@@ -56,6 +56,11 @@ type Deps struct {
 	TrendsFn func() *models.TrendsResponse
 	ClickFn  func(query, url string, position int) error
 
+	// Behavioral tracking (Phase 2)
+	ImpressionFn func(query, url string, position int) error
+	DwellFn      func(query, url string, dwellMs int64) error
+	PogoStickFn  func(query, url string) error
+
 	// Trust admin operations
 	UnquarantineFn      func(peerID string) error
 	DismissReportFn     func(reportID string) error
@@ -837,6 +842,77 @@ func ClickHandler(deps *Deps) http.HandlerFunc {
 			return
 		}
 		if err := deps.ClickFn(body.Query, body.URL, body.Position); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "recorded"})
+	}
+}
+
+// ImpressionHandler handles POST /api/impression
+func ImpressionHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.ImpressionFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			Query    string `json:"query"`
+			URL      string `json:"url"`
+			Position int    `json:"position"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url'"})
+			return
+		}
+		if err := deps.ImpressionFn(body.Query, body.URL, body.Position); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "recorded"})
+	}
+}
+
+// DwellHandler handles POST /api/dwell
+func DwellHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.DwellFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			Query   string `json:"query"`
+			URL     string `json:"url"`
+			DwellMs int64  `json:"dwell_ms"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url'"})
+			return
+		}
+		if err := deps.DwellFn(body.Query, body.URL, body.DwellMs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "recorded"})
+	}
+}
+
+// PogoStickHandler handles POST /api/pogo
+func PogoStickHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.PogoStickFn == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not available"})
+			return
+		}
+		var body struct {
+			Query string `json:"query"`
+			URL   string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.URL == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing 'url'"})
+			return
+		}
+		if err := deps.PogoStickFn(body.Query, body.URL); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

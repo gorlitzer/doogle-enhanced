@@ -87,7 +87,7 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - URL quality signals (path depth, readability, tracking param detection)
 - Graduated freshness scoring with configurable half-lives (time-sensitive vs evergreen)
 - Readability-style main content extraction (Arc90 algorithm) for cleaner indexing
-- 12-signal ranking: E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness
+- 28-feature neural-style ranking: 12 base signals (E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness) + 14 query-document interaction features (term overlap, TF-IDF similarity, term proximity, coverage, exact match) + CTR/mobile/performance scores
 - Knowledge graph entity cards in search results (NER-extracted entities with related topics)
 - Paginated results with prev/next navigation
 - Keyboard shortcuts: `/` and `Ctrl+K`/`Cmd+K` to focus search
@@ -104,6 +104,9 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - Image context enrichment: alt text, figcaption, width/height, surrounding content
 - PDF & document indexing: binary text extraction for PDF, plain text, CSV, markdown, XML
 - Headless browser fallback for JavaScript-heavy pages (via `go-rod`)
+- Core Web Vitals extraction: TTFB measurement, page size analysis, resource counting, lazy image detection, async/defer script detection
+- Mobile-friendliness extraction: viewport meta, responsive CSS detection (media queries, flexbox/grid), touch icons, small font/tap target analysis
+- Priority-based re-crawl scheduler: stale URLs re-crawled every 5 minutes, prioritized by staleness × importance (change frequency)
 - Live crawl feed with real-time FIFO animation
 
 **P2P Network**
@@ -120,9 +123,11 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 **Indexer Pipeline**
 - Quality scoring (12 weighted signals), spam detection, duplicate filtering
 - Persistent content fingerprint dedup (BadgerDB-backed, survives restarts, Jaccard similarity)
-- Domain authority computation (site-level reputation from PageRank, quality, backlinks)
+- Domain authority computation (site-level reputation from PageRank, quality, backlinks + behavioral CTR/dwell signals)
 - URL quality scoring (path depth, query params, slug readability, tracking detection)
 - Readability-style main content extraction for cleaner body text
+- Performance scoring (0–1): TTFB, page size, resource count, lazy images, async scripts, script bloat
+- Mobile scoring (0–1): viewport meta, responsive CSS, flexbox/grid, touch icons, font/tap target analysis
 - Structured data extraction (Schema.org JSON-LD + microdata → type classification)
 - Named entity extraction (pattern-based NER → knowledge graph in BadgerDB)
 - Extractive summarization (TextRank-inspired sentence ranking)
@@ -136,7 +141,8 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 **Intelligence**
 - Knowledge graph: NER-extracted entities with co-occurrence relationships, entity cards in search
 - Trend detection: hourly-bucketed crawl/query counters, velocity-based spike detection
-- Click tracking: records query/URL/position for future learn-to-rank
+- Click-through rate signals: impression tracking, position-debiased CTR, dwell time measurement, pogo-stick detection (<10s return)
+- Behavioral brand authority: domain-level CTR, avg dwell time, and search volume blended into domain authority scores
 - Topic clustering: document grouping by topic with keyword labels
 - Vector search: BadgerDB-backed embedding store with brute-force cosine similarity
 
@@ -160,9 +166,11 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 - Network topology graph (interactive canvas)
 - Crawler management with live feed, analytics, seed URLs
 - Indexer stats, document browser
+- Roadmap page with filterable feature cards (shipped/in-progress/planned status badges)
 - Keyboard shortcuts: `/` and `Ctrl+K` to focus search from anywhere
 - 6 themes: Dracula, CRT Terminal, Modern, Light, Pride, Storm — each with animated logos and backgrounds
 - Update notification banner on Node Overview with "Update Now" button (auto-checks GitHub releases, localhost-only)
+- Behavioral tracking: automatic impression recording, dwell time measurement, pogo-stick detection on search results
 - Comprehensive docs, troubleshooting, and FAQ built in
 
 **Storage**
@@ -255,11 +263,14 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               │  │  robots.txt, rate limiting       │  │
               │  │  goquery + headless fallback     │  │
               │  │  Schema.org + PDF extraction     │  │
+              │  │  TTFB + perf + mobile extraction│  │
+              │  │  Priority re-crawl scheduler    │  │
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── Indexer ────────────────────┐  │
               │  │  12-signal quality scoring       │  │
-              │  │  Domain authority + URL quality  │  │
+              │  │  Performance + mobile scoring    │  │
+              │  │  Domain authority (+ behavioral) │  │
               │  │  Persistent dedup (BadgerDB)    │  │
               │  │  PageRank on backlink graph      │  │
               │  │  Content verification (Ed25519) │  │
@@ -268,6 +279,8 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               │  └─────────────────────────────────┘  │
               │                                       │
               │  ┌──── Search Engine ──────────────┐  │
+              │  │  28-feature neural-style LTR     │  │
+              │  │  CTR + dwell + pogo signals      │  │
               │  │  Intent classification          │  │
               │  │  Synonym expansion + spelling    │  │
               │  │  Local Bleve + fan-out to peers  │  │
@@ -294,7 +307,7 @@ make run ARGS='--fleet-role worker --fleet-coordinator /ip4/<YOUR_IP>/tcp/7001/p
               └──────────────────────────────────────┘
 ```
 
-**Data flow:** Seed URLs → domain ownership check (shard ring) → own domain? crawl locally / not owned? forward to owner via `/doogle/crawl/1.0.0` → GossipSub broadcast discovered URLs → Readability content extraction → quality scoring (12 signals) → domain authority → URL quality → detect duplicates → index in Bleve (title 5x, URL 3x, headings 2x, desc 1.5x) → replicate to shard owners → search queries: parse → classify intent → expand synonyms → BM25 match → fan out to peers → merge → intent-aware re-rank → domain diversity → spelling suggestion → return results.
+**Data flow:** Seed URLs → domain ownership check (shard ring) → own domain? crawl locally / not owned? forward to owner via `/doogle/crawl/1.0.0` → GossipSub broadcast discovered URLs → Readability content extraction → TTFB + performance + mobile metric extraction → quality scoring (12 signals) → performance scoring → mobile scoring → domain authority (structural + behavioral) → URL quality → detect duplicates → index in Bleve (title 5x, URL 3x, headings 2x, desc 1.5x) → replicate to shard owners → re-crawl scheduler prioritizes stale URLs by change frequency → search queries: parse → classify intent → expand synonyms → BM25 match → fan out to peers → merge → 28-feature neural re-rank (LTR with CTR/dwell/interaction features) → domain diversity → spelling suggestion → record impressions → return results.
 
 ---
 
@@ -434,6 +447,9 @@ make major                      # tag + release: v0.1.0 → v1.0.0
 | `GET` | `/api/admin/storage` | Disk usage stats (Bleve, BadgerDB, free space) |
 | `GET` | `/api/trends` | Trending queries and domains (velocity-based) |
 | `POST` | `/api/click` | Record search result click `{"query", "url", "position"}` |
+| `POST` | `/api/impression` | Record search result impression `{"query", "url", "position"}` |
+| `POST` | `/api/dwell` | Record dwell time on clicked result `{"query", "url", "dwell_ms"}` |
+| `POST` | `/api/pogo` | Record pogo-stick event (quick return) `{"query", "url"}` |
 | `GET` | `/api/admin/leaderboard` | Peer contribution rankings |
 | `GET` | `/api/admin/domains` | Domain ownership map (shard assignments, local vs remote) |
 | `GET` | `/api/admin/profile` | Master profile data |
@@ -454,14 +470,14 @@ doogle-v2/
 │   ├── node/                      Orchestrator, config, identity, rate limiter, audit trail, URL filter
 │   ├── geo/                       GeoIP peer geolocation (GeoLite2-Country)
 │   ├── p2p/                       libp2p host, DHT, GossipSub, protocols, proof-of-work
-│   ├── crawler/                   Worker pool, scheduler, rate limiter, structured data, PDF extraction
-│   ├── indexer/                   Quality scoring, dedup, PageRank, domain authority, content verification, NER, summarization
+│   ├── crawler/                   Worker pool, scheduler, rate limiter, structured data, PDF extraction, performance/mobile extraction, re-crawl scheduler
+│   ├── indexer/                   Quality scoring, dedup, PageRank, domain authority (behavioral), content verification, NER, summarization, performance/mobile scoring
 │   ├── index/                     Bleve store, query builder, multi-lang, shard manager, horizontal sharding, embedder, vector store, hybrid search
-│   ├── search/                    Local + distributed search, ranking, intent, spelling, diversity, snippets, entity cards
+│   ├── search/                    Local + distributed search, 28-feature neural ranking, LTR, CTR signals, intent, spelling, diversity, snippets, entity cards
 │   ├── fleet/                     Coordinator, worker, HMAC auth, fleet models
 │   ├── api/                       HTTP server, handlers, middleware
 │   ├── updater/                   Shared GitHub release/update logic
-│   ├── store/                     BadgerDB wrapper, URL queue, link store, trust store, fleet store, entity store, trend store, click store, cluster store
+│   ├── store/                     BadgerDB wrapper, URL queue, link store, trust store, fleet store, entity store, trend store, click store (CTR/dwell/pogo), content store (change tracking), cluster store
 │   └── models/                    Document, CrawlTask, SearchResult, CrawlEvent
 ├── pkg/
 │   ├── consistent/                Consistent hash ring
@@ -633,6 +649,17 @@ url_filter:
 - [x] Trend detection (hourly-bucketed crawl velocity + query frequency, spike detection)
 - [x] ML-based ranking (gradient-boosted decision stumps, pairwise RankNet loss, auto-trains from click data every 6h)
 - [x] Multilingual semantic search (cross-lingual dictionary projection, ~500 words across 9 languages)
+
+### Phase 4.5 — Google Parity ✅
+- [x] 28-feature neural-style ranking (14 base signals + 14 query-document interaction features: term overlap, TF-IDF similarity, term proximity, exact match, coverage)
+- [x] Click-through rate signals (position-debiased CTR using examination hypothesis, impression tracking, dwell time, pogo-stick detection)
+- [x] Core Web Vitals scoring (TTFB measurement, page size analysis, resource counting, lazy image detection, async script detection → composite 0–1 performance score)
+- [x] Mobile-first indexing (viewport meta, responsive CSS detection, flexbox/grid, touch icons, font/tap target analysis → composite 0–1 mobile score)
+- [x] Behavioral brand authority (domain-level CTR, avg dwell time, search volume blended into domain authority when click data exists)
+- [x] Real-time continuous re-crawl (priority scheduler every 5 min, staleness × importance scoring, change frequency tracking)
+- [x] Roadmap page (filterable feature cards with shipped/in-progress/planned status badges)
+- [x] Behavioral tracking frontend (automatic impression recording, dwell time on tab return, pogo-stick events)
+- [x] New API endpoints: `POST /api/impression`, `POST /api/dwell`, `POST /api/pogo`
 
 ### Phase 5 — Ecosystem
 - [ ] Browser extension (address bar search, optional query obfuscation via P2P)

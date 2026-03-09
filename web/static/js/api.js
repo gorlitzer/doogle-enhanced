@@ -137,6 +137,15 @@ export const api = {
   click(query, url, position) {
     return postJSON('/api/click', { query, url, position });
   },
+  impression(query, url, position) {
+    return postJSON('/api/impression', { query, url, position });
+  },
+  dwell(query, url, dwellMs) {
+    return postJSON('/api/dwell', { query, url, dwell_ms: dwellMs });
+  },
+  pogoStick(query, url) {
+    return postJSON('/api/pogo', { query, url });
+  },
   unquarantine(peerID) {
     return postJSON('/api/admin/trust/unquarantine', { peer_id: peerID });
   },

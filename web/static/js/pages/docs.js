@@ -290,7 +290,7 @@ make setup`, 'bash')}
 const archCardDetails = [
   // Application layer
   { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 10 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
-  { title: 'Indexer', html: `<p>12-signal scoring pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, domain authority, URL quality analysis, readability extraction (Arc90 algorithm), PageRank, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
+  { title: 'Indexer', html: `<p>28-feature scoring pipeline (12 base signals + performance/mobile/CTR): language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, domain authority, URL quality analysis, readability extraction (Arc90 algorithm), PageRank, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
   { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Intent classification, synonym expansion (100+ pairs), spelling correction ("Did you mean?"), phrases, fuzzy matching, boolean operators, and site: filters. Domain diversity (max 2 per domain in top 10) and passage-based snippets with highlights. Results ranked by <code>BM25 * StaticScore * freshnessDecay * intentMultiplier</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 6 switchable themes.</p>` },
   // P2P layer
@@ -390,14 +390,14 @@ function renderArchitecture(el) {
               ${icon('cpu', 18, 'var(--accent)')}
               <div>
                 <strong>Indexer</strong>
-                <p>12-signal scoring, domain authority, URL quality, readability extraction (Arc90), PageRank, spam filter, batch indexing.</p>
+                <p>12 base signals + performance/mobile scoring, behavioral domain authority, URL quality, readability extraction (Arc90), PageRank, spam filter, batch indexing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="2" style="cursor:pointer">
               ${icon('search', 18, 'var(--accent)')}
               <div>
                 <strong>Search</strong>
-                <p>Hybrid BM25+vector (RRF). Learn-to-rank ML model. Entity cards, intent classification, multilingual semantic search. Shard-aware routing.</p>
+                <p>Hybrid BM25+vector (RRF). 28-feature neural-style LTR with CTR/dwell/interaction signals. Entity cards, intent classification, multilingual semantic search. Shard-aware routing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="3" style="cursor:pointer">
@@ -851,6 +851,30 @@ function renderAPI(el) {
           <h4>Response</h4>
           ${codeBlock(`{"status": "recorded"}`, 'json')}
           <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Click data is stored locally and used to train the learn-to-rank model. Training auto-triggers every 6 hours when 200+ click pairs are available.</p>
+        `)}
+        ${endpoint('POST', '/api/impression', 'Record a search result impression (used for position-debiased CTR)', `
+          ${codeBlock(`curl -X POST http://localhost:7002/api/impression \\
+  -H 'Content-Type: application/json' \\
+  -d '{"query":"golang tutorial","url":"https://go.dev/tour/","position":1}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "recorded"}`, 'json')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Impressions are recorded automatically by the search UI for each displayed result. Used to compute position-debiased click-through rates.</p>
+        `)}
+        ${endpoint('POST', '/api/dwell', 'Record dwell time on a clicked result', `
+          ${codeBlock(`curl -X POST http://localhost:7002/api/dwell \\
+  -H 'Content-Type: application/json' \\
+  -d '{"query":"golang tutorial","url":"https://go.dev/tour/","dwell_ms":45000}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "recorded"}`, 'json')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Dwell time is measured when the user returns to the search tab after clicking a result. Longer dwell times indicate higher-quality results.</p>
+        `)}
+        ${endpoint('POST', '/api/pogo', 'Record a pogo-stick event (user returned within 10 seconds)', `
+          ${codeBlock(`curl -X POST http://localhost:7002/api/pogo \\
+  -H 'Content-Type: application/json' \\
+  -d '{"query":"golang tutorial","url":"https://go.dev/tour/"}'`, 'bash')}
+          <h4>Response</h4>
+          ${codeBlock(`{"status": "recorded"}`, 'json')}
+          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Pogo-stick events are recorded when the user returns to search results within 10 seconds of clicking — a signal that the result didn't satisfy the query.</p>
         `)}
       </div>
     </div>

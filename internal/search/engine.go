@@ -144,6 +144,8 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			CrawledAt:            hit.Doc.CrawledAt,
 			IsTimeSensitive:      hit.Doc.IsTimeSensitive,
 			IsEvergreen:          hit.Doc.IsEvergreen,
+			PerfScore:            hit.Doc.PerfScore,
+			MobileScore:          hit.Doc.MobileScore,
 		}
 		// Check document-level quarantine (24h voting window)
 		if e.DocQuarantineFn != nil {

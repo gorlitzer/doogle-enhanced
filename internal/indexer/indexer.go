@@ -316,6 +316,10 @@ func (ix *Indexer) enrich(doc *models.Document) {
 	if doc.WordCount > 100 && ix.summarizer != nil {
 		doc.Summary = ix.summarizer.SummarizeWithTitle(doc.Content, doc.Title, 3)
 	}
+
+	// Performance & mobile scoring
+	doc.PerfScore = ComputePerfScore(doc)
+	doc.MobileScore = ComputeMobileScore(doc)
 }
 
 func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
@@ -375,6 +379,10 @@ func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
 	// Structured data: schema type + flattened text
 	idxDoc.SchemaType = doc.SchemaType
 	idxDoc.StructuredText = flattenStructuredData(doc.StructuredData)
+
+	// Performance & mobile scores
+	idxDoc.PerfScore = doc.PerfScore
+	idxDoc.MobileScore = doc.MobileScore
 
 	return idxDoc
 }

@@ -8,6 +8,7 @@ let lastQuery = '';
 let lastResults = [];
 let searchPeerID = ''; // local node peer ID, fetched once
 let searchNodeName = ''; // local node name, fetched once
+const clickTimestamps = new Map(); // url → timestamp of click
 
 function highlightTerms(escapedText, query) {
   if (!query) return escapedText;
@@ -122,6 +123,36 @@ export function renderSearch(container) {
     input.value = currentQuery;
     doSearch();
   }
+
+  // Dwell time tracking: when user returns to the tab, compute dwell time
+  function onVisibilityChange() {
+    if (document.visibilityState !== 'visible') return;
+    for (const [url, info] of clickTimestamps) {
+      const dwellMs = Date.now() - info.time;
+      if (dwellMs > 500 && dwellMs < 30 * 60 * 1000) {
+        api.dwell(info.query, url, dwellMs).catch(() => {});
+        if (dwellMs < 10000) {
+          api.pogoStick(info.query, url).catch(() => {});
+        }
+      }
+    }
+    clickTimestamps.clear();
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window._pageCleanup = () => {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    // Also send dwell events on page navigation away from search
+    for (const [url, info] of clickTimestamps) {
+      const dwellMs = Date.now() - info.time;
+      if (dwellMs > 500) {
+        api.dwell(info.query, url, dwellMs).catch(() => {});
+        if (dwellMs < 10000) {
+          api.pogoStick(info.query, url).catch(() => {});
+        }
+      }
+    }
+    clickTimestamps.clear();
+  };
 
   updateStatusBar();
   window._pageInterval = setInterval(updateStatusBar, 10000);
@@ -259,10 +290,17 @@ async function doSearch(keepPage = false) {
       });
     });
 
-    // Click tracking on result title links
+    // Record impressions for each displayed result
+    lastResults.forEach((r, i) => {
+      api.impression(q, r.url, i + 1).catch(() => {});
+    });
+
+    // Click tracking on result title links (with dwell time tracking)
     results.querySelectorAll('.result-card-title').forEach((link, i) => {
       link.addEventListener('click', () => {
-        api.click(q, lastResults[i]?.url || '', i + 1).catch(() => {});
+        const url = lastResults[i]?.url || '';
+        api.click(q, url, i + 1).catch(() => {});
+        clickTimestamps.set(url, { time: Date.now(), query: q });
       });
     });
   } catch (err) {

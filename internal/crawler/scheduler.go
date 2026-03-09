@@ -112,6 +112,26 @@ func (s *Scheduler) Drain() {
 	}
 }
 
+// ScheduleRecrawl adds a URL to the crawl queue, bypassing the seen-URL dedup check.
+func (s *Scheduler) ScheduleRecrawl(task *models.CrawlTask) bool {
+	// Reject if queue is at capacity
+	if s.maxQueueSize > 0 && int64(s.Pending()) >= s.maxQueueSize {
+		return false
+	}
+
+	// Try non-blocking send, fall back to persistent queue
+	select {
+	case s.pending <- task:
+		return true
+	default:
+		if err := s.urlStore.Enqueue(task); err != nil {
+			log.Printf("scheduler: failed to enqueue recrawl %s: %v", task.URL, err)
+			return false
+		}
+		return true
+	}
+}
+
 // Pending returns the approximate queue size.
 func (s *Scheduler) Pending() int {
 	return len(s.pending) + s.urlStore.QueueSize()

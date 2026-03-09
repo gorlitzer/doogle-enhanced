@@ -23,6 +23,11 @@ type DomainAuthority struct {
 	AvgQuality      float64 `json:"avg_quality"`
 	BacklinkDomains int     `json:"backlink_domains"`
 	Score           float64 `json:"score"`
+
+	// Behavioral signals (from click store)
+	DomainCTR       float64 `json:"domain_ctr"`
+	AvgDwellSeconds float64 `json:"avg_dwell_seconds"`
+	SearchVolume    int64   `json:"search_volume"`
 }
 
 // DomainAuthorityStore persists and retrieves domain authority scores.
@@ -65,9 +70,21 @@ func (das *DomainAuthorityStore) Put(da *DomainAuthority) error {
 	})
 }
 
+// ClickDataProvider provides behavioral signals for domain authority computation.
+type ClickDataProvider interface {
+	DomainCTR(domain string) float64
+	DomainAvgDwell(domain string) float64
+	DomainSearchVolume(domain string) int64
+}
+
 // ComputeDomainAuthority computes authority scores for all indexed domains.
 // Should be called during or after PageRank computation.
-func ComputeDomainAuthority(idx index.Store, linkStore *store.LinkStore, pageRankScores map[string]float64, das *DomainAuthorityStore) {
+// clickData may be nil if no click data is available.
+func ComputeDomainAuthority(idx index.Store, linkStore *store.LinkStore, pageRankScores map[string]float64, das *DomainAuthorityStore, clickData ...ClickDataProvider) {
+	var clicks ClickDataProvider
+	if len(clickData) > 0 {
+		clicks = clickData[0]
+	}
 	start := time.Now()
 
 	// Aggregate per-domain stats by iterating all documents
@@ -146,12 +163,28 @@ func ComputeDomainAuthority(idx index.Store, linkStore *store.LinkStore, pageRan
 			da.AvgQuality = ds.qualitySum / float64(ds.pageCount)
 		}
 
+		// Pull behavioral signals from click store
+		if clicks != nil {
+			da.DomainCTR = clicks.DomainCTR(domain)
+			da.AvgDwellSeconds = clicks.DomainAvgDwell(domain)
+			da.SearchVolume = clicks.DomainSearchVolume(domain)
+		}
+
 		// Composite score: weighted combination
-		score := 0.0
-		score += da.AvgPageRank * 0.35
-		score += da.AvgQuality * 0.25
-		score += math.Min(float64(da.PageCount)/100.0, 1.0) * 0.20
-		score += math.Min(float64(da.BacklinkDomains)/50.0, 1.0) * 0.20
+		structural := math.Min(float64(da.PageCount)/100.0, 1.0)*0.5 +
+			math.Min(float64(da.BacklinkDomains)/50.0, 1.0)*0.5
+
+		var score float64
+		if da.SearchVolume > 10 {
+			// Blend behavioral signals when we have click data
+			behavioral := math.Min(da.DomainCTR*2, 1.0)*0.5 +
+				math.Min(da.AvgDwellSeconds/120.0, 1.0)*0.5
+			score = da.AvgPageRank*0.25 + da.AvgQuality*0.20 + structural*0.15 +
+				behavioral*0.25 + math.Min(float64(da.BacklinkDomains)/50.0, 1.0)*0.15
+		} else {
+			// Original formula (no click data)
+			score = da.AvgPageRank*0.35 + da.AvgQuality*0.25 + structural*0.40
+		}
 
 		da.Score = clamp(score)
 

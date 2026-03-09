@@ -77,6 +77,26 @@ type Document struct {
 	StructuredData []StructuredItem `json:"structured_data,omitempty"`
 	SchemaType     string           `json:"schema_type,omitempty"`
 
+	// Performance (set by crawler + indexer)
+	TTFB            int     `json:"ttfb_ms,omitempty"`
+	PageSizeBytes   int     `json:"page_size_bytes,omitempty"`
+	ResourceCount   int     `json:"resource_count,omitempty"`
+	ScriptCount     int     `json:"script_count,omitempty"`
+	StylesheetCount int     `json:"stylesheet_count,omitempty"`
+	HasLazyImages   bool    `json:"has_lazy_images,omitempty"`
+	HasAsyncScripts bool    `json:"has_async_scripts,omitempty"`
+	PerfScore       float64 `json:"perf_score,omitempty"`
+
+	// Mobile (set by crawler + indexer)
+	HasViewportMeta bool    `json:"has_viewport_meta,omitempty"`
+	ViewportContent string  `json:"viewport_content,omitempty"`
+	HasMediaQueries bool    `json:"has_media_queries,omitempty"`
+	HasFlexboxGrid  bool    `json:"has_flexbox_grid,omitempty"`
+	HasTouchIcons   bool    `json:"has_touch_icons,omitempty"`
+	SmallFontCount  int     `json:"small_font_count,omitempty"`
+	SmallTapTargets int     `json:"small_tap_targets,omitempty"`
+	MobileScore     float64 `json:"mobile_score,omitempty"`
+
 	// Content verification (Ed25519 signature of content hash)
 	ContentSig    string `json:"content_sig,omitempty"`    // hex-encoded Ed25519 signature
 	ContentSigner string `json:"content_signer,omitempty"` // hex-encoded public key

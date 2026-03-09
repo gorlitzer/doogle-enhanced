@@ -103,6 +103,14 @@ func computeFinalScore(r *models.SearchResult, intent *QueryIntent) float64 {
 	// Blend: 92% quality multiplier + 8% freshness signal
 	qualityMultiplier = qualityMultiplier*0.92 + freshScore*0.08*2.0
 
+	// --- Mobile/Performance/CTR adjustments ---
+	if r.MobileScore > 0.7 {
+		qualityMultiplier *= 1.05
+	}
+	if r.PerfScore > 0.7 {
+		qualityMultiplier *= 1.03
+	}
+
 	// --- Intent-based adjustments ---
 	if intent != nil && intent.Confidence > 0.5 {
 		qualityMultiplier *= intentMultiplier(r, intent)

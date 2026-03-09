@@ -70,6 +70,10 @@ type IndexDocument struct {
 	// Structured data: schema type for filtering
 	SchemaType     string `json:"schema_type"`
 	StructuredText string `json:"structured_text"` // flattened structured data for search
+
+	// Performance & mobile scores
+	PerfScore   float64 `json:"perf_score"`
+	MobileScore float64 `json:"mobile_score"`
 }
 
 // Type implements bleve.Classifier. All documents use the default mapping;

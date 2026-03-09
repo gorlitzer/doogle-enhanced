@@ -11,7 +11,7 @@ import (
 	"github.com/doogle/doogle-v2/internal/store"
 )
 
-const ltrModelKey = "ltr:model:v1"
+const ltrModelKey = "ltr:model:v2"
 
 // LTRTrainer periodically trains a learn-to-rank model from click data.
 type LTRTrainer struct {
@@ -19,6 +19,7 @@ type LTRTrainer struct {
 	bleveStore index.Store
 	badger     *store.BadgerStore
 	interval   time.Duration
+	embedder   *index.TFIDFEmbedder
 }
 
 // NewLTRTrainer creates a trainer that runs on the given interval.
@@ -31,6 +32,11 @@ func NewLTRTrainer(clicks *store.ClickStore, bleve index.Store, badger *store.Ba
 	}
 }
 
+// SetEmbedder sets the TF-IDF embedder for query-document similarity features.
+func (t *LTRTrainer) SetEmbedder(e *index.TFIDFEmbedder) {
+	t.embedder = e
+}
+
 // LoadModel attempts to load a previously trained model from BadgerDB.
 // Returns nil if no model exists.
 func (t *LTRTrainer) LoadModel() *LTRModel {
@@ -41,6 +47,11 @@ func (t *LTRTrainer) LoadModel() *LTRModel {
 	var m LTRModel
 	if err := json.Unmarshal(data, &m); err != nil {
 		slog.Warn("ltr: failed to load model", "error", err)
+		return nil
+	}
+	// Discard model if feature count has changed
+	if m.FeatureCountV != 0 && m.FeatureCountV != FeatureCount {
+		slog.Info("ltr: discarding saved model (feature count changed)", "saved", m.FeatureCountV, "current", FeatureCount)
 		return nil
 	}
 	slog.Info("ltr: loaded model", "trees", len(m.Trees), "pairs", m.TrainPairs, "trained_at", m.TrainedAt.Format(time.RFC3339))
@@ -137,6 +148,13 @@ func (t *LTRTrainer) getFeatureVectors(query string, records []store.ClickRecord
 		return nil
 	}
 
+	// Build query context for interaction features
+	qctx := &QueryContext{
+		RawQuery: query,
+		Terms:    pq.Terms,
+		Embedder: t.embedder,
+	}
+
 	// Build URL → features map from search results
 	urlFeatures := make(map[string][FeatureCount]float64, len(hits))
 	for _, hit := range hits {
@@ -158,8 +176,10 @@ func (t *LTRTrainer) getFeatureVectors(query string, records []store.ClickRecord
 			CrawledAt:            hit.Doc.CrawledAt,
 			IsTimeSensitive:      hit.Doc.IsTimeSensitive,
 			IsEvergreen:          hit.Doc.IsEvergreen,
+			PerfScore:            hit.Doc.PerfScore,
+			MobileScore:          hit.Doc.MobileScore,
 		}
-		urlFeatures[hit.Doc.URL] = ExtractFeatures(&r)
+		urlFeatures[hit.Doc.URL] = ExtractFeaturesWithQuery(&r, qctx, t.clickStore)
 	}
 
 	return urlFeatures

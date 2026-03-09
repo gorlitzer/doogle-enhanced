@@ -7,16 +7,22 @@ import (
 	"time"
 
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/internal/store"
 )
 
 // FeatureCount is the number of ranking features extracted from each document.
-const FeatureCount = 14
+const FeatureCount = 28
 
 // FeatureNames maps feature indices to human-readable names.
 var FeatureNames = [FeatureCount]string{
 	"bm25", "eeat", "quality", "pagerank", "domain_authority",
 	"url_quality", "readability", "citation", "link", "seo",
 	"author_credibility", "relevance", "freshness", "spam",
+	"title_term_overlap", "body_term_overlap", "heading_term_overlap",
+	"url_term_overlap", "exact_title_match", "title_coverage",
+	"query_doc_tfidf_sim", "query_length_norm", "doc_length_norm",
+	"term_proximity", "idf_weighted_overlap", "ctr_score",
+	"mobile_score", "perf_score",
 }
 
 // ExtractFeatures builds a feature vector from a search result.
@@ -37,6 +43,37 @@ func ExtractFeatures(r *models.SearchResult) [FeatureCount]float64 {
 		graduatedFreshnessScore(r.CrawledAt, r.IsTimeSensitive, r.IsEvergreen),     // 12: freshness
 		r.SpamScore,                                                                // 13: spam (negative signal)
 	}
+}
+
+// ExtractFeaturesWithQuery builds a feature vector including query-document interaction features.
+func ExtractFeaturesWithQuery(r *models.SearchResult, qctx *QueryContext, clickStore *store.ClickStore) [FeatureCount]float64 {
+	var f [FeatureCount]float64
+	// Base 14 features
+	f[0] = r.Score
+	f[1] = r.EEATScore
+	f[2] = r.QualityScore
+	f[3] = r.PageRankScore
+	f[4] = r.DomainAuthorityScore
+	f[5] = r.URLQualityScore
+	f[6] = r.ReadabilityScore
+	f[7] = r.CitationScore
+	f[8] = r.LinkScore
+	f[9] = r.SEOScore
+	f[10] = r.AuthorCredibility
+	f[11] = r.RelevanceScore
+	f[12] = graduatedFreshnessScore(r.CrawledAt, r.IsTimeSensitive, r.IsEvergreen)
+	f[13] = r.SpamScore
+
+	// Interaction features 14-27
+	if qctx != nil {
+		interaction := ComputeInteractionFeatures(qctx, r, clickStore)
+		arr := interaction.ToArray()
+		for i := 0; i < 14; i++ {
+			f[14+i] = arr[i]
+		}
+	}
+
+	return f
 }
 
 // ClickPair is a pairwise training example: the user preferred doc A over doc B.
@@ -65,11 +102,12 @@ func (s *stump) predict(features [FeatureCount]float64) float64 {
 
 // LTRModel is a gradient-boosted ensemble of decision stumps for learn-to-rank.
 type LTRModel struct {
-	mu         sync.RWMutex
-	Trees      []stump   `json:"trees"`
-	LearningRate float64 `json:"lr"`
-	TrainedAt  time.Time `json:"trained_at"`
-	TrainPairs int       `json:"train_pairs"`
+	mu             sync.RWMutex
+	Trees          []stump   `json:"trees"`
+	LearningRate   float64   `json:"lr"`
+	TrainedAt      time.Time `json:"trained_at"`
+	TrainPairs     int       `json:"train_pairs"`
+	FeatureCountV  int       `json:"feature_count"` // for model versioning
 }
 
 // MinClickPairs is the minimum number of click pairs required to train a model.
@@ -115,6 +153,7 @@ func (m *LTRModel) UnmarshalJSON(data []byte) error {
 	m.LearningRate = a.LearningRate
 	m.TrainedAt = a.TrainedAt
 	m.TrainPairs = a.TrainPairs
+	m.FeatureCountV = a.FeatureCountV
 	return nil
 }
 
@@ -186,10 +225,11 @@ func Train(pairs []ClickPair, cfg TrainConfig) *LTRModel {
 	}
 
 	return &LTRModel{
-		Trees:        trees,
-		LearningRate: cfg.LearningRate,
-		TrainedAt:    time.Now(),
-		TrainPairs:   n,
+		Trees:         trees,
+		LearningRate:  cfg.LearningRate,
+		TrainedAt:     time.Now(),
+		TrainPairs:    n,
+		FeatureCountV: FeatureCount,
 	}
 }
 

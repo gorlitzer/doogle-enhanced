@@ -456,7 +456,9 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 
+	ttfbStart := time.Now()
 	resp, err := client.Do(req)
+	ttfbMs := int(time.Since(ttfbStart).Milliseconds())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("HTTP request: %w", err)
 	}
@@ -578,6 +580,26 @@ func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, 
 		doc.Keywords = metaKeywords
 	}
 
+	// Performance metrics
+	doc.TTFB = ttfbMs
+	doc.PageSizeBytes = len(body)
+	perfMetrics := ExtractPerformanceMetrics(goDoc)
+	doc.ScriptCount = perfMetrics.ScriptCount
+	doc.StylesheetCount = perfMetrics.StylesheetCount
+	doc.ResourceCount = perfMetrics.ResourceCount
+	doc.HasLazyImages = perfMetrics.HasLazyImages
+	doc.HasAsyncScripts = perfMetrics.HasAsyncScripts
+
+	// Mobile metrics
+	mobileMetrics := ExtractMobileMetrics(goDoc)
+	doc.HasViewportMeta = mobileMetrics.HasViewportMeta
+	doc.ViewportContent = mobileMetrics.ViewportContent
+	doc.HasMediaQueries = mobileMetrics.HasMediaQueries
+	doc.HasFlexboxGrid = mobileMetrics.HasFlexboxGrid
+	doc.HasTouchIcons = mobileMetrics.HasTouchIcons
+	doc.SmallFontCount = mobileMetrics.SmallFontCount
+	doc.SmallTapTargets = mobileMetrics.SmallTapTargets
+
 	doc.ComputeHash()
 
 	return doc, discoveredURLs, body, nil
@@ -643,6 +665,25 @@ func (c *Crawler) fetchHeadless(rawURL string) (*models.Document, []string, erro
 	if len(metaKeywords) > 0 {
 		doc.Keywords = metaKeywords
 	}
+
+	// Performance metrics (no TTFB for headless)
+	doc.PageSizeBytes = len(html)
+	perfMetrics := ExtractPerformanceMetrics(goDoc)
+	doc.ScriptCount = perfMetrics.ScriptCount
+	doc.StylesheetCount = perfMetrics.StylesheetCount
+	doc.ResourceCount = perfMetrics.ResourceCount
+	doc.HasLazyImages = perfMetrics.HasLazyImages
+	doc.HasAsyncScripts = perfMetrics.HasAsyncScripts
+
+	// Mobile metrics
+	mobileMetrics := ExtractMobileMetrics(goDoc)
+	doc.HasViewportMeta = mobileMetrics.HasViewportMeta
+	doc.ViewportContent = mobileMetrics.ViewportContent
+	doc.HasMediaQueries = mobileMetrics.HasMediaQueries
+	doc.HasFlexboxGrid = mobileMetrics.HasFlexboxGrid
+	doc.HasTouchIcons = mobileMetrics.HasTouchIcons
+	doc.SmallFontCount = mobileMetrics.SmallFontCount
+	doc.SmallTapTargets = mobileMetrics.SmallTapTargets
 
 	doc.ComputeHash()
 

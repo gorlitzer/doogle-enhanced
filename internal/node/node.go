@@ -629,6 +629,15 @@ func (n *Node) init() error {
 		n.clickStore.RecordClick(query, url, position)
 		return nil
 	}
+	deps.ImpressionFn = func(query, url string, position int) error {
+		return n.clickStore.RecordImpression(query, url, position)
+	}
+	deps.DwellFn = func(query, url string, dwellMs int64) error {
+		return n.clickStore.RecordDwell(query, url, dwellMs)
+	}
+	deps.PogoStickFn = func(query, url string) error {
+		return n.clickStore.RecordPogoStick(query, url)
+	}
 
 	// Trust admin operations
 	deps.UnquarantineFn = n.trustManager.Unquarantine
@@ -776,6 +785,12 @@ func (n *Node) Run() error {
 		// Start learn-to-rank trainer (retrains every 6 hours from click data)
 		ltrTrainer := search.NewLTRTrainer(n.clickStore, n.bleveIdx, n.badger, 6*time.Hour)
 		go ltrTrainer.Run(n.ctx.Done())
+
+		// Start re-crawl scheduler (reschedules stale URLs every 5 minutes)
+		if n.contentStore != nil && n.scheduler != nil {
+			recrawlSched := crawler.NewRecrawlScheduler(n.contentStore, n.scheduler)
+			go recrawlSched.Run(n.ctx)
+		}
 	}
 
 	// Start gossip listeners
@@ -1416,15 +1431,9 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 		return
 	}
 
-	// Track content changes for incremental reindexing
+	// Track content changes for incremental reindexing and re-crawl scheduling
 	if n.contentStore != nil && doc.ContentHash != "" {
-		if n.contentStore.HasChanged(doc.URL, doc.ContentHash) {
-			n.contentStore.Put(doc.URL, &store.ContentRecord{
-				ContentHash: doc.ContentHash,
-				ScoredAt:    time.Now(),
-				Generation:  n.genStore.Current(),
-			})
-		}
+		_ = n.contentStore.PutWithTracking(doc.URL, doc.ContentHash, n.genStore.Current())
 	}
 
 	// Stamp origin: this document was crawled by us

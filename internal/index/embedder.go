@@ -145,6 +145,21 @@ func tokenize(text string) []string {
 	})
 }
 
+// EmbedText is a convenience wrapper around Embed that ignores errors.
+func (e *TFIDFEmbedder) EmbedText(text string) []float32 {
+	vec, _ := e.Embed(text)
+	return vec
+}
+
+// IDF returns the inverse document frequency for a term. Returns 1.0 for unknown terms.
+func (e *TFIDFEmbedder) IDF(term string) float64 {
+	idx, ok := e.vocab[strings.ToLower(term)]
+	if !ok || idx >= len(e.idf) {
+		return 1.0
+	}
+	return e.idf[idx]
+}
+
 // hashString is a simple FNV-1a hash for feature hashing.
 func hashString(s string) uint64 {
 	var h uint64 = 14695981039346656037

@@ -16,6 +16,7 @@ import { renderTrust } from './pages/trust.js';
 import { renderFleet } from './pages/fleet.js';
 import { renderLeaderboard } from './pages/leaderboard.js';
 import { renderProfile } from './pages/profile.js';
+import { renderRoadmap } from './pages/roadmap.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
 import { initLiteMode, pollInterval } from './lite-mode.js';
@@ -38,6 +39,7 @@ const routes = {
   'about':       { render: renderAbout,  layout: 'search' },
   'howitworks':  { render: renderHowItWorks, layout: 'search' },
   'wizard':      { render: renderWizard, layout: 'search' },
+  'roadmap':     { render: renderRoadmap, layout: 'search' },
 };
 
 let statusInterval = null;
