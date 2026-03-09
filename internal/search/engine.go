@@ -146,6 +146,8 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			IsEvergreen:          hit.Doc.IsEvergreen,
 			PerfScore:            hit.Doc.PerfScore,
 			MobileScore:          hit.Doc.MobileScore,
+			SchemaType:           hit.Doc.SchemaType,
+			StructuredData:       hit.Doc.StructuredData,
 		}
 		// Check document-level quarantine (24h voting window)
 		if e.DocQuarantineFn != nil {
@@ -205,6 +207,18 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			resp.RelatedTopics = topics
 		}
 	}
+
+	// Instant answers / featured snippets
+	if instant := DetectInstantAnswer(req.Query); instant != nil {
+		resp.FeaturedSnippet = instant
+	} else if len(results) > 0 {
+		if featured := ExtractFeaturedSnippet(req.Query, results, &intent); featured != nil {
+			resp.FeaturedSnippet = featured
+		}
+	}
+
+	// Related searches: synonym-based reformulations + related topics
+	resp.RelatedSearches = GenerateRelatedSearches(pq, resp.RelatedTopics)
 
 	return resp, nil
 }

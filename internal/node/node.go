@@ -625,6 +625,41 @@ func (n *Node) init() error {
 			ComputedAt:      time.Now(),
 		}
 	}
+	deps.SuggestFn = func(prefix string, limit int) []string {
+		prefix = strings.ToLower(strings.TrimSpace(prefix))
+		if prefix == "" {
+			return nil
+		}
+		seen := make(map[string]bool)
+		var suggestions []string
+
+		// Source 1: popular queries from click store
+		if n.clickStore != nil {
+			for _, q := range n.clickStore.PopularQueries(200) {
+				if strings.HasPrefix(strings.ToLower(q), prefix) && !seen[q] {
+					seen[q] = true
+					suggestions = append(suggestions, q)
+				}
+			}
+		}
+
+		// Source 2: trending queries
+		if n.trendStore != nil {
+			for _, t := range n.trendStore.TrendingQueries(50) {
+				q := t.Name
+				if strings.HasPrefix(strings.ToLower(q), prefix) && !seen[q] {
+					seen[q] = true
+					suggestions = append(suggestions, q)
+				}
+			}
+		}
+
+		if len(suggestions) > limit {
+			suggestions = suggestions[:limit]
+		}
+		return suggestions
+	}
+
 	deps.ClickFn = func(query, url string, position int) error {
 		n.clickStore.RecordClick(query, url, position)
 		return nil

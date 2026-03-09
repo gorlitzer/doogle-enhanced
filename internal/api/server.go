@@ -45,6 +45,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/search", SearchHandler(deps))
+		r.Get("/suggest", SuggestHandler(deps))
 		r.Get("/status", StatusHandler(deps))
 		r.Post("/crawl", CrawlHandler(deps))
 		r.Post("/crawl/batch", BatchCrawlHandler(deps))

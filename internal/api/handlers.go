@@ -91,6 +91,9 @@ type Deps struct {
 
 	// Fleet upgrade orchestration (coordinator only)
 	FleetUpgrade func(ctx context.Context, peerIDs []string, progressFn func(FleetUpgradeEvent)) error
+
+	// Autocomplete suggestions
+	SuggestFn func(prefix string, limit int) []string
 }
 
 // SearchHandler handles GET /api/search?q=...&page=...&size=...
@@ -1186,6 +1189,29 @@ func UpdateAndRestartHandler(deps *Deps) http.HandlerFunc {
 			time.Sleep(500 * time.Millisecond)
 			deps.RestartFn()
 		}()
+	}
+}
+
+// SuggestHandler handles GET /api/suggest?q=...&limit=...
+func SuggestHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		prefix := r.URL.Query().Get("q")
+		if prefix == "" {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"suggestions": []string{}})
+			return
+		}
+		limit := 10
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 50 {
+			limit = l
+		}
+		var suggestions []string
+		if deps.SuggestFn != nil {
+			suggestions = deps.SuggestFn(prefix, limit)
+		}
+		if suggestions == nil {
+			suggestions = []string{}
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"suggestions": suggestions})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -259,6 +260,51 @@ func (cs *ClickStore) DomainSearchVolume(domain string) int64 {
 		return true
 	})
 	return total
+}
+
+// PopularQueries returns the top-N queries by total click count.
+func (cs *ClickStore) PopularQueries(n int) []string {
+	queryCounts := make(map[string]uint64)
+
+	_ = cs.db.Scan([]byte("click:"), func(key, val []byte) bool {
+		k := string(key)
+		if strings.HasPrefix(k, "click_pos:") || strings.HasPrefix(k, "click_imp:") ||
+			strings.HasPrefix(k, "click_dwell:") || strings.HasPrefix(k, "click_dwell_n:") ||
+			strings.HasPrefix(k, "click_pogo:") {
+			return true
+		}
+		rest := strings.TrimPrefix(k, "click:")
+		idx := strings.Index(rest, ":")
+		if idx <= 0 {
+			return true
+		}
+		query := rest[:idx]
+		var clicks uint64
+		if len(val) >= 8 {
+			clicks = binary.BigEndian.Uint64(val)
+		}
+		queryCounts[query] += clicks
+		return true
+	})
+
+	type qc struct {
+		query string
+		count uint64
+	}
+	var sorted []qc
+	for q, c := range queryCounts {
+		sorted = append(sorted, qc{q, c})
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].count > sorted[j].count })
+
+	if len(sorted) > n {
+		sorted = sorted[:n]
+	}
+	result := make([]string, len(sorted))
+	for i, s := range sorted {
+		result[i] = s.query
+	}
+	return result
 }
 
 // --- helpers ---

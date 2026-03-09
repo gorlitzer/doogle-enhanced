@@ -35,6 +35,15 @@ type SearchRequest struct {
 	PageSize int    `json:"page_size"`
 }
 
+// InstantAnswer represents a computed answer shown above search results.
+type InstantAnswer struct {
+	Type   string `json:"type"`             // "calculator", "conversion", "time", "date", "days_until", "featured_snippet"
+	Query  string `json:"query"`
+	Answer string `json:"answer"`
+	Detail string `json:"detail,omitempty"`
+	Source string `json:"source,omitempty"` // URL for featured snippets
+}
+
 // SearchResponse contains search results.
 type SearchResponse struct {
 	Query      string         `json:"query"`
@@ -51,6 +60,10 @@ type SearchResponse struct {
 	SearchMode    string        `json:"search_mode,omitempty"`    // "bm25", "hybrid"
 	EntityCard    *EntityCard   `json:"entity_card,omitempty"`    // knowledge graph card
 	RelatedTopics []string      `json:"related_topics,omitempty"` // topic cluster labels
+
+	// Round 2 features
+	FeaturedSnippet *InstantAnswer `json:"featured_snippet,omitempty"`
+	RelatedSearches []string       `json:"related_searches,omitempty"`
 }
 
 // SearchResult represents a single search hit.
@@ -88,6 +101,10 @@ type SearchResult struct {
 	VectorSimilarity     float64 `json:"vector_similarity,omitempty"`
 	PerfScore            float64 `json:"perf_score,omitempty"`
 	MobileScore          float64 `json:"mobile_score,omitempty"`
+
+	// Rich snippets
+	SchemaType     string           `json:"schema_type,omitempty"`
+	StructuredData []StructuredItem `json:"structured_data,omitempty"`
 
 	// Trust: true if this document is under quarantine review (24h voting window)
 	Quarantined       bool   `json:"quarantined,omitempty"`

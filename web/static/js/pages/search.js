@@ -9,6 +9,8 @@ let lastResults = [];
 let searchPeerID = ''; // local node peer ID, fetched once
 let searchNodeName = ''; // local node name, fetched once
 const clickTimestamps = new Map(); // url → timestamp of click
+let _suggestTimer = null;
+let _acIndex = -1;
 
 function highlightTerms(escapedText, query) {
   if (!query) return escapedText;
@@ -108,7 +110,52 @@ export function renderSearch(container) {
 
   const input = document.getElementById('search-input');
   const btn = document.getElementById('search-btn');
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+  input.addEventListener('keydown', e => {
+    const dropdown = document.getElementById('autocomplete-dropdown');
+    if (dropdown && dropdown.children.length > 0) {
+      const items = dropdown.querySelectorAll('.autocomplete-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _acIndex = Math.min(_acIndex + 1, items.length - 1);
+        items.forEach((el, i) => el.classList.toggle('autocomplete-item--active', i === _acIndex));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _acIndex = Math.max(_acIndex - 1, -1);
+        items.forEach((el, i) => el.classList.toggle('autocomplete-item--active', i === _acIndex));
+        return;
+      }
+      if (e.key === 'Enter' && _acIndex >= 0 && _acIndex < items.length) {
+        e.preventDefault();
+        input.value = items[_acIndex].dataset.query;
+        hideAutocomplete();
+        doSearch();
+        return;
+      }
+      if (e.key === 'Escape') {
+        hideAutocomplete();
+        return;
+      }
+    }
+    if (e.key === 'Enter') doSearch();
+  });
+  input.addEventListener('input', () => {
+    clearTimeout(_suggestTimer);
+    const val = input.value.trim();
+    if (val.length < 2) { hideAutocomplete(); return; }
+    _suggestTimer = setTimeout(async () => {
+      try {
+        const data = await api.suggest(val);
+        const suggestions = data.suggestions || [];
+        if (suggestions.length === 0) { hideAutocomplete(); return; }
+        showAutocomplete(suggestions, val);
+      } catch { hideAutocomplete(); }
+    }, 200);
+  });
+  input.addEventListener('blur', () => {
+    setTimeout(hideAutocomplete, 150);
+  });
   btn.addEventListener('click', doSearch);
 
   // Search tips toggle
@@ -156,6 +203,44 @@ export function renderSearch(container) {
 
   updateStatusBar();
   window._pageInterval = setInterval(updateStatusBar, 10000);
+}
+
+function showAutocomplete(suggestions, prefix) {
+  let dropdown = document.getElementById('autocomplete-dropdown');
+  const input = document.getElementById('search-input');
+  if (!dropdown) {
+    dropdown = document.createElement('div');
+    dropdown.id = 'autocomplete-dropdown';
+    dropdown.className = 'autocomplete-dropdown';
+    input.parentElement.style.position = 'relative';
+    input.parentElement.appendChild(dropdown);
+  }
+  _acIndex = -1;
+  const prefixLower = prefix.toLowerCase();
+  dropdown.innerHTML = suggestions.map(s => {
+    const idx = s.toLowerCase().indexOf(prefixLower);
+    let html;
+    if (idx >= 0) {
+      html = escapeHtml(s.slice(0, idx)) + '<mark>' + escapeHtml(s.slice(idx, idx + prefix.length)) + '</mark>' + escapeHtml(s.slice(idx + prefix.length));
+    } else {
+      html = escapeHtml(s);
+    }
+    return `<div class="autocomplete-item" data-query="${escapeHtml(s)}">${html}</div>`;
+  }).join('');
+  dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      document.getElementById('search-input').value = item.dataset.query;
+      hideAutocomplete();
+      doSearch();
+    });
+  });
+}
+
+function hideAutocomplete() {
+  const dropdown = document.getElementById('autocomplete-dropdown');
+  if (dropdown) dropdown.innerHTML = '';
+  _acIndex = -1;
 }
 
 async function doSearch(keepPage = false) {
@@ -220,10 +305,13 @@ async function doSearch(keepPage = false) {
       return;
     }
 
-    // Render suggestion, entity card, related topics above results
+    // Render suggestion, featured snippet, entity card, related topics above results
     let prefix = '';
     if (data.suggestion) {
       prefix += `<div class="search-suggestion">Did you mean: <a href="#" class="suggestion-link">${escapeHtml(data.suggestion)}</a></div>`;
+    }
+    if (data.featured_snippet) {
+      prefix += renderFeaturedSnippet(data.featured_snippet);
     }
     if (data.entity_card) {
       prefix += renderEntityCard(data.entity_card);
@@ -234,7 +322,8 @@ async function doSearch(keepPage = false) {
 
     results.innerHTML = prefix
       + lastResults.map((r, i) => renderResult(r, i)).join('')
-      + renderPagination(data.total, currentPage, size);
+      + renderPagination(data.total, currentPage, size)
+      + renderRelatedSearches(data.related_searches);
 
     // Bind click handlers for detail modal
     results.querySelectorAll('.result-detail-btn').forEach(btn => {
@@ -286,6 +375,15 @@ async function doSearch(keepPage = false) {
       link.addEventListener('click', e => {
         e.preventDefault();
         document.getElementById('search-input').value = link.textContent;
+        doSearch();
+      });
+    });
+
+    // "People also search for" click
+    results.querySelectorAll('.people-also-search-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        document.getElementById('search-input').value = link.dataset.query;
         doSearch();
       });
     });
@@ -415,6 +513,7 @@ function renderResult(r, index) {
         <button class="result-copy-url" data-url="${escapeHtml(r.url)}" title="Copy URL">${icon('copy', 12)}</button>
       </div>
       <div class="result-card-snippet">${desc}</div>
+      ${renderRichSnippet(r)}
       ${quarantineWarning}
       ${spamWarning}
       <div class="result-card-footer">
@@ -426,6 +525,107 @@ function renderResult(r, index) {
           <button class="result-detail-btn result-detail-btn--accent" data-index="${index}">${icon('eye', 14)} <span class="action-label">Details</span></button>
           <button class="result-report-btn" data-url="${escapeHtml(r.url)}">${icon('flag', 14)}</button>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStars(rating) {
+  const val = parseFloat(rating) || 0;
+  const full = Math.floor(val);
+  const half = val - full >= 0.3 && val - full < 0.8 ? 1 : 0;
+  const fullExtra = val - full >= 0.8 ? 1 : 0;
+  const totalFull = full + fullExtra;
+  const empty = 5 - totalFull - half;
+  let html = '';
+  for (let i = 0; i < totalFull; i++) html += '<span class="star star--full">&#9733;</span>';
+  for (let i = 0; i < half; i++) html += '<span class="star star--half">&#9733;</span>';
+  for (let i = 0; i < empty; i++) html += '<span class="star star--empty">&#9734;</span>';
+  return `<span class="star-rating">${html} <span class="star-value">${val.toFixed(1)}</span></span>`;
+}
+
+function renderRichSnippet(r) {
+  if (!r.schema_type || !r.structured_data || r.structured_data.length === 0) return '';
+  const type = r.schema_type.toLowerCase();
+  const data = r.structured_data[0];
+  const p = data.properties || {};
+
+  let content = '';
+
+  if (type === 'recipe') {
+    const parts = [];
+    if (p.cookTime) parts.push(`Cook: ${escapeHtml(p.cookTime)}`);
+    if (p.prepTime) parts.push(`Prep: ${escapeHtml(p.prepTime)}`);
+    if (p.recipeYield || p.yield) parts.push(`Yield: ${escapeHtml(p.recipeYield || p.yield)}`);
+    if (p.ratingValue) parts.push(renderStars(p.ratingValue));
+    content = parts.join('<span class="rich-sep"> · </span>');
+  } else if (type === 'product') {
+    const parts = [];
+    if (p.price) parts.push(`<strong>${escapeHtml(p.priceCurrency || '$')}${escapeHtml(p.price)}</strong>`);
+    if (p.availability) parts.push(escapeHtml(p.availability.replace('https://schema.org/', '').replace('http://schema.org/', '')));
+    if (p.brand) parts.push(escapeHtml(p.brand));
+    if (p.ratingValue) parts.push(renderStars(p.ratingValue));
+    content = parts.join('<span class="rich-sep"> · </span>');
+  } else if (type === 'faqpage') {
+    let faqItems = r.structured_data.slice(0, 3);
+    content = faqItems.map(item => {
+      const q = item.properties?.question || item.properties?.name || '';
+      const a = item.properties?.answer || item.properties?.acceptedAnswer || '';
+      if (!q) return '';
+      return `<details class="faq-item"><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`;
+    }).filter(Boolean).join('');
+  } else if (type === 'event') {
+    const parts = [];
+    if (p.startDate) parts.push(escapeHtml(p.startDate));
+    if (p.location || p.locationName) parts.push(escapeHtml(p.location || p.locationName));
+    content = parts.join('<span class="rich-sep"> · </span>');
+  } else if (type === 'review') {
+    const parts = [];
+    if (p.ratingValue) parts.push(renderStars(p.ratingValue));
+    if (p.author) parts.push(`by ${escapeHtml(p.author)}`);
+    if (p.reviewBody) parts.push(escapeHtml(p.reviewBody.slice(0, 120)) + (p.reviewBody.length > 120 ? '...' : ''));
+    content = parts.join('<span class="rich-sep"> · </span>');
+  } else if (type === 'howto') {
+    const parts = [];
+    if (p.totalTime) parts.push(`Time: ${escapeHtml(p.totalTime)}`);
+    if (p.estimatedCost) parts.push(`Cost: ${escapeHtml(p.estimatedCost)}`);
+    content = parts.join('<span class="rich-sep"> · </span>');
+  } else if (['article', 'newsarticle', 'blogposting'].includes(type)) {
+    const parts = [];
+    if (p.author) parts.push(`by ${escapeHtml(p.author)}`);
+    if (p.datePublished) parts.push(escapeHtml(p.datePublished));
+    if (p.publisher) parts.push(escapeHtml(p.publisher));
+    content = parts.join('<span class="rich-sep"> · </span>');
+  }
+
+  if (!content) return '';
+
+  const typeLabel = data.type || r.schema_type;
+  return `<div class="rich-snippet"><span class="rich-snippet-type">${escapeHtml(typeLabel)}</span><div class="rich-snippet-props">${content}</div></div>`;
+}
+
+function renderFeaturedSnippet(snippet) {
+  if (!snippet) return '';
+  const typeIcons = { calculator: 'cpu', conversion: 'zap', time: 'globe', date: 'globe', days_until: 'globe', featured_snippet: 'fileText' };
+  const iconName = typeIcons[snippet.type] || 'zap';
+  const isInstant = snippet.type !== 'featured_snippet';
+  return `
+    <div class="featured-snippet ${isInstant ? 'featured-snippet--instant' : ''}">
+      <div class="featured-snippet-header">${icon(iconName, 16)} <span>${escapeHtml(snippet.type.replace('_', ' '))}</span></div>
+      <div class="featured-snippet-answer">${escapeHtml(snippet.answer)}</div>
+      ${snippet.detail ? `<div class="featured-snippet-detail">${escapeHtml(snippet.detail)}</div>` : ''}
+      ${snippet.source ? `<div class="featured-snippet-source"><a href="${escapeHtml(snippet.source)}" target="_blank" rel="noopener">${escapeHtml(snippet.source)}</a></div>` : ''}
+    </div>
+  `;
+}
+
+function renderRelatedSearches(searches) {
+  if (!searches || searches.length === 0) return '';
+  return `
+    <div class="people-also-search">
+      <h3 class="people-also-search-title">People also search for</h3>
+      <div class="people-also-search-grid">
+        ${searches.map(s => `<a class="people-also-search-link" data-query="${escapeHtml(s)}">${escapeHtml(s)}</a>`).join('')}
       </div>
     </div>
   `;

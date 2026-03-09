@@ -181,6 +181,18 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		}
 	}
 
+	// Instant answers / featured snippets
+	if instant := DetectInstantAnswer(req.Query); instant != nil {
+		resp.FeaturedSnippet = instant
+	} else if len(deduped) > 0 {
+		if featured := ExtractFeaturedSnippet(req.Query, deduped, &intent); featured != nil {
+			resp.FeaturedSnippet = featured
+		}
+	}
+
+	// Related searches
+	resp.RelatedSearches = GenerateRelatedSearches(pq, resp.RelatedTopics)
+
 	// Store in cache
 	if ds.cache != nil {
 		ds.cache.Put(cacheKey, resp)

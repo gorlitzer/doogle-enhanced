@@ -2,6 +2,8 @@ package index
 
 import (
 	"time"
+
+	"github.com/doogle/doogle-v2/internal/models"
 )
 
 // IndexDocument is the Bleve-indexed representation of a web page.
@@ -70,6 +72,9 @@ type IndexDocument struct {
 	// Structured data: schema type for filtering
 	SchemaType     string `json:"schema_type"`
 	StructuredText string `json:"structured_text"` // flattened structured data for search
+
+	// Structured data items (stored as JSON, not text-indexed)
+	StructuredData []models.StructuredItem `json:"structured_data,omitempty"`
 
 	// Performance & mobile scores
 	PerfScore   float64 `json:"perf_score"`

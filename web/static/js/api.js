@@ -59,6 +59,9 @@ export const api = {
   search(q, page = 1, size = 10) {
     return fetchJSON(`/api/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`);
   },
+  suggest(q, limit = 10) {
+    return fetchJSON(`/api/suggest?q=${encodeURIComponent(q)}&limit=${limit}`);
+  },
   status() {
     return fetchJSON('/api/status');
   },

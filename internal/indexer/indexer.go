@@ -376,9 +376,10 @@ func (ix *Indexer) toIndexDocument(doc *models.Document) *index.IndexDocument {
 	idxDoc.ImageText = extractImageText(doc.Images)
 	idxDoc.ImageCount = len(doc.Images)
 
-	// Structured data: schema type + flattened text
+	// Structured data: schema type + flattened text + raw items
 	idxDoc.SchemaType = doc.SchemaType
 	idxDoc.StructuredText = flattenStructuredData(doc.StructuredData)
+	idxDoc.StructuredData = doc.StructuredData
 
 	// Performance & mobile scores
 	idxDoc.PerfScore = doc.PerfScore
