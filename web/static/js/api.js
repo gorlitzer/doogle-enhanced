@@ -182,4 +182,10 @@ export const api = {
   applyUpdateRestart() {
     return postJSON('/api/admin/update-restart', {});
   },
+  getSearXNG() {
+    return fetchJSON('/api/admin/searxng');
+  },
+  setSearXNG(enabled, url) {
+    return postJSON('/api/admin/searxng', { enabled, url });
+  },
 };

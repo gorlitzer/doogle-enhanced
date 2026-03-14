@@ -112,7 +112,8 @@ doogle-v2/
 │   │   ├── snippets.go         # Passage-based snippet extraction with term highlights
 │   │   ├── spelling.go         # Spell checker (Damerau-Levenshtein, index dictionary)
 │   │   ├── entity_card.go      # Knowledge graph entity cards in results
-│   │   └── ltr.go              # Learn-to-rank (gradient-boosted decision stumps)
+│   │   ├── ltr.go              # Learn-to-rank (gradient-boosted decision stumps)
+│   │   └── searxng.go          # SearXNG HTTP client (external metasearch fallback)
 │   ├── fleet/                  # Fleet coordinator/worker management
 │   │   ├── coordinator.go      # Coordinator: heartbeat handler, proxy, staleness loop
 │   │   ├── worker.go           # Worker: heartbeat sender, proxy handler
@@ -231,6 +232,8 @@ The `Store` interface abstracts the index backend. `BleveStore` is the implement
 Multiple layers: `Engine` (local-only), `DistributedSearch` (local + peers + cache), `SearchCache` (LRU+TTL), `SpellChecker` (Damerau-Levenshtein against index dictionary), and intent classification. The distributed search checks the cache first, then uses the local engine and fans out to peers. Query parsing handles boolean operators (`-exclude`, uppercase `OR`), phrases, `site:`, `lang:` filters, and synonym expansion (100+ bidirectional pairs). Intent classification (navigational/informational/transactional/local) adjusts ranking weights per query. Domain diversity caps max 2 results per domain in top 10. Passage-based snippet extraction scores sentences by query term coverage.
 
 **Entity cards:** `entity_card.go` detects when a query matches a known entity in the knowledge graph and attaches a structured entity card (summary, type, properties) to the search response. Related topics are surfaced from the cluster store to aid exploration.
+
+**SearXNG client:** `searxng.go` provides a thin HTTP client that queries a configured SearXNG instance and maps its JSON response into `models.SearchResult` values. The `SearXNGClient.Search(ctx, query)` method issues a GET request to `/search?q=...&format=json&categories=...`, applies the configured timeout, and returns results annotated with `source: "searxng"`. The client is constructed once in `node.New()` from `SearXNGConfig` and passed into `DistributedSearch`. The distributed search layer calls it conditionally — either always (when `FallbackOnly` is false) or only when the combined local + peer result count is below `Threshold`. A `ScorePenalty` is subtracted from each returned result's score before the results are appended to the unified pool for re-ranking.
 
 ### `internal/fleet` — Fleet Management
 

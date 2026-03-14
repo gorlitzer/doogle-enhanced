@@ -30,6 +30,11 @@ type DistributedSearch struct {
 	PeerNameFn func(id string) string // resolve peer ID → name
 	LocalName  string                 // this node's name
 	LocalID    string                 // this node's peer ID
+
+	// SearXNG metasearch fallback
+	SearXNG          *SearXNGClient
+	SearXNGFallback  bool // fallback-only mode
+	SearXNGThreshold int  // min native results before skipping
 }
 
 // NewDistributedSearch creates a distributed search engine.
@@ -133,6 +138,18 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 
 	wg.Wait()
 
+	// SearXNG external search (if enabled)
+	searxngCount := 0
+	if ds.SearXNG != nil {
+		nativeCount := len(allResults)
+		if !ds.SearXNGFallback || nativeCount < ds.SearXNGThreshold {
+			if ext, err := ds.SearXNG.Query(ctx, req.Query); err == nil && len(ext) > 0 {
+				allResults = append(allResults, ext...)
+				searxngCount = len(ext)
+			}
+		}
+	}
+
 	// Classify intent for reranking
 	pq := ParseQuery(req.Query)
 	pq.Synonyms = ExpandQuery(pq)
@@ -164,14 +181,15 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 	}
 
 	resp := &models.SearchResponse{
-		Query:      req.Query,
-		Results:    deduped,
-		Total:      len(deduped),
-		Page:       req.Page,
-		PageSize:   pageSize,
-		TookMs:     time.Since(start).Milliseconds(),
-		PeersAsked: peersAsked,
-		Intent:     intent.Type.String(),
+		Query:          req.Query,
+		Results:        deduped,
+		Total:          len(deduped),
+		Page:           req.Page,
+		PageSize:       pageSize,
+		TookMs:         time.Since(start).Milliseconds(),
+		PeersAsked:     peersAsked,
+		SearXNGResults: searxngCount,
+		Intent:         intent.Type.String(),
 	}
 
 	// Spelling suggestion

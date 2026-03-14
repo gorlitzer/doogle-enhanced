@@ -563,6 +563,48 @@ An LRU cache with TTL sits in front of distributed search:
 
 Failed peer connections are logged but don't block the response.
 
+### SearXNG External Search
+
+When configured, SearXNG acts as a supplemental source of results inserted into the pipeline after native peer results are collected and before intent classification and re-ranking.
+
+```
+Local Bleve + peer fan-out results
+              │
+              ▼
+  [result count < threshold?]
+         yes │
+             ▼
+    Query SearXNG instance
+    (HTTP GET /search?q=...&format=json)
+             │
+             ▼
+  Append SearXNG results with score_penalty
+             │
+             ▼
+  Intent classification + re-rank (unified pool)
+```
+
+**Fallback mode** (`fallback_only: true`, the default): SearXNG is only queried when the combined local + peer result count is below `threshold` (default 3). This avoids redundant external calls when the native index already has sufficient coverage.
+
+**Always-on mode** (`fallback_only: false`): SearXNG is queried on every search and its results are always merged into the pool. Useful for light nodes or early-stage nodes with sparse indexes.
+
+SearXNG results are annotated with a `source: "searxng"` provenance field. The frontend renders these results with an amber provenance pill and a SearXNG badge in the search meta row. A `score_penalty` (default 0.1) is subtracted from each SearXNG result's score before unified re-ranking, ensuring native results are preferred when quality is comparable.
+
+**Configuration** (`internal/node/config.go` — `SearXNGConfig`):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `Enabled` | bool | `false` | Activate the integration |
+| `URL` | string | `""` | SearXNG instance base URL |
+| `Timeout` | duration | `5s` | Per-request HTTP timeout |
+| `MaxResults` | int | `10` | Max results to request from SearXNG |
+| `FallbackOnly` | bool | `true` | Only query when peer results are below threshold |
+| `Threshold` | int | `3` | Peer result count below which fallback fires |
+| `ScorePenalty` | float64 | `0.1` | Score deduction for SearXNG-sourced results |
+| `Categories` | string | `"general"` | SearXNG categories parameter |
+
+Light nodes have SearXNG enabled by default in fallback mode, since they do not maintain a local index and rely entirely on peer queries for results.
+
 ---
 
 ## Shard Assignment & Crawl Coordination
@@ -858,6 +900,7 @@ cmd/doogle/main.go
        │    ├─ internal/p2p
        │    ├─ entity_card.go (entity query detection → knowledge cards)
        │    ├─ ltr.go (learn-to-rank: gradient-boosted decision stumps)
+       │    ├─ searxng.go (SearXNG HTTP client, external metasearch fallback)
        │    └─ internal/models
        ├─ internal/fleet
        │    ├─ internal/p2p

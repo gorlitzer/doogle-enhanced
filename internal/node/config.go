@@ -126,6 +126,21 @@ type SearchConfig struct {
 	HybridVecWeight      float64       `yaml:"hybrid_vec_weight"`
 	LTRRetrainInterval   time.Duration `yaml:"ltr_retrain_interval"`
 	LTRMinSignals        int           `yaml:"ltr_min_signals"`
+
+	// SearXNG metasearch fallback
+	SearXNG SearXNGConfig `yaml:"searxng"`
+}
+
+// SearXNGConfig holds settings for the optional SearXNG metasearch integration.
+type SearXNGConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	URL          string        `yaml:"url"`            // e.g. "http://localhost:8888"
+	Timeout      time.Duration `yaml:"timeout"`
+	MaxResults   int           `yaml:"max_results"`
+	FallbackOnly bool          `yaml:"fallback_only"`  // only query when native results < Threshold
+	Threshold    int           `yaml:"threshold"`      // min native results before skipping SearXNG
+	ScorePenalty float64       `yaml:"score_penalty"`  // multiplier for external results (0.0-1.0)
+	Categories   string        `yaml:"categories"`     // SearXNG categories (default "general")
 }
 
 // DefaultConfig returns sensible defaults.
@@ -191,6 +206,16 @@ func DefaultConfig() *Config {
 			HybridVecWeight:    0.3,
 			LTRRetrainInterval: 1 * time.Hour,
 			LTRMinSignals:      100,
+			SearXNG: SearXNGConfig{
+				Enabled:      true,
+				URL:          "", // empty = auto (public instances)
+				Timeout:      3 * time.Second,
+				MaxResults:   10,
+				FallbackOnly: true,
+				Threshold:    5,
+				ScorePenalty: 0.7,
+				Categories:   "general",
+			},
 		},
 		Fleet: FleetConfig{
 			Role:              "coordinator",
@@ -246,7 +271,16 @@ func ParseFlags(cfg *Config) {
 	flag.Int64Var(&cfg.Storage.MaxQueueSize, "max-queue", cfg.Storage.MaxQueueSize, "Max queue size (0 = unlimited)")
 	flag.BoolVar(&cfg.LowResource, "low-resource", cfg.LowResource, "Enable low-resource (Eco) mode for reduced memory/CPU usage")
 	flag.BoolVar(&cfg.LightNode, "light", cfg.LightNode, "Enable light node mode (search + relay only, no crawling)")
+
+	var searxngURL string
+	flag.StringVar(&searxngURL, "searxng-url", "", "SearXNG instance URL (enables metasearch fallback)")
 	flag.Parse()
+
+	// Apply SearXNG URL from CLI flag (auto-enables)
+	if searxngURL != "" {
+		cfg.Search.SearXNG.URL = searxngURL
+		cfg.Search.SearXNG.Enabled = true
+	}
 
 	// Snapshot CLI-only flags before config file may overwrite them.
 	cliLowResource := cfg.LowResource

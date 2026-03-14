@@ -186,6 +186,11 @@ func (n *Node) init() error {
 			slog.Info("node: restored name", "name", saved)
 		}
 	}
+	if n.cfg.NodeName == "" {
+		n.cfg.NodeName = GenerateNodeName()
+		_ = SaveNodeName(dataDir, n.cfg.NodeName)
+		slog.Info("node: generated name", "name", n.cfg.NodeName)
+	}
 
 	// 1c. Restore persisted resource limits
 	if saved := LoadLimits(dataDir); saved != nil {
@@ -508,6 +513,34 @@ func (n *Node) init() error {
 	n.search.LocalName = n.cfg.NodeName
 	n.search.LocalID = n.peerID.String()
 
+	// 12-searxng. Load persisted SearXNG settings and initialize client
+	if saved := LoadSearXNG(dataDir); saved != nil {
+		n.cfg.Search.SearXNG.Enabled = saved.Enabled
+		if saved.URL != "" {
+			n.cfg.Search.SearXNG.URL = saved.URL
+		}
+	}
+	sxCfg := n.cfg.Search.SearXNG
+	if sxCfg.Enabled {
+		if sxCfg.URL == "" || sxCfg.URL == "auto" {
+			n.search.SearXNG = search.NewSearXNGClientAuto(
+				sxCfg.Timeout, sxCfg.MaxResults,
+				sxCfg.Categories, sxCfg.ScorePenalty,
+			)
+			slog.Info("searxng: external metasearch enabled (auto, public instances)",
+				"fallback_only", sxCfg.FallbackOnly)
+		} else {
+			n.search.SearXNG = search.NewSearXNGClient(
+				sxCfg.URL, sxCfg.Timeout, sxCfg.MaxResults,
+				sxCfg.Categories, sxCfg.ScorePenalty,
+			)
+			slog.Info("searxng: external metasearch enabled (custom)",
+				"url", sxCfg.URL, "fallback_only", sxCfg.FallbackOnly)
+		}
+		n.search.SearXNGFallback = sxCfg.FallbackOnly
+		n.search.SearXNGThreshold = sxCfg.Threshold
+	}
+
 	// 12a. Wire intelligence into search engine
 	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, multiEmbedder, 0.7, 0.3)
 	n.localEng.SetHybridSearcher(hybridSearcher)
@@ -746,6 +779,53 @@ func (n *Node) init() error {
 		n.cfg.LowResource = enabled
 		slog.Info("low-resource (Eco) mode toggled via API", "enabled", enabled)
 		return SaveLowResource(dataDir, enabled)
+	}
+
+	// SearXNG admin functions
+	deps.SetSearXNGFn = func(enabled bool, sxURL string) error {
+		if enabled {
+			sxCfg := n.cfg.Search.SearXNG
+			if sxURL == "" || sxURL == "auto" {
+				n.search.SearXNG = search.NewSearXNGClientAuto(
+					sxCfg.Timeout, sxCfg.MaxResults,
+					sxCfg.Categories, sxCfg.ScorePenalty,
+				)
+			} else {
+				n.search.SearXNG = search.NewSearXNGClient(
+					sxURL, sxCfg.Timeout, sxCfg.MaxResults,
+					sxCfg.Categories, sxCfg.ScorePenalty,
+				)
+			}
+			n.search.SearXNGFallback = sxCfg.FallbackOnly
+			n.search.SearXNGThreshold = sxCfg.Threshold
+		} else {
+			n.search.SearXNG = nil
+		}
+		n.cfg.Search.SearXNG.Enabled = enabled
+		n.cfg.Search.SearXNG.URL = sxURL
+		slog.Info("searxng: settings updated via API", "enabled", enabled, "url", sxURL)
+		return SaveSearXNG(dataDir, enabled, sxURL)
+	}
+	deps.GetSearXNGFn = func() map[string]interface{} {
+		sxCfg := n.cfg.Search.SearXNG
+		mode := "auto"
+		if sxCfg.URL != "" && sxCfg.URL != "auto" {
+			mode = "custom"
+		}
+		instance := ""
+		if n.search.SearXNG != nil {
+			instance = n.search.SearXNG.CurrentURL()
+		}
+		return map[string]interface{}{
+			"enabled":       sxCfg.Enabled,
+			"url":           sxCfg.URL,
+			"mode":          mode,
+			"instance":      instance,
+			"fallback_only": sxCfg.FallbackOnly,
+			"threshold":     sxCfg.Threshold,
+			"score_penalty": sxCfg.ScorePenalty,
+			"categories":    sxCfg.Categories,
+		}
 	}
 
 	// Wire restart function for update-restart endpoint.

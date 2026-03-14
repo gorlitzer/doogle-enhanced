@@ -573,6 +573,7 @@ a:hover { text-decoration: underline; }
 }
 .result-prov--green { background: var(--green-dim); color: var(--green); }
 .result-prov--blue  { background: var(--blue-dim); color: var(--blue); }
+.result-prov--amber { background: var(--amber-dim); color: var(--amber); }
 
 /* Title */
 .result-card-title {
@@ -721,6 +722,7 @@ a:hover { text-decoration: underline; }
 .badge-amber   { background: var(--amber-dim); color: var(--amber); }
 .badge-blue    { background: var(--blue-dim); color: var(--blue); }
 .badge-purple  { background: var(--purple-dim); color: var(--purple); }
+.badge-amber   { background: var(--amber-dim); color: var(--amber); }
 .badge-accent  { background: var(--accent-dim); color: var(--accent); }
 
 /* ---- Trust badge tooltip ---- */

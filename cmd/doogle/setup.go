@@ -26,18 +26,13 @@ func runSetup(args []string) {
 
 	// 1. Node name
 	currentName := node.LoadNodeName(*dataDir)
-	if currentName != "" {
-		fmt.Printf("Node Name [%s]: ", currentName)
-	} else {
-		fmt.Print("Node Name [My Doogle Node]: ")
+	if currentName == "" {
+		currentName = node.GenerateNodeName()
 	}
+	fmt.Printf("Node Name [%s]: ", currentName)
 	name := readLine(reader)
 	if name == "" {
-		if currentName != "" {
-			name = currentName
-		} else {
-			name = "My Doogle Node"
-		}
+		name = currentName
 	}
 
 	// 2. Node type
@@ -124,7 +119,18 @@ func runSetup(args []string) {
 		}
 	}
 
-	// 8. GeoIP database download
+	// 8. SearXNG metasearch
+	fmt.Println()
+	fmt.Println("SearXNG metasearch is enabled by default (uses public instances).")
+	fmt.Print("Disable SearXNG? [y/N]: ")
+	disableSearXNG := strings.HasPrefix(strings.ToLower(readLine(reader)), "y")
+	searxngURL := ""
+	if !disableSearXNG {
+		fmt.Print("Custom SearXNG URL (leave empty for auto/public): ")
+		searxngURL = readLine(reader)
+	}
+
+	// 9. GeoIP database download
 	geoDBPath := filepath.Join(*dataDir, "GeoLite2-Country.mmdb")
 	if _, err := os.Stat(geoDBPath); os.IsNotExist(err) {
 		fmt.Print("Download GeoIP database for peer geolocation? [Y/n]: ")
@@ -149,6 +155,17 @@ func runSetup(args []string) {
 	// Save light node setting
 	if err := node.SaveLightNode(*dataDir, isLight); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to save light node setting: %v\n", err)
+	}
+
+	// Save SearXNG setting
+	if disableSearXNG {
+		if err := node.SaveSearXNG(*dataDir, false, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save SearXNG setting: %v\n", err)
+		}
+	} else if searxngURL != "" {
+		if err := node.SaveSearXNG(*dataDir, true, searxngURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to save SearXNG setting: %v\n", err)
+		}
 	}
 
 	// Save limits
@@ -180,6 +197,13 @@ func runSetup(args []string) {
 	if len(seeds) > 0 {
 		fmt.Printf("  Seeds:        %d URLs\n", len(seeds))
 	}
+	if disableSearXNG {
+		fmt.Printf("  SearXNG:      disabled\n")
+	} else if searxngURL != "" {
+		fmt.Printf("  SearXNG:      %s (custom)\n", searxngURL)
+	} else {
+		fmt.Printf("  SearXNG:      auto (public instances)\n")
+	}
 	fmt.Println()
 
 	// Build recommended start command
@@ -191,6 +215,9 @@ func runSetup(args []string) {
 	}
 	if len(seeds) > 0 {
 		cmd += " --seed " + strings.Join(seeds, ",")
+	}
+	if searxngURL != "" {
+		cmd += " --searxng-url " + searxngURL
 	}
 	fmt.Printf("Start with:\n  %s\n", cmd)
 }

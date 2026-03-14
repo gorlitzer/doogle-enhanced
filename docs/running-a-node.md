@@ -12,6 +12,7 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 - [Joining a Network](#joining-a-network)
 - [Configuration](#configuration)
 - [Configuration File](#configuration-file)
+- [Configuring SearXNG](#configuring-searxng)
 - [Network Topologies](#network-topologies)
 - [Monitoring](#monitoring)
 - [Data Management](#data-management)
@@ -221,6 +222,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--fleet-role` | `standalone` | Fleet mode: `standalone`, `coordinator`, `worker` |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Shared fleet secret hex (auto-generated on coordinator) |
+| `--searxng-url` | — | Custom SearXNG instance URL (overrides auto public instances) |
 
 ### Precedence
 
@@ -342,6 +344,99 @@ CLI flags can still override individual settings:
 | `max_peers` | int | `10` | Max peers to query per search |
 | `cache_size` | int | `1000` | LRU cache entries for search results (0 = disabled) |
 | `cache_ttl` | duration | `5m` | How long cached results stay valid |
+
+---
+
+## Configuring SearXNG
+
+SearXNG is an open-source metasearch engine. Doogle uses it as a fallback when the native peer index has too few results, giving users immediate coverage even when the node is newly started or lightly seeded.
+
+### Out-of-the-Box (No Setup Required)
+
+SearXNG is **enabled by default** and uses curated public instances with automatic failover. Just start Doogle — external search results will appear alongside native P2P results without any configuration:
+
+```bash
+./bin/doogle
+# SearXNG is already working via public instances
+```
+
+If a public instance is slow or rate-limited, Doogle automatically rotates to the next one.
+
+### Custom Instance (Optional)
+
+For more control or privacy, you can point Doogle at your own self-hosted SearXNG instance:
+
+```bash
+./bin/doogle --searxng-url http://localhost:8080
+```
+
+#### Running a Local SearXNG Instance
+
+The quickest way is Docker:
+
+```bash
+docker run -d \
+  --name searxng \
+  -p 8080:8080 \
+  -e SEARXNG_BASE_URL=http://localhost:8080 \
+  searxng/searxng:latest
+```
+
+Verify it works:
+
+```bash
+curl "http://localhost:8080/search?q=test&format=json"
+```
+
+SearXNG must have JSON output enabled. In `searxng/settings.yml`, ensure:
+
+```yaml
+search:
+  formats:
+    - html
+    - json
+```
+
+### YAML Configuration
+
+```yaml
+searxng:
+  enabled: true               # enabled by default
+  url: ""                     # empty = auto (public instances), or custom URL
+  timeout: 5s
+  max_results: 10
+  fallback_only: true         # only query when peer results are below threshold
+  threshold: 3                # peer result count that triggers fallback
+  score_penalty: 0.1          # score deduction applied to SearXNG results
+  categories: "general"
+```
+
+### Runtime Toggle
+
+You can toggle SearXNG on or off at runtime without restarting the node:
+
+```bash
+# Switch to custom instance
+curl -X POST http://localhost:7002/api/admin/searxng \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "url": "http://localhost:8080"}'
+
+# Switch back to auto (public instances)
+curl -X POST http://localhost:7002/api/admin/searxng \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "url": ""}'
+
+# Disable entirely
+curl -X POST http://localhost:7002/api/admin/searxng \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false, "url": ""}'
+```
+
+The Settings toggle in Admin > Actions shows the current mode (Auto/Custom) and the active instance URL.
+
+### SearXNG Result Provenance
+
+Results sourced from SearXNG are visually distinguished in the search UI with an amber provenance pill. The search meta row shows a SearXNG badge indicating how many external results were included. Native peer results always rank above SearXNG results with comparable scores due to the configurable `score_penalty`.
 
 ---
 

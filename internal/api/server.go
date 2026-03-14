@@ -82,6 +82,8 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 			r.Get("/profile", ProfileHandler(deps))
 			r.Get("/sysinfo", SystemInfoHandler(deps))
 			r.Post("/low-resource", SetLowResourceHandler(deps))
+			r.Get("/searxng", GetSearXNGHandler(deps))
+			r.Post("/searxng", SetSearXNGHandler(deps))
 			r.Get("/dump", DumpHandler(deps))
 			r.Post("/restore", RestoreHandler(deps))
 			r.Delete("/data", DeleteDataHandler(deps))

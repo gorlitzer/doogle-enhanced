@@ -52,7 +52,8 @@ type SearchResponse struct {
 	Page       int            `json:"page"`
 	PageSize   int            `json:"page_size"`
 	TookMs     int64          `json:"took_ms"`
-	PeersAsked int            `json:"peers_asked,omitempty"`
+	PeersAsked     int            `json:"peers_asked,omitempty"`
+	SearXNGResults int            `json:"searxng_results,omitempty"`
 
 	// Search intelligence
 	Suggestion    string        `json:"suggestion,omitempty"`     // "Did you mean: X?"
@@ -79,6 +80,7 @@ type SearchResult struct {
 	PeerName       string  `json:"peer_name,omitempty"`
 	OriginPeerID   string  `json:"origin_peer_id,omitempty"`
 	OriginPeerName string  `json:"origin_peer_name,omitempty"`
+	Source         string  `json:"source,omitempty"` // "doogle" (default), "searxng"
 
 	// Scoring signals (used by ranker, exposed for transparency)
 	PageRankScore     float64   `json:"pagerank_score,omitempty"`

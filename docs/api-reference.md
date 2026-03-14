@@ -40,6 +40,8 @@ Base URL: `http://localhost:7002` (the default `--bind` is `0.0.0.0`, so the API
 | `GET` | `/api/admin/update-check` | Check for new release (localhost-only) |
 | `POST` | `/api/admin/update` | Download and apply binary update (localhost-only) |
 | `DELETE` | `/api/admin/data` | Delete all local data (index, crawl history) |
+| `GET` | `/api/admin/searxng` | SearXNG integration status and config |
+| `POST` | `/api/admin/searxng` | Update SearXNG integration settings |
 | `GET` | `/` | Web search interface (HTML) |
 
 ---
@@ -904,6 +906,82 @@ curl -X POST http://localhost:7002/api/admin/update
 ```json
 {
   "error": "no binary found for doogle-darwin-arm64"
+}
+```
+
+---
+
+## SearXNG Admin Endpoints
+
+These endpoints read and update the SearXNG metasearch integration settings at runtime without requiring a node restart.
+
+### `GET /api/admin/searxng`
+
+Returns the current SearXNG integration configuration.
+
+### Example Request
+
+```bash
+curl http://localhost:7002/api/admin/searxng
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "enabled": true,
+  "url": "http://localhost:8080",
+  "fallback_only": true,
+  "threshold": 3,
+  "score_penalty": 0.1,
+  "categories": "general"
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | bool | Whether SearXNG integration is active |
+| `url` | string | SearXNG instance base URL |
+| `fallback_only` | bool | When `true`, SearXNG is only queried when peer results are below `threshold` |
+| `threshold` | int | Minimum number of peer results required before SearXNG is skipped (in fallback mode) |
+| `score_penalty` | float | Score deduction applied to all SearXNG-sourced results |
+| `categories` | string | SearXNG search categories sent with each request |
+
+---
+
+### `POST /api/admin/searxng`
+
+Updates SearXNG integration settings. Only `enabled` and `url` are accepted; all other fields are managed through the YAML config.
+
+### Request Body
+
+```json
+{
+  "enabled": true,
+  "url": "http://localhost:8080"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `enabled` | bool | no | Enable or disable SearXNG integration |
+| `url` | string | no | SearXNG instance base URL |
+
+### Example Request
+
+```bash
+curl -X POST http://localhost:7002/api/admin/searxng \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "url": "http://localhost:8080"}'
+```
+
+### Response — `200 OK`
+
+```json
+{
+  "status": "ok"
 }
 ```
 

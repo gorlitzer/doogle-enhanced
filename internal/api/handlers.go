@@ -80,6 +80,10 @@ type Deps struct {
 	SysInfoFn        func() interface{}
 	SetLowResourceFn func(enabled bool) error
 
+	// SearXNG metasearch
+	SetSearXNGFn func(enabled bool, url string) error
+	GetSearXNGFn func() map[string]interface{}
+
 	// Graceful restart (update + re-exec)
 	RestartFn func()
 
@@ -1139,6 +1143,44 @@ func SetLowResourceHandler(deps *Deps) http.HandlerFunc {
 		}
 		if deps.SysInfoFn != nil {
 			writeJSON(w, http.StatusOK, deps.SysInfoFn())
+		} else {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+		}
+	}
+}
+
+// GetSearXNGHandler handles GET /api/admin/searxng
+func GetSearXNGHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.GetSearXNGFn == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"enabled": false})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.GetSearXNGFn())
+	}
+}
+
+// SetSearXNGHandler handles POST /api/admin/searxng
+func SetSearXNGHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.SetSearXNGFn == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not supported"})
+			return
+		}
+		var req struct {
+			Enabled bool   `json:"enabled"`
+			URL     string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if err := deps.SetSearXNGFn(req.Enabled, req.URL); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if deps.GetSearXNGFn != nil {
+			writeJSON(w, http.StatusOK, deps.GetSearXNGFn())
 		} else {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 		}

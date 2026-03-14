@@ -70,6 +70,7 @@ Three nodes on ports 7002, 7004, 7006 — auto-connected via mDNS.
 ## Features
 
 **Search & Indexing**
+- SearXNG metasearch: works out of the box using curated public instances with automatic failover — no setup required. Optionally point to a custom self-hosted instance
 - BM25 full-text search via Bleve with stemming, phrase matching, fuzzy queries
 - Hybrid search: BM25 + multilingual TF-IDF vector similarity via Reciprocal Rank Fusion (RRF)
 - Boolean query operators: `AND`, `OR`, `NOT` (`-term` exclusion, `python OR ruby`)
@@ -336,6 +337,7 @@ Flags:
   --fleet-role ROLE    Fleet mode: coordinator (default), worker, standalone
   --fleet-coordinator  Coordinator multiaddr (required for workers)
   --fleet-secret HEX   Shared fleet secret (auto-generated on coordinator)
+  --searxng-url URL    SearXNG instance URL (overrides auto public instances)
 ```
 
 ### Search Mode (CLI)
@@ -458,6 +460,8 @@ make major                      # tag + release: v0.1.0 → v1.0.0
 | `GET` | `/api/fleet/nodes` | Fleet summary and worker list (bearer token required) |
 | `GET` | `/api/fleet/nodes/{peerID}` | Single worker detail |
 | `ANY` | `/api/fleet/nodes/{peerID}/proxy/*` | Proxy request to worker's local API |
+| `GET` | `/api/admin/searxng` | SearXNG integration status and config |
+| `POST` | `/api/admin/searxng` | Update SearXNG integration settings |
 
 ---
 
@@ -574,6 +578,16 @@ url_filter:
     - "example-spam.com"
   blocked_prefixes:              # blacklist URL prefixes
     - "https://malware.example/"
+
+searxng:
+  enabled: true                    # enabled by default with public instances
+  url: ""                        # empty = auto (public instances), or custom URL
+  timeout: 5s
+  max_results: 10
+  fallback_only: true            # only query SearXNG when peer results are below threshold
+  threshold: 3                   # min peer results before skipping SearXNG (fallback_only mode)
+  score_penalty: 0.1             # score deduction applied to SearXNG results
+  categories: "general"          # SearXNG search categories
 ```
 
 ---

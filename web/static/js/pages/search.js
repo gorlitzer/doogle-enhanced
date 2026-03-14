@@ -296,12 +296,13 @@ async function doSearch(keepPage = false) {
     let metaHtml = escapeHtml(metaText);
     if (data.search_mode) metaHtml += ` <span class="badge badge-blue">${escapeHtml(data.search_mode)}</span>`;
     if (data.intent) metaHtml += ` <span class="badge badge-purple">${escapeHtml(data.intent)}</span>`;
+    if (data.searxng_results > 0) metaHtml += ` <span class="badge badge-amber">+${data.searxng_results} from SearXNG</span>`;
     meta.innerHTML = metaHtml;
 
     lastResults = data.results || [];
 
     if (lastResults.length === 0) {
-      results.innerHTML = '<div class="empty-state"><p>No results found. Try a different query or add seed URLs via Admin.</p></div>';
+      results.innerHTML = '<div class="empty-state"><p>No results found. Try a different query or add seed URLs via Admin.</p><p style="color:var(--text-muted);font-size:0.85em;margin-top:4px">Consider enabling SearXNG in Settings for web-wide search.</p></div>';
       return;
     }
 
@@ -453,8 +454,9 @@ function renderResult(r, index) {
 
   // Provenance
   const isLocal = r.origin_peer_id && r.origin_peer_id === searchPeerID;
-  const provLabel = r.origin_peer_name || (isLocal ? (searchNodeName || 'This Node') : (r.origin_peer_id ? r.origin_peer_id.slice(0, 12) + '...' : ''));
-  const provColor = isLocal ? 'green' : 'blue';
+  const isSearXNG = r.source === 'searxng';
+  const provLabel = isSearXNG ? 'SearXNG' : (r.origin_peer_name || (isLocal ? (searchNodeName || 'This Node') : (r.origin_peer_id ? r.origin_peer_id.slice(0, 12) + '...' : '')));
+  const provColor = isSearXNG ? 'amber' : (isLocal ? 'green' : 'blue');
   const provPill = provLabel
     ? `<span class="result-prov result-prov--${provColor}" title="${escapeHtml(r.origin_peer_id || '')}">${provLabel}</span>`
     : '';
@@ -791,6 +793,11 @@ function showResultDetail(r) {
 
     <div class="detail-tab-content" data-tab-content="provenance">
       <div class="detail-provenance">
+        ${r.source === 'searxng' ? `
+        <div class="detail-prov-row">
+          <span class="detail-prov-label">Source</span>
+          <span class="detail-prov-value"><span class="badge badge-amber">SearXNG</span> External metasearch result</span>
+        </div>` : ''}
         <div class="detail-prov-row">
           <span class="detail-prov-label">Origin Node</span>
           <span class="detail-prov-value">${escapeHtml(originLabel)}</span>

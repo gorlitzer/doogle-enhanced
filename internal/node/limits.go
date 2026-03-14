@@ -10,6 +10,7 @@ import (
 const limitsFile = "limits.yaml"
 const lowResourceFile = "low_resource.yaml"
 const lightNodeFile = "light_node.yaml"
+const searxngFile = "searxng.yaml"
 
 // ResourceLimits holds configurable resource caps persisted to disk.
 type ResourceLimits struct {
@@ -88,6 +89,36 @@ func SaveLightNode(dataDir string, enabled bool) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dataDir, lightNodeFile), data, 0600)
+}
+
+type searxngSetting struct {
+	Enabled bool   `yaml:"enabled"`
+	URL     string `yaml:"url"`
+}
+
+// LoadSearXNG reads persisted SearXNG setting from {dataDir}/searxng.yaml.
+func LoadSearXNG(dataDir string) *searxngSetting {
+	data, err := os.ReadFile(filepath.Join(dataDir, searxngFile))
+	if err != nil {
+		return nil
+	}
+	var s searxngSetting
+	if err := yaml.Unmarshal(data, &s); err != nil {
+		return nil
+	}
+	return &s
+}
+
+// SaveSearXNG persists SearXNG setting to {dataDir}/searxng.yaml.
+func SaveSearXNG(dataDir string, enabled bool, url string) error {
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(&searxngSetting{Enabled: enabled, URL: url})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dataDir, searxngFile), data, 0600)
 }
 
 // SaveLowResource persists low-resource setting to {dataDir}/low_resource.yaml.

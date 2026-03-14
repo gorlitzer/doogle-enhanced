@@ -182,14 +182,15 @@ function rebuildDiagram() {
 async function loadAllData() {
   const gen = navGen();
   try {
-    const [status, crawler, indexer, storage] = await Promise.all([
+    const [status, crawler, indexer, storage, searxng] = await Promise.all([
       api.status().catch(() => null),
       api.crawlerStatus().catch(() => null),
       api.indexerStats().catch(() => null),
       api.storage().catch(() => null),
+      api.getSearXNG().catch(() => null),
     ]);
     if (gen !== navGen()) return;
-    lastData = { status, crawler, indexer, storage };
+    lastData = { status, crawler, indexer, storage, searxng };
     applyData(status, crawler, indexer, storage);
   } catch (err) {
     const el = document.getElementById('spotlight-summary');
@@ -422,6 +423,10 @@ function renderDashboard(status, crawler, indexer, storage) {
     : '<span class="sl-fleet-badge" style="opacity:0.6">Full Node</span>';
 
   const countryBadgeHtml = countryBadge(s.country, { size: '1em' });
+  const sx = lastData.searxng || {};
+  const searxngBadge = sx.enabled && sx.url
+    ? '<span class="sl-fleet-badge" style="background:var(--amber);color:var(--bg)">SearXNG</span>'
+    : '';
   const card1 = cardWrap('Node Identity', 'green', `
     <div class="sl-body-row" style="flex-wrap:wrap;gap:8px">
       <span class="sl-node-name">${escapeHtml(nodeName)}</span>
@@ -429,6 +434,7 @@ function renderDashboard(status, crawler, indexer, storage) {
       <span class="sl-version-badge">v${escapeHtml(version)}</span>
       ${nodeTypeBadge}
       ${fleetBadge}
+      ${searxngBadge}
     </div>
     <div class="sl-stat-row">
       <div class="sl-stat"><span class="sl-stat-value" title="${escapeHtml(peerId)}">${escapeHtml(shortPeer)}</span><span class="sl-stat-label">Peer ID</span></div>

@@ -150,6 +150,30 @@ export function renderActions(container) {
         </div>
       </div>
 
+      <!-- SearXNG Metasearch -->
+      <div class="actions-section" id="searxng-section">
+        <div class="actions-section-header">
+          ${icon('search', 20, 'var(--amber)')}
+          <h3>SearXNG Metasearch</h3>
+        </div>
+        <div class="actions-grid">
+          <div class="action-card" style="grid-column:1/-1">
+            <div class="action-card-header">
+              <div class="action-icon">${icon('search', 24, 'var(--amber)')}</div>
+              <div>
+                <strong>External Search via SearXNG</strong>
+                <p>Supplement Doogle's P2P results with external search engines.
+                   SearXNG is a privacy-respecting metasearch engine that aggregates
+                   results from 70+ sources without tracking you.</p>
+              </div>
+            </div>
+            <div class="action-card-body" id="searxng-body">
+              <div class="wizard-loading">Loading SearXNG settings...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Fleet Management -->
       <div class="actions-section" id="fleet-section" style="display:none">
         <div class="actions-section-header">
@@ -290,6 +314,7 @@ export function renderActions(container) {
   loadCurrentName();
   loadLimits();
   loadPerformance();
+  loadSearXNG();
 }
 
 async function loadCurrentName() {
@@ -806,5 +831,117 @@ async function loadPerformance() {
     const result = document.getElementById('perf-result');
     result.innerHTML = '<span class="badge badge-green">Lite Mode ' + (e.target.checked ? 'enabled' : 'disabled') + '</span>';
     setTimeout(() => { result.innerHTML = ''; }, 3000);
+  });
+}
+
+// ---- SearXNG Metasearch ----
+
+async function loadSearXNG() {
+  const body = document.getElementById('searxng-body');
+  if (!body) return;
+
+  let cfg;
+  try {
+    cfg = await api.getSearXNG();
+  } catch {
+    body.innerHTML = '<p style="color:var(--text-secondary)">Could not load SearXNG settings.</p>';
+    return;
+  }
+
+  const enabled = cfg.enabled || false;
+  const mode = cfg.mode || 'auto';
+  const instance = cfg.instance || '';
+  const url = cfg.url || '';
+  const isAuto = mode === 'auto';
+
+  const statusBadge = !enabled
+    ? '<span class="badge" style="background:var(--bg-secondary);color:var(--text-muted)">Disabled</span>'
+    : isAuto
+      ? '<span class="badge badge-green">Auto (public instances)</span>'
+      : '<span class="badge badge-blue">Custom</span>';
+
+  const instanceLine = enabled && instance
+    ? `<div style="margin-top:4px;font-size:0.82em;color:var(--text-secondary)">Active instance: <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">${escapeHtml(instance)}</code></div>`
+    : '';
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      ${statusBadge}
+      ${cfg.fallback_only ? '<span class="badge badge-amber">Fallback mode</span>' : ''}
+    </div>
+    ${instanceLine}
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="searxng-enabled" ${enabled ? 'checked' : ''} style="accent-color:var(--amber);width:18px;height:18px">
+        <span><strong>Enable SearXNG</strong> — Query external search engines as a fallback</span>
+      </label>
+      <div id="searxng-mode-section" style="${enabled ? '' : 'display:none'}">
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:8px">Instance Mode</label>
+        <div style="display:flex;gap:16px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="searxng-mode" value="auto" ${isAuto ? 'checked' : ''} style="accent-color:var(--amber)">
+            <span>Auto (public instances)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="searxng-mode" value="custom" ${!isAuto ? 'checked' : ''} style="accent-color:var(--amber)">
+            <span>Custom instance</span>
+          </label>
+        </div>
+        <div id="searxng-url-section" style="${isAuto ? 'display:none' : ''}">
+          <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">SearXNG Instance URL</label>
+          <input type="text" id="searxng-url" class="action-input" value="${escapeHtml(isAuto ? '' : url)}" placeholder="http://localhost:8888" style="width:100%;max-width:400px">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-primary" id="save-searxng-btn">
+          <span class="btn-label">Save</span>
+        </button>
+      </div>
+      <div id="searxng-result" class="action-result"></div>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font-size:0.85em;color:var(--text-secondary)">
+      <strong style="color:var(--text-primary)">What is SearXNG?</strong><br>
+      SearXNG is a free, open-source metasearch engine that aggregates
+      results from Google, Bing, DuckDuckGo, and 70+ other engines without
+      tracking you. Doogle uses public SearXNG instances by default — no setup required.<br><br>
+      <span style="color:var(--text-muted)">
+        Self-host for more control: <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">docker run -p 8888:8080 searxng/searxng</code><br>
+        Learn more: <a href="https://docs.searxng.org" target="_blank" rel="noopener" style="color:var(--accent)">docs.searxng.org</a>
+      </span>
+    </div>
+  `;
+
+  // Toggle mode section visibility when enabled checkbox changes
+  document.getElementById('searxng-enabled').addEventListener('change', (e) => {
+    const modeSection = document.getElementById('searxng-mode-section');
+    if (modeSection) modeSection.style.display = e.target.checked ? '' : 'none';
+  });
+
+  // Toggle URL input visibility based on mode radio
+  document.querySelectorAll('input[name="searxng-mode"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const urlSection = document.getElementById('searxng-url-section');
+      if (urlSection) urlSection.style.display = radio.value === 'custom' ? '' : 'none';
+    });
+  });
+
+  document.getElementById('save-searxng-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('save-searxng-btn');
+    const result = document.getElementById('searxng-result');
+    const isEnabled = document.getElementById('searxng-enabled').checked;
+    const selectedMode = document.querySelector('input[name="searxng-mode"]:checked');
+    const isCustom = selectedMode && selectedMode.value === 'custom';
+    const urlInput = document.getElementById('searxng-url');
+    const sxUrl = isEnabled && isCustom && urlInput ? urlInput.value.trim() : '';
+
+    setLoading(btn, true, 'Saving...');
+    try {
+      await api.setSearXNG(isEnabled, sxUrl);
+      result.innerHTML = '<span class="badge badge-green">SearXNG settings saved</span>';
+      setTimeout(() => loadSearXNG(), 1500);
+    } catch (err) {
+      result.innerHTML = '<span class="badge badge-red">Error: ' + escapeHtml(err.message) + '</span>';
+    }
+    setLoading(btn, false, 'Save');
   });
 }
