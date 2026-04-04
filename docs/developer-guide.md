@@ -151,9 +151,7 @@ doogle-v2/
 ├── web/
 │   ├── embed.go                # embed.FS declaration for static files
 │   └── static/index.html       # Search frontend (HTML/CSS/JS)
-├── configs/default.yaml        # Default YAML config
 ├── docs/                       # Documentation
-├── test/integration/           # Multi-node integration tests
 ├── Makefile                    # Build targets
 └── go.mod                      # Module definition and dependencies
 ```
@@ -511,21 +509,6 @@ Each package should have `*_test.go` files testing its public API in isolation. 
 - `internal/store` — Trust store, entity store, trend store, click store, cluster store
 - `internal/index` — Multilingual embedder, vector store, hybrid search
 
-### Integration Tests
-
-The `test/integration/` directory is for multi-node tests. Pattern:
-
-```go
-func TestThreeNodeSearch(t *testing.T) {
-    // 1. Create 3 in-process nodes on different ports
-    // 2. Connect them via bootstrap
-    // 3. Seed a URL on node 1
-    // 4. Wait for crawl + index
-    // 5. Search from node 3
-    // 6. Assert results contain content from node 1
-}
-```
-
 ### Manual Smoke Test
 
 ```bash
@@ -583,14 +566,6 @@ curl "http://localhost:7004/api/search?q=example"
 go get github.com/some/package
 go mod tidy
 ```
-
-### Regenerate protobuf (when proto/ files are added)
-
-```bash
-make proto
-```
-
-Requires `protoc` and `protoc-gen-go`.
 
 ### Build for a different platform
 

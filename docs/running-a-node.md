@@ -11,7 +11,6 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 - [Starting a Node](#starting-a-node)
 - [Joining a Network](#joining-a-network)
 - [Configuration](#configuration)
-- [Configuration File](#configuration-file)
 - [Configuring SearXNG](#configuring-searxng)
 - [Network Topologies](#network-topologies)
 - [Monitoring](#monitoring)
@@ -219,131 +218,12 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--headless` | `false` | Enable headless browser rendering for JS-heavy pages |
 | `--light` | `false` | Light node mode: search + relay only, no crawling or indexing |
 | `--log-level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `--fleet-role` | `standalone` | Fleet mode: `standalone`, `coordinator`, `worker` |
+| `--fleet-role` | `coordinator` | Fleet mode: `coordinator` (fleet-ready), `worker`, `standalone` |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Shared fleet secret hex (auto-generated on coordinator) |
 | `--searxng-url` | — | Custom SearXNG instance URL (overrides auto public instances) |
 
-### Precedence
-
-1. Hardcoded defaults
-2. YAML config file (if `--config` is set)
-3. CLI flags (highest priority — override everything)
-
----
-
-## Configuration File
-
-Create a YAML config for persistent settings:
-
-```yaml
-# my-config.yaml
-log_level: "info"              # debug, info, warn, error
-
-p2p:
-  port: 7001
-  bootstrap_peers:
-    - /ip4/203.0.113.10/tcp/7001/p2p/12D3KooWAbc...
-    - /ip4/198.51.100.5/tcp/7001/p2p/12D3KooWDef...
-  mdns: true
-  dht_discovery: true
-  dht_rendezvous: "doogle/network/v2"
-  dht_discovery_interval: 30s
-  dht_max_peers: 50
-
-api:
-  port: 7002
-  bind: "0.0.0.0"
-
-crawler:
-  workers: 8
-  user_agent: "DoogleBot/2.0 (+https://github.com/doogle/doogle-v2)"
-  request_timeout: 30s
-  rate_limit: 10          # Requests per minute per domain
-  max_depth: 3
-  respect_robots: true
-
-storage:
-  data_dir: "/var/lib/doogle"
-  badger_dir: "badger"
-
-index:
-  bleve_dir: "bleve"
-
-search:
-  max_results: 50
-  default_page_size: 10
-  peer_timeout: 5s
-  max_peers: 10
-```
-
-Run with it:
-
-```bash
-./bin/doogle --config my-config.yaml
-```
-
-CLI flags can still override individual settings:
-
-```bash
-./bin/doogle --config my-config.yaml --workers 16 --api-port 9090
-```
-
-### Configuration Reference
-
-#### `p2p`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `port` | int | `7001` | libp2p listen port |
-| `bootstrap_peers` | []string | `[]` | Multiaddr list of known peers |
-| `mdns` | bool | `true` | Enable mDNS LAN discovery |
-| `dht_discovery` | bool | `true` | Enable automatic peer discovery via IPFS public DHT |
-| `dht_rendezvous` | string | `"doogle/network/v2"` | DHT rendezvous namespace for finding Doogle nodes |
-| `dht_discovery_interval` | duration | `30s` | How often to search the DHT for new peers |
-| `dht_max_peers` | int | `50` | Skip DHT discovery rounds when this many peers are connected |
-
-#### `api`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `port` | int | `7002` | HTTP API port |
-| `bind` | string | `"0.0.0.0"` | Bind address |
-
-#### `crawler`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `workers` | int | `4` | Concurrent crawl goroutines |
-| `user_agent` | string | `"DoogleBot/2.0 (...)"` | HTTP User-Agent header |
-| `request_timeout` | duration | `30s` | Per-request timeout |
-| `rate_limit` | int | `10` | Max requests per minute per domain |
-| `max_depth` | int | `3` | Max link-follow depth from seed |
-| `respect_robots` | bool | `true` | Obey robots.txt |
-
-#### `storage`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `data_dir` | string | `"./data/doogle"` | Base directory for all persistent data |
-| `badger_dir` | string | `"badger"` | BadgerDB subdirectory (relative to data_dir) |
-
-#### `index`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `bleve_dir` | string | `"bleve"` | Bleve index subdirectory (relative to data_dir) |
-
-#### `search`
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `max_results` | int | `50` | Absolute max results per query |
-| `default_page_size` | int | `10` | Default results per page |
-| `peer_timeout` | duration | `5s` | How long to wait for each peer's response |
-| `max_peers` | int | `10` | Max peers to query per search |
-| `cache_size` | int | `1000` | LRU cache entries for search results (0 = disabled) |
-| `cache_ttl` | duration | `5m` | How long cached results stay valid |
+All settings are controlled via CLI flags. Run `./bin/doogle --help` for the full list.
 
 ---
 
@@ -395,20 +275,6 @@ search:
   formats:
     - html
     - json
-```
-
-### YAML Configuration
-
-```yaml
-searxng:
-  enabled: true               # enabled by default
-  url: ""                     # empty = auto (public instances), or custom URL
-  timeout: 5s
-  max_results: 10
-  fallback_only: true         # only query when peer results are below threshold
-  threshold: 3                # peer result count that triggers fallback
-  score_penalty: 0.1          # score deduction applied to SearXNG results
-  categories: "general"
 ```
 
 ### Runtime Toggle
@@ -658,18 +524,6 @@ From the dashboard you can see all workers, their stats, and open each worker's 
 | `--fleet-role` | `coordinator` | `coordinator` (fleet-ready), `worker`, or `standalone` (disables fleet) |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Hex fleet secret (auto-generated on coordinator if omitted) |
-
-### Fleet Configuration (YAML)
-
-```yaml
-fleet:
-  role: "coordinator"            # coordinator (default), worker, standalone
-  coordinator_peer: ""           # multiaddr (workers only)
-  fleet_secret: ""               # hex override
-  heartbeat_interval: 15s
-  node_timeout: 60s
-  allowlist: []                  # peer IDs (empty = accept all with valid secret)
-```
 
 ---
 

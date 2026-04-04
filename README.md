@@ -120,7 +120,6 @@ See [full architecture](docs/architecture.md) for detailed diagrams and data flo
 ## Docs
 
 - [Architecture](docs/architecture.md) — system design, data flow, protocols
-- [Configuration](docs/configuration.md) — YAML config, CLI flags, all options
 - [API Reference](docs/api-reference.md) — all HTTP endpoints
 - [Running a Node](docs/running-a-node.md) — deployment, tuning, troubleshooting
 - [Fleet Management](docs/fleet.md) — multi-node coordination

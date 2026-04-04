@@ -734,7 +734,7 @@ Returns the full profile object with interest categories, topic weights, and act
 
 ## Trust Admin Endpoints
 
-These endpoints manage the trust & safety system. They are available to all requests (no auth required — designed for single-operator nodes).
+These endpoints manage the trust & safety system. All admin endpoints (including trust) are **localhost-only** — remote requests receive `403 Forbidden`.
 
 ### `POST /api/admin/trust/unquarantine`
 
@@ -933,7 +933,7 @@ curl http://localhost:7002/api/admin/searxng
   "url": "http://localhost:8080",
   "fallback_only": true,
   "threshold": 3,
-  "score_penalty": 0.1,
+  "score_penalty": 0.7,
   "categories": "general"
 }
 ```
@@ -946,7 +946,7 @@ curl http://localhost:7002/api/admin/searxng
 | `url` | string | SearXNG instance base URL |
 | `fallback_only` | bool | When `true`, SearXNG is only queried when peer results are below `threshold` |
 | `threshold` | int | Minimum number of peer results required before SearXNG is skipped (in fallback mode) |
-| `score_penalty` | float | Score deduction applied to all SearXNG-sourced results |
+| `score_penalty` | float | Score multiplier for SearXNG results (0.0-1.0, lower = more penalty) |
 | `categories` | string | SearXNG search categories sent with each request |
 
 ---
