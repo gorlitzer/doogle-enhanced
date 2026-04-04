@@ -1,4 +1,4 @@
-.PHONY: help setup build run run-only upgrade test dev stop stop-quiet status clean nuke release checksums patch minor major geoip
+.PHONY: help setup build run run-only upgrade test lint dev stop stop-quiet status clean nuke release checksums patch minor major geoip
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -24,8 +24,9 @@ help:
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make status             Check if the node is running"
-	@echo "    make test               Run all tests"
-	@echo "    make geoip             Download GeoLite2-Country database for peer geolocation"
+	@echo "    make test               Run all tests (with race detector)"
+	@echo "    make lint               Run go vet (matches CI)"
+	@echo "    make geoip             Download GeoLite2-Country database (MaxMind EULA applies)"
 	@echo "    make clean              Stop node + remove build artifacts + crawl data"
 	@echo "    make nuke               Clean + delete local Go runtime"
 	@echo "    make release            Cross-compile binaries for all platforms to dist/"
@@ -122,8 +123,13 @@ run-only:
 
 test:
 	@echo "==> Running tests..."
-	@$(GO) test ./...
+	@$(GO) test -race -timeout 120s ./...
 	@echo "==> All tests passed."
+
+lint:
+	@echo "==> Running linter..."
+	@$(GO) vet ./...
+	@echo "==> Lint passed."
 
 dev:
 	docker compose up --build
@@ -203,6 +209,7 @@ nuke: clean
 geoip:
 	@mkdir -p data
 	@echo "==> Downloading GeoLite2-Country database..."
+	@echo "    Note: usage subject to MaxMind EULA (https://www.maxmind.com/en/geolite2/eula)"
 	@curl -sL "https://git.io/GeoLite2-Country.mmdb" -o data/GeoLite2-Country.mmdb
 	@echo "==> GeoLite2-Country.mmdb downloaded to data/"
 
@@ -223,7 +230,16 @@ checksums:
 	@cat $(DIST_DIR)/checksums.txt
 
 define bump_version
-	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if [ "$$BRANCH" != "main" ]; then \
+		echo "ERROR: releases must be tagged on main (currently on $$BRANCH)"; \
+		exit 1; \
+	fi; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "ERROR: working tree is dirty — commit or stash changes first"; \
+		exit 1; \
+	fi; \
+	CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
 	MAJOR=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f1); \
 	MINOR=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f2); \
 	PATCH=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f3); \
