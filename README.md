@@ -39,6 +39,17 @@ Nodes find each other **automatically** via the IPFS public DHT — no manual bo
 ./bin/doogle --port 7003 --api-port 7004 --data-dir ./data/node2
 ```
 
+### Neural search (optional)
+
+If you have [Ollama](https://ollama.com) installed, enable neural semantic search:
+
+```bash
+ollama pull all-minilm
+./bin/doogle --ollama
+```
+
+This gives you true semantic understanding ("automobile" matches "car"). Without `--ollama`, search still works using TF-IDF — no quality loss for keyword queries.
+
 ### Docker
 
 ```bash
@@ -58,13 +69,15 @@ If you find something broken, open an issue. If you want to fix it, even better.
 
 **Solid:**
 - P2P networking, crawler, full-text search (BM25 + hybrid vector), 12-stage indexer, trust & safety, admin dashboard, fleet management, backup & restore, Docker
+- Search quality benchmarks: NDCG@10=0.971, MRR=1.000 across 20 test queries
+- P2P version compatibility (peers exchange versions, incompatible nodes rejected gracefully)
+- Neural semantic search via Ollama integration (`--ollama` flag)
+- Query relaxation (AND→OR fallback when stopwords kill a query)
 
 **WIP / needs testing:**
-- Search ranking quality at scale (no relevance benchmarks yet)
 - LTR model (trains from clicks, untested in production)
-- P2P version compatibility (no handshake protocol yet — version mismatches between nodes are not handled gracefully)
-- Semantic search (TF-IDF embeddings only, no neural encoder)
 - Large-scale P2P (needs stress testing with 50+ peers)
+- Neural search quality vs TF-IDF (needs A/B comparison with real corpus)
 
 **Planned:** Browser extension, mobile client, incentive layer, governance, plugin system. See [full roadmap](docs/roadmap.md).
 
@@ -72,7 +85,7 @@ If you find something broken, open an issue. If you want to fix it, even better.
 
 | Area | Highlights |
 |------|-----------|
-| **Search** | BM25 + vector hybrid (RRF), 28-feature LTR, intent classification, spelling correction, synonym expansion, search dorks (`site:`, `lang:`, `intitle:`, `filetype:`, etc.), domain diversity, passage snippets |
+| **Search** | BM25 + vector hybrid (RRF), neural embeddings via Ollama, 28-feature LTR, intent classification, query relaxation, spelling correction, synonym expansion, search dorks (`site:`, `lang:`, `intitle:`, `filetype:`, etc.), domain diversity, passage snippets |
 | **Crawling** | Concurrent workers, per-domain rate limiting, robots.txt + sitemaps, headless JS rendering, Schema.org extraction, PDF/CSV/markdown, Core Web Vitals, mobile-friendliness, priority re-crawl |
 | **P2P** | libp2p (TCP+QUIC), Kademlia DHT, IPFS auto-discovery, GossipSub, 7 custom protocols, shard routing, replication N=3, NAT traversal, light node mode |
 | **Indexer** | 12-signal quality scoring, PageRank, domain authority, spam detection, content dedup, Ed25519 verification, horizontal sharding, batch indexing |

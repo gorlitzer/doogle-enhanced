@@ -222,8 +222,55 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Shared fleet secret hex (auto-generated on coordinator) |
 | `--searxng-url` | — | Custom SearXNG instance URL (overrides auto public instances) |
+| `--ollama` | `false` | Enable neural embeddings via Ollama (auto-detects localhost:11434) |
+| `--ollama-url` | — | Custom Ollama server URL (default http://localhost:11434) |
+| `--ollama-model` | `all-minilm` | Ollama embedding model name |
+| `--embedding-url` | — | Generic neural embedding server URL (for non-Ollama servers) |
 
 All settings are controlled via CLI flags. Run `./bin/doogle --help` for the full list.
+
+---
+
+## Neural Semantic Search
+
+By default, Doogle uses TF-IDF embeddings for vector search — good for keyword matching but lacks semantic understanding. For true semantic search ("automobile" finds "car"), connect a neural embedding model.
+
+### Ollama (recommended)
+
+If you have [Ollama](https://ollama.com) installed:
+
+```bash
+ollama pull all-minilm       # ~23MB one-time download
+./bin/doogle --ollama        # auto-connects to localhost:11434
+```
+
+Custom Ollama setup:
+
+```bash
+./bin/doogle --ollama-url http://remote:11434 --ollama-model nomic-embed-text
+```
+
+### Generic embedding server
+
+For non-Ollama servers (sentence-transformers, TEI, etc.):
+
+```bash
+./bin/doogle --embedding-url http://localhost:11411/embed
+```
+
+The server must accept `POST {"texts": ["..."]}` and return `{"embeddings": [[...]]}` with 384-dim vectors.
+
+A reference Python server is included:
+
+```bash
+python scripts/embedding-server.py    # requires: pip install sentence-transformers flask
+```
+
+Or from a pre-built binary: `doogle embeddings` (auto-installs Python deps).
+
+### Fallback behavior
+
+If the embedding server is unreachable at startup, Doogle falls back to TF-IDF silently. If the connection drops mid-run, it switches to TF-IDF and retries in the background every 30 seconds.
 
 ---
 
