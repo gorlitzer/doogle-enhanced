@@ -423,7 +423,9 @@ func (n *Node) init() error {
 	multiEmbedder := index.NewMultilingualEmbedder(baseEmbedder)
 	var embedder index.TextEmbedder = multiEmbedder
 
-	if n.cfg.Index.EmbeddingURL != "" {
+	if n.cfg.Index.OllamaURL != "" {
+		embedder = index.NewOllamaEmbedder(n.cfg.Index.OllamaURL, n.cfg.Index.OllamaModel, multiEmbedder)
+	} else if n.cfg.Index.EmbeddingURL != "" {
 		embedder = index.NewHTTPEmbedder(n.cfg.Index.EmbeddingURL, multiEmbedder)
 	}
 

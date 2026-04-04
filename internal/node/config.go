@@ -95,7 +95,9 @@ type IndexConfig struct {
 	// Semantic search (Phase 4)
 	EnableSemantic bool    `yaml:"enable_semantic"`
 	SemanticWeight float64 `yaml:"semantic_weight"`
-	EmbeddingURL   string  `yaml:"embedding_url"` // external neural embedding server URL (empty = TF-IDF)
+	EmbeddingURL   string  `yaml:"embedding_url"`   // generic embedding server URL (empty = TF-IDF)
+	OllamaURL      string  `yaml:"ollama_url"`      // Ollama server URL (default http://localhost:11434)
+	OllamaModel    string  `yaml:"ollama_model"`    // Ollama embedding model (default all-minilm)
 	ClusterInterval time.Duration `yaml:"cluster_interval"`
 	ClusterCount    int           `yaml:"cluster_count"`
 }
@@ -276,7 +278,16 @@ func ParseFlags(cfg *Config) {
 	var searxngURL string
 	flag.StringVar(&searxngURL, "searxng-url", "", "SearXNG instance URL (enables metasearch fallback)")
 	flag.StringVar(&cfg.Index.EmbeddingURL, "embedding-url", cfg.Index.EmbeddingURL, "Neural embedding server URL (e.g. http://localhost:11411/embed)")
+	var ollamaFlag bool
+	flag.BoolVar(&ollamaFlag, "ollama", false, "Enable neural embeddings via Ollama (auto-detects on localhost:11434)")
+	flag.StringVar(&cfg.Index.OllamaURL, "ollama-url", cfg.Index.OllamaURL, "Ollama server URL (default http://localhost:11434)")
+	flag.StringVar(&cfg.Index.OllamaModel, "ollama-model", cfg.Index.OllamaModel, "Ollama embedding model (default all-minilm)")
 	flag.Parse()
+
+	// --ollama flag sets defaults
+	if ollamaFlag && cfg.Index.OllamaURL == "" {
+		cfg.Index.OllamaURL = "http://localhost:11434"
+	}
 
 	// Apply SearXNG URL from CLI flag (auto-enables)
 	if searxngURL != "" {
