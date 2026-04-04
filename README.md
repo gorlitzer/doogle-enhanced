@@ -22,6 +22,40 @@ Single Go binary. Run it, connect to peers, become part of a distributed search 
 
 ---
 
+## Project Status
+
+> **Alpha** — core features work but the project needs community testing at scale.
+
+### What's production-ready
+- P2P networking (libp2p, DHT discovery, GossipSub, NAT traversal)
+- Crawler (workers, robots.txt, sitemaps, headless JS rendering, rate limiting)
+- Full-text search (BM25, phrases, fuzzy, boolean operators, `site:` / `lang:` filters)
+- Indexer pipeline (12-stage: dedup, NLP, EEAT, spam, PageRank, content verification)
+- Trust & safety (peer reputation, Sybil PoW, consensus domain blocklist, audit trail)
+- Admin dashboard (6 themes, wizard, live feed, network graph)
+- Fleet management (coordinator/worker, secure proxy, HMAC auth)
+- Backup & restore, CLI tools, Docker support
+
+### What's WIP / needs testing
+- **Search quality at scale** — ranking has 14+ signals and a 28-feature LTR model, but has not been validated with large-scale relevance benchmarks (NDCG, MRR). Needs a proper test corpus (10K+ pages) and quality evaluation suite.
+- **Neural/semantic search** — hybrid BM25+vector via TF-IDF embeddings works, but no neural encoder (sentence-transformers) is integrated yet. Vector search is brute-force cosine (fine for <100K docs, won't scale beyond that).
+- **LTR model training** — gradient-boosted stumps train automatically after 200+ click pairs. Untested in production; needs real click data to validate.
+- **Click models** — CTR, dwell time, pogo-stick signals are collected but not yet integrated into the ranking pipeline as position-debiased features.
+- **Result diversity** — no MMR or subtopic diversification. Repeated domains are capped at 2 in top 10, but results can still be redundant.
+- **Query expansion** — hardcoded synonym map (~100 pairs). No neural query rewriting or learned expansions.
+- **Dark web crawling** (Phase 3) — on hold pending legal review. Tor/I2P integration is not implemented.
+- **Cross-lingual search** — dictionary projection covers ~500 words across 9 languages. Not a full multilingual model.
+- **Large-scale P2P** — tested with small clusters. Shard rebalancing, anti-entropy, and replication need stress testing with 50+ peers.
+
+### What's planned (not started)
+- Browser extension, mobile client
+- Incentive layer (reputation credits for uptime/crawl contribution)
+- Governance (community proposals, node operator voting)
+- Plugin system (pluggable analyzers, scorers, extractors)
+- Public bootstrap network
+
+---
+
 ## Quick Start
 
 ```bash
