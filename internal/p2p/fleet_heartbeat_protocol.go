@@ -23,6 +23,7 @@ type FleetHeartbeatHandler func(senderID peer.ID, req *fleet.HeartbeatRequest) *
 func RegisterFleetHeartbeatProtocol(h host.Host, handler FleetHeartbeatHandler) {
 	h.SetStreamHandler(FleetHeartbeatProtocol, func(s network.Stream) {
 		defer s.Close()
+		s.SetDeadline(time.Now().Add(15 * time.Second))
 
 		reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max
 		data, err := reader.ReadBytes('\n')

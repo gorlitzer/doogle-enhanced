@@ -688,6 +688,18 @@ searxng:
 
 ---
 
+## Third-Party Data
+
+This product includes GeoLite2 data created by MaxMind, available from [https://www.maxmind.com](https://www.maxmind.com). The GeoLite2 database is **not included** in this repository — run `make geoip` to download it. Usage is subject to the [MaxMind EULA](https://www.maxmind.com/en/geolite2/eula).
+
+---
+
+## Security
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for responsible disclosure.
+
+---
+
 ## License
 
-MIT
+[MIT](LICENSE)

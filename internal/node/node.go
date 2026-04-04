@@ -1808,6 +1808,11 @@ func (n *Node) gossipLoop() {
 		}
 
 		for _, u := range ann.URLs {
+			// Validate URL is safe (prevent SSRF via gossip)
+			if !urlutil.IsSafeURL(u) {
+				continue
+			}
+
 			domain := urlutil.ExtractDomain(u)
 
 			// Skip URLs from flagged or consensus-blocked domains

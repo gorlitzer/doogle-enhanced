@@ -159,8 +159,9 @@ func (rc *RobotsCache) fetch(domain, userAgent string) *robotsEntry {
 
 // compilePattern converts a robots.txt path pattern into a regexp.
 // '*' → '.*', '$' at end → anchor, everything else escaped.
+// Patterns longer than 1024 characters are rejected to prevent ReDoS.
 func compilePattern(pattern string) *regexp.Regexp {
-	if pattern == "" {
+	if pattern == "" || len(pattern) > 1024 {
 		return nil
 	}
 
@@ -198,6 +199,8 @@ func parseRobotsTxt(content string) ([]robotsGroup, []string) {
 	var sitemaps []string
 	lines := strings.Split(content, "\n")
 
+	const maxRulesPerGroup = 500
+	const maxGroups = 100
 	var currentGroup *robotsGroup
 	startNewGroup := true
 
@@ -222,6 +225,9 @@ func parseRobotsTxt(content string) ([]robotsGroup, []string) {
 		switch directive {
 		case "user-agent":
 			if startNewGroup {
+				if len(groups) >= maxGroups {
+					continue
+				}
 				groups = append(groups, robotsGroup{})
 				currentGroup = &groups[len(groups)-1]
 				startNewGroup = false
@@ -232,7 +238,7 @@ func parseRobotsTxt(content string) ([]robotsGroup, []string) {
 
 		case "disallow":
 			startNewGroup = false
-			if currentGroup != nil {
+			if currentGroup != nil && len(currentGroup.rules) < maxRulesPerGroup {
 				re := compilePattern(value)
 				if re != nil {
 					currentGroup.rules = append(currentGroup.rules, robotsRule{
@@ -246,7 +252,7 @@ func parseRobotsTxt(content string) ([]robotsGroup, []string) {
 
 		case "allow":
 			startNewGroup = false
-			if currentGroup != nil {
+			if currentGroup != nil && len(currentGroup.rules) < maxRulesPerGroup {
 				re := compilePattern(value)
 				if re != nil {
 					currentGroup.rules = append(currentGroup.rules, robotsRule{

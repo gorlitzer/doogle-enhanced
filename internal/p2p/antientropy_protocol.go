@@ -21,6 +21,7 @@ type AntiEntropyHandler func(req *AntiEntropyRequest) (*AntiEntropyResponse, err
 func RegisterAntiEntropyProtocol(h host.Host, handler AntiEntropyHandler) {
 	h.SetStreamHandler(AntiEntropyProtocol, func(s network.Stream) {
 		defer s.Close()
+		s.SetDeadline(time.Now().Add(30 * time.Second))
 
 		reader := bufio.NewReader(io.LimitReader(s, 10<<20)) // 10 MB max
 		data, err := reader.ReadBytes('\n')

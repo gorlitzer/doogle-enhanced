@@ -1,6 +1,7 @@
 package urlutil
 
 import (
+	"net"
 	"net/url"
 	"strings"
 )
@@ -104,6 +105,44 @@ func isTrackingParam(key string) bool {
 		}
 	}
 	return false
+}
+
+// IsSafeURL checks that a URL targets a public host (not private/internal IPs).
+// This prevents SSRF attacks from untrusted sources (gossip, user input).
+func IsSafeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+
+	// Reject localhost variants.
+	lower := strings.ToLower(host)
+	if lower == "localhost" || lower == "0.0.0.0" || strings.HasSuffix(lower, ".local") {
+		return false
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// hostname, not IP — allow (DNS resolution happens at crawl time).
+		return true
+	}
+
+	// Reject private, loopback, link-local, and reserved ranges.
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		return false
+	}
+
+	// Reject cloud metadata IPs (169.254.169.254).
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return false
+	}
+
+	return true
 }
 
 // ShouldCrawl returns true if the URL is worth crawling (http/https, no binary extensions).

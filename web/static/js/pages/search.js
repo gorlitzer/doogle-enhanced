@@ -285,7 +285,7 @@ async function doSearch(keepPage = false) {
 
     const data = await api.search(query, currentPage, size);
     if (data.error) {
-      results.innerHTML = `<div class="empty-state"><p>${data.error}</p></div>`;
+      results.innerHTML = `<div class="empty-state"><p>${escapeHtml(data.error)}</p></div>`;
       return;
     }
 
@@ -403,7 +403,7 @@ async function doSearch(keepPage = false) {
       });
     });
   } catch (err) {
-    results.innerHTML = `<div class="empty-state"><p>Search failed: ${err.message}</p></div>`;
+    results.innerHTML = `<div class="empty-state"><p>Search failed: ${escapeHtml(err.message)}</p></div>`;
   }
 }
 

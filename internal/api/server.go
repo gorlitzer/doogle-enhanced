@@ -39,6 +39,7 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		AllowCredentials: false,
 		MaxAge:           3600,
 	}))
+	r.Use(SecurityHeaders)
 	r.Use(Logger)
 	r.Use(RateLimiter(20, 40)) // 20 req/s per IP, burst of 40
 
@@ -58,8 +59,9 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		r.Post("/dwell", DwellHandler(deps))
 		r.Post("/pogo", PogoStickHandler(deps))
 
-		// Admin endpoints
+		// Admin endpoints (localhost-only)
 		r.Route("/admin", func(r chi.Router) {
+			r.Use(LoopbackOnly)
 			r.Get("/crawler", CrawlerInfoHandler(deps))
 			r.Get("/crawler/feed", CrawlerFeedHandler(deps))
 			r.Get("/indexer", IndexerStatsHandler(deps))
