@@ -418,11 +418,17 @@ func (n *Node) init() error {
 	// 9a0. Wire intelligence subsystems into indexer
 	n.indexer.SetEntityStore(n.entityStore)
 
-	// 9a0b. Multilingual TF-IDF embedder + vector store for semantic search
+	// 9a0b. Embedder + vector store for semantic search
 	baseEmbedder := index.NewTFIDFEmbedder()
 	multiEmbedder := index.NewMultilingualEmbedder(baseEmbedder)
+	var embedder index.TextEmbedder = multiEmbedder
+
+	if n.cfg.Index.EmbeddingURL != "" {
+		embedder = index.NewHTTPEmbedder(n.cfg.Index.EmbeddingURL, multiEmbedder)
+	}
+
 	vectorStore := index.NewBadgerVectorStore(n.badger.DB(), 384)
-	n.indexer.SetEmbedder(multiEmbedder)
+	n.indexer.SetEmbedder(embedder)
 	n.indexer.SetVectorStore(vectorStore)
 
 	// 9a. Content verification — sign documents with Ed25519
@@ -549,7 +555,7 @@ func (n *Node) init() error {
 	}
 
 	// 12a. Wire intelligence into search engine
-	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, multiEmbedder, 0.7, 0.3)
+	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, embedder, 0.7, 0.3)
 	n.localEng.SetHybridSearcher(hybridSearcher)
 	n.localEng.SetEntityStore(n.entityStore)
 	n.localEng.SetClusterComputer(n.clusterStore)

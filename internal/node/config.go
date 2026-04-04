@@ -95,6 +95,7 @@ type IndexConfig struct {
 	// Semantic search (Phase 4)
 	EnableSemantic bool    `yaml:"enable_semantic"`
 	SemanticWeight float64 `yaml:"semantic_weight"`
+	EmbeddingURL   string  `yaml:"embedding_url"` // external neural embedding server URL (empty = TF-IDF)
 	ClusterInterval time.Duration `yaml:"cluster_interval"`
 	ClusterCount    int           `yaml:"cluster_count"`
 }
@@ -274,6 +275,7 @@ func ParseFlags(cfg *Config) {
 
 	var searxngURL string
 	flag.StringVar(&searxngURL, "searxng-url", "", "SearXNG instance URL (enables metasearch fallback)")
+	flag.StringVar(&cfg.Index.EmbeddingURL, "embedding-url", cfg.Index.EmbeddingURL, "Neural embedding server URL (e.g. http://localhost:11411/embed)")
 	flag.Parse()
 
 	// Apply SearXNG URL from CLI flag (auto-enables)
