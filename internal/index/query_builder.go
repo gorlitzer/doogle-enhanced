@@ -26,6 +26,23 @@ func newAndMatchQueryWithAnalyzer(terms string, field string, boost float64, ana
 	return q
 }
 
+// newOrMatchQuery creates a MatchQuery where ANY term can match (OR).
+// Used as a relaxation fallback when AND returns no results.
+func newOrMatchQuery(terms string, field string, boost float64) *query.MatchQuery {
+	q := bleve.NewMatchQuery(terms)
+	q.SetField(field)
+	q.SetBoost(boost)
+	q.SetOperator(query.MatchQueryOperatorOr)
+	return q
+}
+
+// newOrMatchQueryWithAnalyzer creates an OR MatchQuery with a specific analyzer.
+func newOrMatchQueryWithAnalyzer(terms string, field string, boost float64, analyzer string) *query.MatchQuery {
+	q := newOrMatchQuery(terms, field, boost)
+	q.Analyzer = analyzer
+	return q
+}
+
 // BuildQuery translates a ParsedQuery into a Bleve query tree.
 //
 // Architecture: BooleanQuery with two tiers:
@@ -40,26 +57,33 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 	// Resolve language-specific analyzer
 	langAnalyzer := LangAnalyzer(pq.Language)
 
-	// ── Primary tier: AND match across fields ──
+	// ── Primary tier: AND match across fields (OR if relaxed) ──
 	termStr := strings.Join(pq.Terms, " ")
 	if termStr != "" {
+		newMatchFn := newAndMatchQuery
+		newMatchWithAnalyzerFn := newAndMatchQueryWithAnalyzer
+		if pq.UseOR {
+			newMatchFn = newOrMatchQuery
+			newMatchWithAnalyzerFn = newOrMatchQueryWithAnalyzer
+		}
+
 		if langAnalyzer != "" {
 			primaryClauses = append(primaryClauses,
-				newAndMatchQueryWithAnalyzer(termStr, "title", 5.0, langAnalyzer),
-				newAndMatchQueryWithAnalyzer(termStr, "url_text", 3.0, langAnalyzer),
-				newAndMatchQueryWithAnalyzer(termStr, "headings_text", 2.0, langAnalyzer),
-				newAndMatchQueryWithAnalyzer(termStr, "description", 1.5, langAnalyzer),
-				newAndMatchQueryWithAnalyzer(termStr, "content", 1.0, langAnalyzer),
-				newAndMatchQueryWithAnalyzer(termStr, "anchor_text", 2.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "title", 5.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "url_text", 3.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "headings_text", 2.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "description", 1.5, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "content", 1.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "anchor_text", 2.0, langAnalyzer),
 			)
 		} else {
 			primaryClauses = append(primaryClauses,
-				newAndMatchQuery(termStr, "title", 5.0),
-				newAndMatchQuery(termStr, "url_text", 3.0),
-				newAndMatchQuery(termStr, "headings_text", 2.0),
-				newAndMatchQuery(termStr, "description", 1.5),
-				newAndMatchQuery(termStr, "content", 1.0),
-				newAndMatchQuery(termStr, "anchor_text", 2.0),
+				newMatchFn(termStr, "title", 5.0),
+				newMatchFn(termStr, "url_text", 3.0),
+				newMatchFn(termStr, "headings_text", 2.0),
+				newMatchFn(termStr, "description", 1.5),
+				newMatchFn(termStr, "content", 1.0),
+				newMatchFn(termStr, "anchor_text", 2.0),
 			)
 		}
 

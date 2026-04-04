@@ -22,6 +22,7 @@ type ParsedQuery struct {
 	After        string              // from after:YYYY-MM-DD
 	HasHTTPS     bool                // from has:https
 	UseFuzzy     bool                // true for short queries (≤3 terms)
+	UseOR        bool                // true to relax AND to OR (query relaxation fallback)
 	CleanedQuery string              // fallback plain string
 	Synonyms     []string            // synonym expansions for query terms
 	PeerFilter   string              // from peer:PEERID — restrict to origin peer
