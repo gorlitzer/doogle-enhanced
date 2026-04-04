@@ -167,6 +167,7 @@ type NodeStatus struct {
 	OwnedDomains   int       `json:"owned_domains"`
 	ForwardedTasks int64     `json:"forwarded_tasks"`
 	ReceivedTasks  int64     `json:"received_tasks"`
+	UpdateNeeded   bool      `json:"update_needed,omitempty"`
 
 	// Fleet (omitted when standalone)
 	FleetRole          string `json:"fleet_role,omitempty"`           // "coordinator" or "worker"
@@ -287,5 +288,6 @@ type PeerInfo struct {
 	PeerID   string   `json:"peer_id"`
 	NodeName string   `json:"node_name,omitempty"`
 	Country  string   `json:"country,omitempty"`
+	Version  string   `json:"version,omitempty"`
 	Addrs    []string `json:"addrs"`
 }

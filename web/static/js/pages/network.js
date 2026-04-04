@@ -244,7 +244,8 @@ function buildGraph(status, peerList, trustMap) {
   nodes.push({
     id: status.peer_id,
     label: status.node_name || 'Anonymous Node',
-    tooltip: (status.node_name ? status.node_name + ' — ' : '') + status.peer_id.slice(0, 24) + '...',
+    version: status.version || '',
+    tooltip: (status.node_name ? status.node_name + ' — ' : '') + (status.version ? 'v' + status.version + ' — ' : '') + status.peer_id.slice(0, 24) + '...',
     type: 'self',
     color: getCSS('--accent'),
     radius: 20,
@@ -255,6 +256,7 @@ function buildGraph(status, peerList, trustMap) {
     const id = typeof p === 'string' ? p : p.peer_id;
     connectedIds.add(id);
     const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : 'Anonymous Node';
+    const peerVersion = (typeof p !== 'string' && p.version) ? p.version : '';
     const rep = trustMap?.get(id);
     const tier = rep ? peerTier(rep.trust_score || 0, rep.quarantine_count || 0, rep.strikes || 0) : 'trusted';
     const edgeColor = tier === 'quarantined' ? hexToRgba(colors.quarantined, 0.4)
@@ -264,7 +266,8 @@ function buildGraph(status, peerList, trustMap) {
     nodes.push({
       id,
       label: peerName,
-      tooltip: peerName + ' — ' + id.slice(0, 20) + '... [' + tier + ']',
+      version: peerVersion,
+      tooltip: peerName + (peerVersion ? ' v' + peerVersion : '') + ' — ' + id.slice(0, 20) + '... [' + tier + ']',
       type: tier === 'quarantined' ? 'quarantined' : tier === 'excommunicado' ? 'banned' : 'peer',
       color: colors[tier] || colors.trusted,
       radius: tier === 'excommunicado' ? 10 : 14,

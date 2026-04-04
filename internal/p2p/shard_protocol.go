@@ -16,14 +16,16 @@ import (
 
 // ShardCatalog describes what a peer is responsible for.
 type ShardCatalog struct {
-	PeerID        string   `json:"peer_id"`
-	NodeName      string   `json:"node_name,omitempty"`
-	NodeType      string   `json:"node_type,omitempty"`
-	Country       string   `json:"country,omitempty"`
-	Domains       []string `json:"domains"`
-	DocCount      uint64   `json:"doc_count"`
-	Generation    uint64   `json:"generation"`
-	QueriesServed int64    `json:"queries_served,omitempty"`
+	PeerID           string   `json:"peer_id"`
+	NodeName         string   `json:"node_name,omitempty"`
+	NodeType         string   `json:"node_type,omitempty"`
+	Country          string   `json:"country,omitempty"`
+	Version          string   `json:"version,omitempty"`             // e.g. "v0.5.0"
+	MinCompatVersion int      `json:"min_compat_version,omitempty"` // protocol compat level
+	Domains          []string `json:"domains"`
+	DocCount         uint64   `json:"doc_count"`
+	Generation       uint64   `json:"generation"`
+	QueriesServed    int64    `json:"queries_served,omitempty"`
 }
 
 // ShardCatalogHandler processes incoming shard catalog exchanges.
