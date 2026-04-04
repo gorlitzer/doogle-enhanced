@@ -46,19 +46,25 @@ docker compose up -d          # single node
 docker compose up -d node1 node2 node3   # 3-node cluster
 ```
 
+## Heads Up
+
+This is a vibe-coded project. It was built fast, with ambition, and with a lot of help from AI. There will be bugs. Some features are half-baked. The architecture might make you raise an eyebrow. That's fine — it works, it's fun, and it's getting better.
+
+If you find something broken, open an issue. If you want to fix it, even better. Contributions of any size are welcome — from typo fixes to entire subsystems. This is an ongoing project and help is genuinely appreciated.
+
 ## Project Status
 
 > **Alpha** — core features work, needs community testing at scale.
 
-**Production-ready:** P2P networking, crawler (robots.txt, headless JS, rate limiting), full-text search (BM25, phrases, fuzzy, boolean, filters), 12-stage indexer pipeline, trust & safety (peer reputation, Sybil PoW, consensus blocklist), admin dashboard, fleet management, backup & restore, Docker.
+**Solid:**
+- P2P networking, crawler, full-text search (BM25 + hybrid vector), 12-stage indexer, trust & safety, admin dashboard, fleet management, backup & restore, Docker
 
 **WIP / needs testing:**
-- Search quality at scale — 14+ ranking signals and 28-feature LTR model, but no large-scale relevance benchmarks yet
-- Neural/semantic search — hybrid BM25+vector works via TF-IDF embeddings, no neural encoder yet
-- LTR model — trains automatically after 200+ click pairs, untested in production
-- Click models — CTR/dwell/pogo signals collected but not fully integrated into ranking
-- Result diversity — domain cap only, no MMR or subtopic diversification
-- Large-scale P2P — needs stress testing with 50+ peers
+- Search ranking quality at scale (no relevance benchmarks yet)
+- LTR model (trains from clicks, untested in production)
+- P2P version compatibility (no handshake protocol yet — version mismatches between nodes are not handled gracefully)
+- Semantic search (TF-IDF embeddings only, no neural encoder)
+- Large-scale P2P (needs stress testing with 50+ peers)
 
 **Planned:** Browser extension, mobile client, incentive layer, governance, plugin system. See [full roadmap](docs/roadmap.md).
 
