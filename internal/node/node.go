@@ -108,6 +108,11 @@ type Node struct {
 	peerVersionsMu sync.RWMutex
 	updateNeeded   atomic.Bool // set when a peer requires a newer compat level than ours
 
+	// Neural embedding management
+	embeddingMu      sync.RWMutex
+	activeEmbedder   index.TextEmbedder // currently active embedder
+	fallbackEmbedder index.TextEmbedder // TF-IDF fallback (always available)
+
 	// Crawl coordination counters
 	forwardedTasks atomic.Int64
 	receivedTasks  atomic.Int64
@@ -421,16 +426,17 @@ func (n *Node) init() error {
 	// 9a0b. Embedder + vector store for semantic search
 	baseEmbedder := index.NewTFIDFEmbedder()
 	multiEmbedder := index.NewMultilingualEmbedder(baseEmbedder)
-	var embedder index.TextEmbedder = multiEmbedder
+	n.fallbackEmbedder = multiEmbedder
+	n.activeEmbedder = multiEmbedder
 
 	if n.cfg.Index.OllamaURL != "" {
-		embedder = index.NewOllamaEmbedder(n.cfg.Index.OllamaURL, n.cfg.Index.OllamaModel, multiEmbedder)
+		n.activeEmbedder = index.NewOllamaEmbedder(n.cfg.Index.OllamaURL, n.cfg.Index.OllamaModel, multiEmbedder)
 	} else if n.cfg.Index.EmbeddingURL != "" {
-		embedder = index.NewHTTPEmbedder(n.cfg.Index.EmbeddingURL, multiEmbedder)
+		n.activeEmbedder = index.NewHTTPEmbedder(n.cfg.Index.EmbeddingURL, multiEmbedder)
 	}
 
 	vectorStore := index.NewBadgerVectorStore(n.badger.DB(), 384)
-	n.indexer.SetEmbedder(embedder)
+	n.indexer.SetEmbedder(n.activeEmbedder)
 	n.indexer.SetVectorStore(vectorStore)
 
 	// 9a. Content verification — sign documents with Ed25519
@@ -557,7 +563,7 @@ func (n *Node) init() error {
 	}
 
 	// 12a. Wire intelligence into search engine
-	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, embedder, 0.7, 0.3)
+	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, n.activeEmbedder, 0.7, 0.3)
 	n.localEng.SetHybridSearcher(hybridSearcher)
 	n.localEng.SetEntityStore(n.entityStore)
 	n.localEng.SetClusterComputer(n.clusterStore)
@@ -841,6 +847,84 @@ func (n *Node) init() error {
 			"score_penalty": sxCfg.ScorePenalty,
 			"categories":    sxCfg.Categories,
 		}
+	}
+
+	// Neural embedding management
+	deps.GetEmbeddingsFn = func() map[string]interface{} {
+		n.embeddingMu.RLock()
+		defer n.embeddingMu.RUnlock()
+
+		provider := "tfidf"
+		url := ""
+		model := ""
+		healthy := true
+
+		if httpEmb, ok := n.activeEmbedder.(*index.HTTPEmbedder); ok {
+			healthy = httpEmb.IsNeural()
+			if n.cfg.Index.OllamaURL != "" {
+				provider = "ollama"
+				url = n.cfg.Index.OllamaURL
+				model = n.cfg.Index.OllamaModel
+				if model == "" {
+					model = "all-minilm"
+				}
+			} else {
+				provider = "custom"
+				url = n.cfg.Index.EmbeddingURL
+			}
+		}
+
+		return map[string]interface{}{
+			"enabled":  provider != "tfidf",
+			"provider": provider,
+			"url":      url,
+			"model":    model,
+			"healthy":  healthy,
+		}
+	}
+
+	deps.SetEmbeddingsFn = func(enabled bool, provider, embURL, model string) error {
+		n.embeddingMu.Lock()
+		defer n.embeddingMu.Unlock()
+
+		if !enabled {
+			n.activeEmbedder = n.fallbackEmbedder
+			n.cfg.Index.OllamaURL = ""
+			n.cfg.Index.EmbeddingURL = ""
+			n.indexer.SetEmbedder(n.fallbackEmbedder)
+			slog.Info("embeddings: switched to TF-IDF")
+			return nil
+		}
+
+		switch provider {
+		case "ollama":
+			if embURL == "" {
+				embURL = "http://localhost:11434"
+			}
+			if model == "" {
+				model = "all-minilm"
+			}
+			emb := index.NewOllamaEmbedder(embURL, model, n.fallbackEmbedder)
+			n.activeEmbedder = emb
+			n.cfg.Index.OllamaURL = embURL
+			n.cfg.Index.OllamaModel = model
+			n.cfg.Index.EmbeddingURL = ""
+			n.indexer.SetEmbedder(emb)
+			slog.Info("embeddings: switched to Ollama", "url", embURL, "model", model, "healthy", emb.IsNeural())
+		case "custom":
+			if embURL == "" {
+				return fmt.Errorf("URL is required for custom embedding provider")
+			}
+			emb := index.NewHTTPEmbedder(embURL, n.fallbackEmbedder)
+			n.activeEmbedder = emb
+			n.cfg.Index.EmbeddingURL = embURL
+			n.cfg.Index.OllamaURL = ""
+			n.indexer.SetEmbedder(emb)
+			slog.Info("embeddings: switched to custom", "url", embURL, "healthy", emb.IsNeural())
+		default:
+			return fmt.Errorf("unknown provider: %s (use ollama, custom, or tfidf)", provider)
+		}
+		return nil
 	}
 
 	// Wire restart function for update-restart endpoint.

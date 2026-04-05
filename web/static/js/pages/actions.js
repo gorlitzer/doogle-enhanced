@@ -174,6 +174,29 @@ export function renderActions(container) {
         </div>
       </div>
 
+      <!-- Neural Embeddings -->
+      <div class="actions-section" id="embeddings-section">
+        <div class="actions-section-header">
+          ${icon('zap', 20, 'var(--green)')}
+          <h3>Neural Search</h3>
+        </div>
+        <div class="actions-grid">
+          <div class="action-card" style="grid-column:1/-1">
+            <div class="action-card-header">
+              <div class="action-icon">${icon('zap', 24, 'var(--green)')}</div>
+              <div>
+                <strong>Neural Semantic Search</strong>
+                <p>Upgrade from keyword matching to true semantic understanding.
+                   "automobile" will match "car", "machine learning" will match "AI".</p>
+              </div>
+            </div>
+            <div class="action-card-body" id="embeddings-body">
+              <div class="wizard-loading">Loading embedding settings...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Fleet Management -->
       <div class="actions-section" id="fleet-section" style="display:none">
         <div class="actions-section-header">
@@ -315,6 +338,7 @@ export function renderActions(container) {
   loadLimits();
   loadPerformance();
   loadSearXNG();
+  loadEmbeddings();
 }
 
 async function loadCurrentName() {
@@ -939,6 +963,136 @@ async function loadSearXNG() {
       await api.setSearXNG(isEnabled, sxUrl);
       result.innerHTML = '<span class="badge badge-green">SearXNG settings saved</span>';
       setTimeout(() => loadSearXNG(), 1500);
+    } catch (err) {
+      result.innerHTML = '<span class="badge badge-red">Error: ' + escapeHtml(err.message) + '</span>';
+    }
+    setLoading(btn, false, 'Save');
+  });
+}
+
+// ---- Neural Embeddings ----
+
+async function loadEmbeddings() {
+  const body = document.getElementById('embeddings-body');
+  if (!body) return;
+
+  let cfg;
+  try {
+    cfg = await api.getEmbeddings();
+  } catch {
+    body.innerHTML = '<p style="color:var(--text-secondary)">Could not load embedding settings.</p>';
+    return;
+  }
+
+  const enabled = cfg.enabled || false;
+  const provider = cfg.provider || 'tfidf';
+  const healthy = cfg.healthy !== false;
+  const url = cfg.url || '';
+  const model = cfg.model || 'all-minilm';
+
+  const statusBadge = !enabled
+    ? '<span class="badge" style="background:var(--bg-secondary);color:var(--text-muted)">TF-IDF (basic)</span>'
+    : healthy
+      ? '<span class="badge badge-green">Neural (' + escapeHtml(provider) + ')</span>'
+      : '<span class="badge badge-amber">Connecting...</span>';
+
+  const healthDot = enabled
+    ? healthy
+      ? '<span style="color:var(--green)">Connected</span>'
+      : '<span style="color:var(--amber)">Unreachable — using TF-IDF fallback</span>'
+    : '';
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      ${statusBadge}
+      <span style="font-size:0.82em;color:var(--text-secondary)">${healthDot}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="emb-enabled" ${enabled ? 'checked' : ''} style="accent-color:var(--green);width:18px;height:18px">
+        <span><strong>Enable Neural Embeddings</strong></span>
+      </label>
+      <div id="emb-provider-section" style="${enabled ? '' : 'display:none'}">
+        <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:8px">Provider</label>
+        <div style="display:flex;gap:16px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="emb-provider" value="ollama" ${provider === 'ollama' ? 'checked' : ''} style="accent-color:var(--green)">
+            <span>Ollama</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="radio" name="emb-provider" value="custom" ${provider === 'custom' ? 'checked' : ''} style="accent-color:var(--green)">
+            <span>Custom server</span>
+          </label>
+        </div>
+        <div id="emb-ollama-section" style="${provider !== 'custom' ? '' : 'display:none'}">
+          <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">Ollama URL</label>
+          <input type="text" id="emb-url" class="action-input" value="${escapeHtml(provider === 'ollama' ? url : 'http://localhost:11434')}" placeholder="http://localhost:11434" style="width:100%;max-width:400px;margin-bottom:8px">
+          <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">Model</label>
+          <input type="text" id="emb-model" class="action-input" value="${escapeHtml(model)}" placeholder="all-minilm" style="width:100%;max-width:400px">
+        </div>
+        <div id="emb-custom-section" style="${provider === 'custom' ? '' : 'display:none'}">
+          <label style="font-size:0.82em;color:var(--text-secondary);display:block;margin-bottom:4px">Embedding Server URL</label>
+          <input type="text" id="emb-custom-url" class="action-input" value="${escapeHtml(provider === 'custom' ? url : '')}" placeholder="http://localhost:11411/embed" style="width:100%;max-width:400px">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-primary" id="save-emb-btn">
+          <span class="btn-label">Save</span>
+        </button>
+      </div>
+      <div id="emb-result" class="action-result"></div>
+    </div>
+    <div style="margin-top:16px;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;font-size:0.85em;color:var(--text-secondary)">
+      <strong style="color:var(--text-primary)">How to set up Ollama</strong><br>
+      1. Install <a href="https://ollama.com" target="_blank" rel="noopener" style="color:var(--accent)">Ollama</a><br>
+      2. Run: <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">ollama pull all-minilm</code><br>
+      3. Enable above and click Save<br><br>
+      <span style="color:var(--text-muted)">
+        Without neural embeddings, search uses TF-IDF (keyword matching only).
+        With Ollama, "automobile" matches "car" and "ML" matches "machine learning".
+      </span>
+    </div>
+  `;
+
+  // Toggle provider section visibility
+  document.getElementById('emb-enabled').addEventListener('change', (e) => {
+    document.getElementById('emb-provider-section').style.display = e.target.checked ? '' : 'none';
+  });
+
+  // Toggle ollama vs custom sections
+  document.querySelectorAll('input[name="emb-provider"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const isOllama = document.querySelector('input[name="emb-provider"]:checked')?.value === 'ollama';
+      document.getElementById('emb-ollama-section').style.display = isOllama ? '' : 'none';
+      document.getElementById('emb-custom-section').style.display = isOllama ? 'none' : '';
+    });
+  });
+
+  // Save handler
+  document.getElementById('save-emb-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('save-emb-btn');
+    const result = document.getElementById('emb-result');
+    const isEnabled = document.getElementById('emb-enabled').checked;
+
+    let prov = 'tfidf';
+    let embUrl = '';
+    let embModel = '';
+
+    if (isEnabled) {
+      prov = document.querySelector('input[name="emb-provider"]:checked')?.value || 'ollama';
+      if (prov === 'ollama') {
+        embUrl = document.getElementById('emb-url')?.value?.trim() || 'http://localhost:11434';
+        embModel = document.getElementById('emb-model')?.value?.trim() || 'all-minilm';
+      } else {
+        embUrl = document.getElementById('emb-custom-url')?.value?.trim() || '';
+      }
+    }
+
+    setLoading(btn, true, 'Saving...');
+    try {
+      await api.setEmbeddings(isEnabled, prov, embUrl, embModel);
+      result.innerHTML = '<span class="badge badge-green">Embedding settings saved</span>';
+      setTimeout(() => loadEmbeddings(), 1500);
     } catch (err) {
       result.innerHTML = '<span class="badge badge-red">Error: ' + escapeHtml(err.message) + '</span>';
     }

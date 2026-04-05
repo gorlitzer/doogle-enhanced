@@ -188,4 +188,10 @@ export const api = {
   setSearXNG(enabled, url) {
     return postJSON('/api/admin/searxng', { enabled, url });
   },
+  getEmbeddings() {
+    return fetchJSON('/api/admin/embeddings');
+  },
+  setEmbeddings(enabled, provider, url, model) {
+    return postJSON('/api/admin/embeddings', { enabled, provider, url, model });
+  },
 };
