@@ -83,6 +83,10 @@ type Deps struct {
 	SetSearXNGFn func(enabled bool, url string) error
 	GetSearXNGFn func() map[string]interface{}
 
+	// Neural embeddings (Ollama / generic)
+	GetEmbeddingsFn func() map[string]interface{}
+	SetEmbeddingsFn func(enabled bool, provider, url, model string) error
+
 	// Graceful restart (update + re-exec)
 	RestartFn func()
 
@@ -1144,6 +1148,46 @@ func SetSearXNGHandler(deps *Deps) http.HandlerFunc {
 		}
 		if deps.GetSearXNGFn != nil {
 			writeJSON(w, http.StatusOK, deps.GetSearXNGFn())
+		} else {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+		}
+	}
+}
+
+// GetEmbeddingsHandler handles GET /api/admin/embeddings
+func GetEmbeddingsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.GetEmbeddingsFn == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"enabled": false, "provider": "tfidf"})
+			return
+		}
+		writeJSON(w, http.StatusOK, deps.GetEmbeddingsFn())
+	}
+}
+
+// SetEmbeddingsHandler handles POST /api/admin/embeddings
+func SetEmbeddingsHandler(deps *Deps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.SetEmbeddingsFn == nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not supported"})
+			return
+		}
+		var req struct {
+			Enabled  bool   `json:"enabled"`
+			Provider string `json:"provider"` // "ollama", "custom", "tfidf"
+			URL      string `json:"url"`
+			Model    string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if err := deps.SetEmbeddingsFn(req.Enabled, req.Provider, req.URL, req.Model); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if deps.GetEmbeddingsFn != nil {
+			writeJSON(w, http.StatusOK, deps.GetEmbeddingsFn())
 		} else {
 			writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 		}
