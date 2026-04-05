@@ -95,6 +95,9 @@ type IndexConfig struct {
 	// Semantic search (Phase 4)
 	EnableSemantic bool    `yaml:"enable_semantic"`
 	SemanticWeight float64 `yaml:"semantic_weight"`
+	EmbeddingURL   string  `yaml:"embedding_url"`   // generic embedding server URL (empty = TF-IDF)
+	OllamaURL      string  `yaml:"ollama_url"`      // Ollama server URL (default http://localhost:11434)
+	OllamaModel    string  `yaml:"ollama_model"`    // Ollama embedding model (default all-minilm)
 	ClusterInterval time.Duration `yaml:"cluster_interval"`
 	ClusterCount    int           `yaml:"cluster_count"`
 }
@@ -254,7 +257,7 @@ func ParseFlags(cfg *Config) {
 	flag.StringVar(&cfg.NodeName, "name", cfg.NodeName, "Human-readable node name")
 	flag.IntVar(&cfg.P2P.Port, "port", cfg.P2P.Port, "libp2p listen port")
 	flag.IntVar(&cfg.API.Port, "api-port", cfg.API.Port, "HTTP API port")
-	flag.StringVar(&cfg.API.Bind, "bind", cfg.API.Bind, "API server bind address (default 127.0.0.1, use 0.0.0.0 for Docker)")
+	flag.StringVar(&cfg.API.Bind, "bind", cfg.API.Bind, "API server bind address (default 0.0.0.0)")
 	flag.StringVar(&cfg.Storage.DataDir, "data-dir", cfg.Storage.DataDir, "Data directory")
 	flag.StringVar(&bootstrap, "bootstrap", "", "Bootstrap peer multiaddr")
 	flag.StringVar(&seed, "seed", "", "Seed URL(s) to crawl (comma-separated)")
@@ -274,7 +277,17 @@ func ParseFlags(cfg *Config) {
 
 	var searxngURL string
 	flag.StringVar(&searxngURL, "searxng-url", "", "SearXNG instance URL (enables metasearch fallback)")
+	flag.StringVar(&cfg.Index.EmbeddingURL, "embedding-url", cfg.Index.EmbeddingURL, "Neural embedding server URL (e.g. http://localhost:11411/embed)")
+	var ollamaFlag bool
+	flag.BoolVar(&ollamaFlag, "ollama", false, "Enable neural embeddings via Ollama (auto-detects on localhost:11434)")
+	flag.StringVar(&cfg.Index.OllamaURL, "ollama-url", cfg.Index.OllamaURL, "Ollama server URL (default http://localhost:11434)")
+	flag.StringVar(&cfg.Index.OllamaModel, "ollama-model", cfg.Index.OllamaModel, "Ollama embedding model (default all-minilm)")
 	flag.Parse()
+
+	// --ollama flag sets defaults
+	if ollamaFlag && cfg.Index.OllamaURL == "" {
+		cfg.Index.OllamaURL = "http://localhost:11434"
+	}
 
 	// Apply SearXNG URL from CLI flag (auto-enables)
 	if searxngURL != "" {

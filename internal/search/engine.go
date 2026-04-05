@@ -103,6 +103,21 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 		return nil, fmt.Errorf("search: %w", err)
 	}
 
+	// Query relaxation: if AND returned 0 results and we have 2+ terms,
+	// retry with OR semantics so at least partial matches surface.
+	if total == 0 && len(pq.Terms) >= 2 {
+		relaxed := *pq
+		relaxed.UseOR = true
+		if e.hybridSearcher != nil && e.hybridSearcher.Available() {
+			hits, total, err = e.hybridSearcher.Search(&relaxed, 0, fetchSize)
+		} else {
+			hits, total, err = e.store.SearchAdvanced(&relaxed, 0, fetchSize)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("search relaxed: %w", err)
+		}
+	}
+
 	var results []models.SearchResult
 	for _, hit := range hits {
 		// Use passage-based snippet extraction with highlights

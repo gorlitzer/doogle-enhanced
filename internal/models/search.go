@@ -22,6 +22,7 @@ type ParsedQuery struct {
 	After        string              // from after:YYYY-MM-DD
 	HasHTTPS     bool                // from has:https
 	UseFuzzy     bool                // true for short queries (≤3 terms)
+	UseOR        bool                // true to relax AND to OR (query relaxation fallback)
 	CleanedQuery string              // fallback plain string
 	Synonyms     []string            // synonym expansions for query terms
 	PeerFilter   string              // from peer:PEERID — restrict to origin peer
@@ -167,6 +168,7 @@ type NodeStatus struct {
 	OwnedDomains   int       `json:"owned_domains"`
 	ForwardedTasks int64     `json:"forwarded_tasks"`
 	ReceivedTasks  int64     `json:"received_tasks"`
+	UpdateNeeded   bool      `json:"update_needed,omitempty"`
 
 	// Fleet (omitted when standalone)
 	FleetRole          string `json:"fleet_role,omitempty"`           // "coordinator" or "worker"
@@ -287,5 +289,6 @@ type PeerInfo struct {
 	PeerID   string   `json:"peer_id"`
 	NodeName string   `json:"node_name,omitempty"`
 	Country  string   `json:"country,omitempty"`
+	Version  string   `json:"version,omitempty"`
 	Addrs    []string `json:"addrs"`
 }

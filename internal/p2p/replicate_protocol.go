@@ -53,6 +53,7 @@ type ReplicateHandler func(senderPeerID string, req *ReplicateRequest) (*Replica
 func RegisterReplicateProtocol(h host.Host, handler ReplicateHandler) {
 	h.SetStreamHandler(ReplicateProtocol, func(s network.Stream) {
 		defer s.Close()
+		s.SetDeadline(time.Now().Add(60 * time.Second))
 
 		senderPeerID := s.Conn().RemotePeer().String()
 

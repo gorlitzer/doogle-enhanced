@@ -7,9 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,6 +22,7 @@ import (
 	"github.com/doogle/doogle-v2/internal/updater"
 	"github.com/doogle/doogle-v2/internal/p2p"
 	"github.com/doogle/doogle-v2/internal/search"
+	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
 // Deps holds handler dependencies.
@@ -179,7 +178,7 @@ func CrawlHandler(deps *Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "URL must use http or https scheme"})
 			return
 		}
-		if !isSafeURL(body.URL) {
+		if !urlutil.IsSafeURL(body.URL) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "URL targets a private or reserved address"})
 			return
 		}
@@ -322,7 +321,7 @@ func BatchCrawlHandler(deps *Deps) http.HandlerFunc {
 		queued := 0
 		for _, u := range body.URLs {
 			u = strings.TrimSpace(u)
-			if (strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) && isSafeURL(u) {
+			if (strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")) && urlutil.IsSafeURL(u) {
 				deps.CrawlSeed(u)
 				queued++
 			}
@@ -334,43 +333,6 @@ func BatchCrawlHandler(deps *Deps) http.HandlerFunc {
 			"total":  len(body.URLs),
 		})
 	}
-}
-
-// isSafeURL checks that a URL targets a public host (not private/internal IPs).
-func isSafeURL(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	if host == "" {
-		return false
-	}
-
-	// Reject localhost variants.
-	lower := strings.ToLower(host)
-	if lower == "localhost" || lower == "0.0.0.0" || strings.HasSuffix(lower, ".local") {
-		return false
-	}
-
-	ip := net.ParseIP(host)
-	if ip == nil {
-		// hostname, not IP — allow (DNS resolution happens at crawl time).
-		return true
-	}
-
-	// Reject private, loopback, link-local, and reserved ranges.
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-		return false
-	}
-
-	// Reject cloud metadata IPs (169.254.169.254).
-	if ip.Equal(net.ParseIP("169.254.169.254")) {
-		return false
-	}
-
-	return true
 }
 
 // ReportHandler handles POST /api/report with JSON body {"url": "...", "reason": "...", "detail": "..."}
@@ -486,6 +448,7 @@ func DumpHandler(deps *Deps) http.HandlerFunc {
 		// Sensitive files to exclude from backups.
 		skipFiles := map[string]bool{
 			"fleet.secret": true,
+			"node.key":     true,
 		}
 
 		filepath.Walk(absDir, func(path string, fi os.FileInfo, err error) error {

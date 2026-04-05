@@ -23,6 +23,7 @@ type SearchHandler func(req *models.SearchRequest) (*models.SearchResponse, erro
 func RegisterSearchProtocol(h host.Host, handler SearchHandler) {
 	h.SetStreamHandler(SearchProtocol, func(s network.Stream) {
 		defer s.Close()
+		s.SetDeadline(time.Now().Add(30 * time.Second))
 
 		// Read request
 		reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max

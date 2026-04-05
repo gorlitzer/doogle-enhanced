@@ -344,6 +344,20 @@ function applyData(status, crawler, indexer, storage) {
   if (diagram) diagram.setSpawnRate(Math.max(1, activeW));
   renderDashboard(status, crawler, indexer, storage);
   syncMobileView();
+
+  // Show warning banner if peers require a newer protocol version
+  if (s.update_needed && !document.getElementById('compat-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'compat-banner';
+    banner.className = 'update-banner update-banner--error';
+    banner.innerHTML = `
+      <span class="update-banner-text">
+        ${icon('alertTriangle', 16)} Your node may be outdated — peers on the network require a newer protocol version. Run <code>doogle update</code> or rebuild from source.
+      </span>
+    `;
+    const header = document.querySelector('.page-header');
+    if (header) header.parentNode.insertBefore(banner, header.nextSibling);
+  }
 }
 
 // ── Dashboard Helpers ──

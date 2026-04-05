@@ -23,6 +23,7 @@ type CrawlTaskHandler func(task *models.CrawlTask) error
 func RegisterCrawlProtocol(h host.Host, handler CrawlTaskHandler) {
 	h.SetStreamHandler(CrawlProtocol, func(s network.Stream) {
 		defer s.Close()
+		s.SetDeadline(time.Now().Add(30 * time.Second))
 
 		reader := bufio.NewReader(io.LimitReader(s, 1<<20)) // 1 MB max
 		data, err := reader.ReadBytes('\n')

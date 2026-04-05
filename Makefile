@@ -1,4 +1,4 @@
-.PHONY: help setup build run run-only upgrade test dev stop stop-quiet status clean nuke release checksums patch minor major geoip
+.PHONY: help setup build run run-only upgrade test lint dev stop stop-quiet status clean nuke release checksums patch minor major geoip embeddings
 
 BINARY     = doogle
 BIN_DIR    = bin
@@ -24,8 +24,10 @@ help:
 	@echo "    make dev                Docker foreground on :7002 (Ctrl+C to stop)"
 	@echo "    make stop               Gracefully stop running node (SIGTERM, 15s timeout)"
 	@echo "    make status             Check if the node is running"
-	@echo "    make test               Run all tests"
-	@echo "    make geoip             Download GeoLite2-Country database for peer geolocation"
+	@echo "    make test               Run all tests (with race detector)"
+	@echo "    make lint               Run go vet (matches CI)"
+	@echo "    make geoip             Download GeoLite2-Country database (MaxMind EULA applies)"
+	@echo "    make embeddings         Start neural embedding server (requires Python)"
 	@echo "    make clean              Stop node + remove build artifacts + crawl data"
 	@echo "    make nuke               Clean + delete local Go runtime"
 	@echo "    make release            Cross-compile binaries for all platforms to dist/"
@@ -100,6 +102,24 @@ run: build stop-quiet
 	@echo "    Stop:   make stop"
 	@echo ""
 
+run-neural: build stop-quiet
+	@echo "==> Starting embedding server in background..."
+	@if ! python3 -c "import sentence_transformers, flask" 2>/dev/null; then \
+		echo "==> Installing dependencies..."; \
+		pip3 install --quiet sentence-transformers flask; \
+	fi
+	@nohup python3 scripts/embedding-server.py > embeddings.log 2>&1 & echo "$$!" > .embeddings.pid
+	@sleep 3
+	@nohup ./$(BIN_DIR)/$(BINARY) --embedding-url http://localhost:11411/embed $(ARGS) > doogle.log 2>&1 & echo "$$!" > .doogle.pid
+	@echo ""
+	@echo "  Doogle is running with neural embeddings! (PID $$(cat .doogle.pid))"
+	@echo ""
+	@echo "    Open:   http://localhost:7002"
+	@echo "    Logs:   tail -f doogle.log"
+	@echo "    Embed:  tail -f embeddings.log"
+	@echo "    Stop:   make stop"
+	@echo ""
+
 upgrade:
 	@if [ -x ./$(BIN_DIR)/$(BINARY) ]; then \
 		echo "==> Checking for updates..."; \
@@ -122,8 +142,13 @@ run-only:
 
 test:
 	@echo "==> Running tests..."
-	@$(GO) test ./...
+	@$(GO) test -race -timeout 120s ./...
 	@echo "==> All tests passed."
+
+lint:
+	@echo "==> Running linter..."
+	@$(GO) vet ./...
+	@echo "==> Lint passed."
 
 dev:
 	docker compose up --build
@@ -143,6 +168,12 @@ stop:
 	  echo "==> Nothing running."; \
 	fi
 	@killall $(BINARY) 2>/dev/null || true
+	@if [ -f .embeddings.pid ]; then \
+	  EPID=$$(cat .embeddings.pid); \
+	  if kill -0 "$$EPID" 2>/dev/null; then \
+	    echo "==> Stopping embedding server (PID $$EPID)..."; kill "$$EPID"; \
+	  fi; rm -f .embeddings.pid; \
+	fi
 	@docker compose down 2>/dev/null || true
 
 # Silent variant used by run/clean to avoid noise.
@@ -188,7 +219,7 @@ status:
 
 clean: stop-quiet
 	@echo "==> Removing build artifacts and crawl data..."
-	@rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid doogle.log data/
+	@rm -rf $(BIN_DIR)/ $(DIST_DIR)/ .doogle.pid .embeddings.pid doogle.log embeddings.log data/
 	@echo "==> Clean complete."
 
 nuke: clean
@@ -200,9 +231,26 @@ nuke: clean
 	@rm -rf .go/
 	@echo "==> Nuke complete. Run 'make setup' to reinstall."
 
+embeddings:
+	@echo "==> Starting neural embedding server (all-MiniLM-L6-v2, port 11411)..."
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		echo "[!!] python3 not found — install Python 3.8+ first"; exit 1; \
+	fi
+	@python3 -c "import sentence_transformers, flask" 2>/dev/null || { \
+		echo "==> Installing dependencies (sentence-transformers + flask)..."; \
+		pip3 install --quiet sentence-transformers flask; \
+	}
+	@echo ""
+	@echo "  Embedding server starting on http://localhost:11411"
+	@echo "  Use with: make run ARGS='--embedding-url http://localhost:11411/embed'"
+	@echo "  Or:       ./bin/doogle --embedding-url http://localhost:11411/embed"
+	@echo ""
+	@python3 scripts/embedding-server.py
+
 geoip:
 	@mkdir -p data
 	@echo "==> Downloading GeoLite2-Country database..."
+	@echo "    Note: usage subject to MaxMind EULA (https://www.maxmind.com/en/geolite2/eula)"
 	@curl -sL "https://git.io/GeoLite2-Country.mmdb" -o data/GeoLite2-Country.mmdb
 	@echo "==> GeoLite2-Country.mmdb downloaded to data/"
 
@@ -223,7 +271,16 @@ checksums:
 	@cat $(DIST_DIR)/checksums.txt
 
 define bump_version
-	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	if [ "$$BRANCH" != "main" ]; then \
+		echo "ERROR: releases must be tagged on main (currently on $$BRANCH)"; \
+		exit 1; \
+	fi; \
+	if [ -n "$$(git status --porcelain)" ]; then \
+		echo "ERROR: working tree is dirty — commit or stash changes first"; \
+		exit 1; \
+	fi; \
+	CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
 	MAJOR=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f1); \
 	MINOR=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f2); \
 	PATCH=$$(echo $$CURRENT | sed 's/^v//' | cut -d. -f3); \

@@ -103,6 +103,11 @@ type Node struct {
 	peerGeoMu   sync.RWMutex
 	selfCountry string
 
+	// Peer version tracking
+	peerVersions   map[string]string // peer ID → version string
+	peerVersionsMu sync.RWMutex
+	updateNeeded   atomic.Bool // set when a peer requires a newer compat level than ours
+
 	// Crawl coordination counters
 	forwardedTasks atomic.Int64
 	receivedTasks  atomic.Int64
@@ -155,6 +160,7 @@ func New(cfg *Config) (*Node, error) {
 		peerNames:     make(map[string]string),
 		peerRelayInfo: make(map[string]relayInfo),
 		peerGeo:       make(map[string]string),
+		peerVersions:  make(map[string]string),
 		startedAt:     time.Now(),
 		ctx:           ctx,
 		cancel:        cancel,
@@ -274,6 +280,7 @@ func (n *Node) init() error {
 	// 5-restore. Restore persisted peer names and geo from previous runs.
 	n.loadPeerNames()
 	n.loadPeerGeo()
+	n.loadPeerVersions()
 
 	// 5-geo. Load GeoLite2 database for peer geolocation.
 	geoDBPath := filepath.Join(dataDir, "GeoLite2-Country.mmdb")
@@ -411,11 +418,19 @@ func (n *Node) init() error {
 	// 9a0. Wire intelligence subsystems into indexer
 	n.indexer.SetEntityStore(n.entityStore)
 
-	// 9a0b. Multilingual TF-IDF embedder + vector store for semantic search
+	// 9a0b. Embedder + vector store for semantic search
 	baseEmbedder := index.NewTFIDFEmbedder()
 	multiEmbedder := index.NewMultilingualEmbedder(baseEmbedder)
+	var embedder index.TextEmbedder = multiEmbedder
+
+	if n.cfg.Index.OllamaURL != "" {
+		embedder = index.NewOllamaEmbedder(n.cfg.Index.OllamaURL, n.cfg.Index.OllamaModel, multiEmbedder)
+	} else if n.cfg.Index.EmbeddingURL != "" {
+		embedder = index.NewHTTPEmbedder(n.cfg.Index.EmbeddingURL, multiEmbedder)
+	}
+
 	vectorStore := index.NewBadgerVectorStore(n.badger.DB(), 384)
-	n.indexer.SetEmbedder(multiEmbedder)
+	n.indexer.SetEmbedder(embedder)
 	n.indexer.SetVectorStore(vectorStore)
 
 	// 9a. Content verification — sign documents with Ed25519
@@ -542,7 +557,7 @@ func (n *Node) init() error {
 	}
 
 	// 12a. Wire intelligence into search engine
-	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, multiEmbedder, 0.7, 0.3)
+	hybridSearcher := index.NewHybridSearcher(bleveIdx, vectorStore, embedder, 0.7, 0.3)
 	n.localEng.SetHybridSearcher(hybridSearcher)
 	n.localEng.SetEntityStore(n.entityStore)
 	n.localEng.SetClusterComputer(n.clusterStore)
@@ -1085,6 +1100,7 @@ func (n *Node) Status() *models.NodeStatus {
 		OwnedDomains:   n.countOwnedDomains(),
 		ForwardedTasks: n.forwardedTasks.Load(),
 		ReceivedTasks:  n.receivedTasks.Load(),
+		UpdateNeeded:   n.updateNeeded.Load(),
 	}
 
 	// Fleet info.
@@ -1430,6 +1446,7 @@ func (n *Node) PeersInfo() []models.PeerInfo {
 			PeerID:   pidStr,
 			NodeName: n.PeerName(pidStr),
 			Country:  n.PeerGeo(pidStr),
+			Version:  n.PeerVersion(pidStr),
 			Addrs:    addrStrs,
 		})
 	}
@@ -1517,6 +1534,78 @@ func (n *Node) loadPeerGeo() {
 	})
 }
 
+const peerVersionPrefix = "pv:"
+
+// PeerVersion returns the version string for a peer, or empty if unknown.
+func (n *Node) PeerVersion(id string) string {
+	n.peerVersionsMu.RLock()
+	defer n.peerVersionsMu.RUnlock()
+	return n.peerVersions[id]
+}
+
+// setPeerVersion stores a peer's version in memory and persists it to BadgerDB.
+func (n *Node) setPeerVersion(peerID, version string) {
+	n.peerVersionsMu.Lock()
+	n.peerVersions[peerID] = version
+	n.peerVersionsMu.Unlock()
+	_ = n.badger.Set([]byte(peerVersionPrefix+peerID), []byte(version))
+}
+
+// loadPeerVersions restores all persisted peer versions from BadgerDB into memory.
+func (n *Node) loadPeerVersions() {
+	prefix := []byte(peerVersionPrefix)
+	_ = n.badger.DB().View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = prefix
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := string(it.Item().Key())
+			peerID := key[len(peerVersionPrefix):]
+			_ = it.Item().Value(func(val []byte) error {
+				n.peerVersionsMu.Lock()
+				n.peerVersions[peerID] = string(val)
+				n.peerVersionsMu.Unlock()
+				return nil
+			})
+		}
+		return nil
+	})
+}
+
+// checkPeerCompat checks whether a peer's protocol compatibility level is acceptable.
+// Returns true if compatible, false if the peer should be rejected.
+func (n *Node) checkPeerCompat(catalog *p2p.ShardCatalog) bool {
+	peerCompat := catalog.MinCompatVersion // 0 for old pre-version nodes
+
+	// They require a newer protocol than we support — we're outdated
+	if peerCompat > p2p.CompatLevel {
+		slog.Warn("peer requires newer protocol — consider updating",
+			"peer", catalog.PeerID[:12], "their_compat", peerCompat, "our_compat", p2p.CompatLevel)
+		n.updateNeeded.Store(true)
+		return false
+	}
+
+	// We require a newer protocol than they support — they're outdated
+	if p2p.MinRequiredCompat > 0 && peerCompat < p2p.MinRequiredCompat {
+		slog.Warn("peer too old — disconnecting",
+			"peer", catalog.PeerID[:12], "their_compat", peerCompat, "our_min_required", p2p.MinRequiredCompat)
+		return false
+	}
+
+	return true
+}
+
+// disconnectIncompatPeer removes an incompatible peer from the shard ring and closes the connection.
+func (n *Node) disconnectIncompatPeer(peerIDStr string) {
+	n.shards.RemoveNode(peerIDStr)
+	if pid, err := peer.Decode(peerIDStr); err == nil {
+		n.host.ConnManager().Unprotect(pid, "doogle")
+		_ = n.host.Network().ClosePeer(pid)
+	}
+}
+
 // sendCatalogToPeer sends our shard catalog (including node name) directly
 // to a peer via the /doogle/shard/1.0.0 stream protocol. This bypasses
 // GossipSub so the remote peer learns our name immediately on connection.
@@ -1526,11 +1615,13 @@ func (n *Node) sendCatalogToPeer(pid peer.ID) {
 	}
 	docCount, _ := n.bleveIdx.DocCount()
 	catalog := &p2p.ShardCatalog{
-		PeerID:     n.peerID.String(),
-		NodeName:   n.cfg.NodeName,
-		Country:    n.selfCountry,
-		DocCount:   docCount,
-		Generation: n.genStore.Current(),
+		PeerID:           n.peerID.String(),
+		NodeName:         n.cfg.NodeName,
+		Country:          n.selfCountry,
+		Version:          n.cfg.Version,
+		MinCompatVersion: p2p.CompatLevel,
+		DocCount:         docCount,
+		Generation:       n.genStore.Current(),
 	}
 	if err := p2p.SendShardCatalog(n.ctx, n.host, pid, catalog, 10*time.Second); err != nil {
 		slog.Debug("shard catalog: direct send failed", "peer", pid.String()[:12], "err", err)
@@ -1808,6 +1899,11 @@ func (n *Node) gossipLoop() {
 		}
 
 		for _, u := range ann.URLs {
+			// Validate URL is safe (prevent SSRF via gossip)
+			if !urlutil.IsSafeURL(u) {
+				continue
+			}
+
 			domain := urlutil.ExtractDomain(u)
 
 			// Skip URLs from flagged or consensus-blocked domains
@@ -1851,6 +1947,17 @@ func (n *Node) shardCatalogLoop() {
 			continue
 		}
 
+		// Store version regardless of compat (for UI display)
+		if catalog.Version != "" {
+			n.setPeerVersion(catalog.PeerID, catalog.Version)
+		}
+
+		// Check protocol compatibility
+		if !n.checkPeerCompat(catalog) {
+			n.disconnectIncompatPeer(catalog.PeerID)
+			continue
+		}
+
 		// Ensure the peer is in our shard ring
 		n.shards.AddNode(catalog.PeerID)
 		if catalog.NodeName != "" {
@@ -1873,7 +1980,7 @@ func (n *Node) shardCatalogLoop() {
 			}
 			n.peerRelayInfoMu.Unlock()
 		}
-		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "type", catalog.NodeType, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
+		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "version", catalog.Version, "type", catalog.NodeType, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
 	}
 }
 
@@ -1909,13 +2016,15 @@ func (n *Node) publishShardCatalog() {
 		nodeType = "light"
 	}
 	catalog := &p2p.ShardCatalog{
-		PeerID:        n.peerID.String(),
-		NodeName:      n.cfg.NodeName,
-		NodeType:      nodeType,
-		Country:       n.selfCountry,
-		DocCount:      docCount,
-		Generation:    n.genStore.Current(),
-		QueriesServed: n.queriesServed.Load(),
+		PeerID:           n.peerID.String(),
+		NodeName:         n.cfg.NodeName,
+		NodeType:         nodeType,
+		Country:          n.selfCountry,
+		Version:          n.cfg.Version,
+		MinCompatVersion: p2p.CompatLevel,
+		DocCount:         docCount,
+		Generation:       n.genStore.Current(),
+		QueriesServed:    n.queriesServed.Load(),
 	}
 	if err := n.gossip.PublishShardCatalog(n.ctx, catalog); err != nil {
 		slog.Error("node: shard catalog publish error", "err", err)
@@ -1943,6 +2052,17 @@ func (n *Node) handlePeerIndexDoc(senderPeerID string, doc *models.Document) err
 }
 
 func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
+	// Store version regardless of compat (for UI display)
+	if catalog.Version != "" {
+		n.setPeerVersion(catalog.PeerID, catalog.Version)
+	}
+
+	// Check protocol compatibility
+	if !n.checkPeerCompat(catalog) {
+		n.disconnectIncompatPeer(catalog.PeerID)
+		return fmt.Errorf("incompatible peer %s (compat %d)", catalog.PeerID[:12], catalog.MinCompatVersion)
+	}
+
 	n.shards.AddNode(catalog.PeerID)
 	if catalog.NodeName != "" {
 		n.setPeerName(catalog.PeerID, catalog.NodeName)
@@ -1964,7 +2084,7 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 		}
 		n.peerRelayInfoMu.Unlock()
 	}
-	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "type", catalog.NodeType, "docs", catalog.DocCount)
+	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "version", catalog.Version, "type", catalog.NodeType, "docs", catalog.DocCount)
 	return nil
 }
 

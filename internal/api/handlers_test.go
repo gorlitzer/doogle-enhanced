@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
 func TestCrawlerFeedHandler_ReturnsEvents(t *testing.T) {
@@ -214,9 +215,9 @@ func TestIsSafeURL(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := isSafeURL(tt.url)
+		got := urlutil.IsSafeURL(tt.url)
 		if got != tt.safe {
-			t.Errorf("isSafeURL(%q) = %v, want %v", tt.url, got, tt.safe)
+			t.Errorf("IsSafeURL(%q) = %v, want %v", tt.url, got, tt.safe)
 		}
 	}
 }

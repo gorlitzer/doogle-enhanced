@@ -31,6 +31,7 @@ type FleetProxyHandler func(senderID peer.ID, req *fleet.ProxyRequest, w io.Writ
 func RegisterFleetProxyProtocol(h host.Host, handler FleetProxyHandler) {
 	h.SetStreamHandler(FleetProxyProtocol, func(s network.Stream) {
 		defer s.Close()
+		s.SetDeadline(time.Now().Add(60 * time.Second))
 
 		// Phase 1: read the proxy request (up to 5 MB)
 		reader := bufio.NewReader(io.LimitReader(s, 5<<20))

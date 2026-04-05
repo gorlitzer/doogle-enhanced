@@ -2,35 +2,12 @@
 
 ## Getting Started
 
-### 1. GitHub Token
-
-You need a personal access token to pull releases from the private repo.
-
-1. Go to **https://github.com/settings/tokens**
-2. Click **Generate new token (classic)**
-3. Select the `repo` scope
-4. Copy the token
-
-Save it on your machine:
-
-```sh
-mkdir -p ~/.doogle
-echo 'ghp_YOUR_TOKEN' > ~/.doogle/token
-chmod 600 ~/.doogle/token
-```
-
-Or export it as an environment variable:
-
-```sh
-export GITHUB_TOKEN=ghp_YOUR_TOKEN
-```
-
-### 2. Install Doogle
+### 1. Install Doogle
 
 **Option A — Install script (recommended):**
 
 ```sh
-sh install.sh
+curl -fsSL https://raw.githubusercontent.com/gorlitzer/doogle-enhanced/main/install.sh | sh
 ```
 
 This detects your OS/arch, downloads the latest binary, and installs it to `/usr/local/bin`.
@@ -46,7 +23,7 @@ make setup    # checks/installs Go if needed
 make build
 ```
 
-### 3. Run
+### 2. Run
 
 ```sh
 doogle                                    # if installed via install.sh
@@ -56,14 +33,14 @@ doogle                                    # if installed via install.sh
 
 Open http://localhost:7002 — the setup wizard walks you through the rest.
 
-### 4. Update
+### 3. Update
 
 ```sh
 doogle update           # download + replace with latest release
 doogle update --check   # just check if an update is available
 ```
 
-### 5. Check Version
+### 4. Check Version
 
 ```sh
 doogle version
@@ -81,6 +58,18 @@ make stop      # stop running node
 make status    # check if the node is running
 ```
 
+## GeoIP Data
+
+Doogle uses MaxMind's GeoLite2-Country database for peer geolocation. This data is **not bundled** with the source code due to licensing requirements.
+
+To download the database:
+
+```sh
+make geoip
+```
+
+Usage of GeoLite2 data is subject to [MaxMind's End User License Agreement](https://www.maxmind.com/en/geolite2/eula). By downloading and using this data, you agree to their terms.
+
 ## Fleet Workers
 
 To join as a fleet worker, you need the coordinator's peer ID, IP, and fleet secret:
@@ -95,3 +84,7 @@ To join as a fleet worker, you need the coordinator's peer ID, IP, and fleet sec
 ```
 
 The coordinator provides the fleet secret in their logs and in `data/fleet.secret`.
+
+## Security
+
+If you find a security vulnerability, please **do not open a public issue**. See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.

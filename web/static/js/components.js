@@ -680,6 +680,13 @@ export class NetworkGraph {
       ctx.font = `${n.type === 'self' ? 'bold ' : ''}${n.radius > 14 ? 11 : 9}px system-ui`;
       ctx.textAlign = 'center';
       ctx.fillText(n.label || '', n.x, n.y + n.radius + 14);
+
+      // Version sub-label
+      if (n.version) {
+        ctx.fillStyle = getCSS('--text-muted') || 'rgba(255,255,255,0.4)';
+        ctx.font = '8px system-ui';
+        ctx.fillText(n.version, n.x, n.y + n.radius + 25);
+      }
     }
 
     // Tooltip for hovered

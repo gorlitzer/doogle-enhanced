@@ -38,7 +38,9 @@ coverage.out
 
 # Runtime
 doogle.log
+embeddings.log
 .doogle.pid
+.embeddings.pid
 
 # Build
 dist/
