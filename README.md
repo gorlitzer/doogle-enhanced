@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="web/static/img/owl.svg" width="180" alt="Doogle logo" />
+  <img src="web/static/img/banner.png" alt="Doogle — Search everything. Own the network." width="100%" />
 </p>
 
 <h1 align="center">Doogle</h1>
