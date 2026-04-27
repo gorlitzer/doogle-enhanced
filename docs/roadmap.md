@@ -1,5 +1,12 @@
 # Roadmap
 
+**Legend:**
+- `[x]` — done and working
+- `[~]` — code exists, needs real-world validation
+- `[ ]` — not started
+
+---
+
 ## Phase 1 — Foundation
 - [x] P2P networking (libp2p TCP+QUIC, Kademlia DHT, IPFS DHT discovery, mDNS, GossipSub, NAT traversal)
 - [x] Crawler (workers, rate limiting, robots.txt, headless browser, live feed)
@@ -37,8 +44,12 @@
 - [x] Report audit trail (Ed25519-signed, hash-chained tamper-proof log of all reports)
 - [x] Admin UI for trust dashboard (visualize peer trust, manage quarantine, review reports)
 - [x] Allowlist/denylist per node (operator-defined URL/domain prefix filtering via YAML)
+- [~] Sybil / adversarial resistance — logic is implemented, but no adversarial testing done. Needs someone to simulate a real attack (coordinated malicious peers, PoW bypass attempts).
 
-## Phase 3 — Dark Web & Privacy (on hold — pending legal review)
+## Phase 3 — Dark Web & Privacy
+
+> **Status: not started.** All items below are design-only — no code has been written. This phase is blocked pending legal review (liability, CSAM handling requirements, jurisdiction). If you have relevant legal/policy expertise and want to help unblock it, open an issue.
+
 - [ ] SOCKS5 proxy support in crawler (configurable per-transport)
 - [ ] Tor integration (bundled/sidecar daemon, automatic SOCKS5 routing for .onion)
 - [ ] .onion crawling (frontier accepts .onion URLs, Tor-routed fetches, per-hidden-service rate limiting)
@@ -62,13 +73,14 @@
 - [x] Graduated freshness scoring (time-sensitive vs evergreen half-lives)
 - [x] 12-signal ranking model (E-E-A-T, Quality, PageRank, Domain Authority, URL Quality, Readability, Citation, Link, SEO, Author Credibility, Relevance, Freshness)
 - [x] Semantic search (TF-IDF 384-dim embeddings, hybrid BM25 + vector RRF scoring, optional neural via Ollama)
+- [~] Neural semantic search quality — Ollama integration works, but no A/B comparison against TF-IDF on a real corpus. Whether it actually helps is unknown.
 - [x] Knowledge graph (NER → entity graph in BadgerDB, entity cards in search results)
 - [x] Click tracking for learn-to-rank (local-only click signals: query, URL, position)
 - [x] Automatic summarization (extractive TextRank-inspired sentence ranking)
 - [x] Topic clustering (document grouping with keyword labels, related topics in results)
 - [x] Trend detection (hourly-bucketed crawl velocity + query frequency, spike detection)
-- [x] ML-based ranking (gradient-boosted decision stumps, pairwise RankNet loss, auto-trains from click data every 6h)
-- [x] Multilingual semantic search (cross-lingual dictionary projection, ~500 words across 9 languages)
+- [~] ML-based ranking — gradient-boosted decision stumps, pairwise RankNet loss, auto-trains from click data every 6h. **Code is complete but untested in production.** Needs real users generating real clicks before training is meaningful. Without click data it falls back to static signal weights.
+- [~] Multilingual semantic search — cross-lingual dictionary projection across 9 languages (~500 words per language). Works for common terms; quality drops significantly for uncommon vocabulary or long queries. Not a real multilingual embedding model.
 
 ## Phase 4.5 — Google Parity
 - [x] 28-feature neural-style ranking (14 base signals + 14 query-document interaction features: term overlap, TF-IDF similarity, term proximity, exact match, coverage)
@@ -92,11 +104,12 @@
 - [x] Automatic peer discovery via IPFS public DHT (zero-config onboarding)
 - [ ] Public bootstrap network (maintained Doogle-specific entry nodes)
 
-## Phase 6 — Hardening (latest)
+## Phase 6 — Hardening
 - [x] Security hardening (admin loopback, XSS, SSRF, P2P stream timeouts, security headers, ReDoS protection)
 - [x] P2P version compatibility (peers exchange versions, incompatible nodes rejected gracefully, update-needed alert)
 - [x] Neural semantic search via Ollama integration (`--ollama` flag, fallback to TF-IDF)
 - [x] Query relaxation (AND→OR fallback when Bleve stopwords return 0 results)
-- [x] Search quality benchmarks (NDCG@10=0.971, MRR=1.000 across 20-query test suite)
+- [~] Search quality benchmarks — NDCG@10=0.971, MRR=1.000, but measured on a 20-query synthetic test suite. Not validated on real-world traffic at scale.
 - [x] CI/CD (test + lint on every PR, release verification, branch protection)
-- [x] Open-source readiness (LICENSE, SECURITY.md, install.sh rewrite, docs overhaul)
+- [x] Open-source readiness (LICENSE, SECURITY.md, install.sh, docs, community handoff)
+- [~] P2P at scale — discovery and basic multi-node setups work. Untested beyond a handful of peers. Needs stress testing with 50+ simultaneous nodes.
