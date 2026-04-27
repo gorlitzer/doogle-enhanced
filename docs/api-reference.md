@@ -1,6 +1,6 @@
 # API Reference
 
-Doogle v2 exposes a JSON HTTP API for search, status monitoring, and crawl management. All endpoints are served on the configured `--api-port` (default `7002`).
+Doogle exposes a JSON HTTP API for search, status monitoring, and crawl management. All endpoints are served on the configured `--api-port` (default `7002`).
 
 Base URL: `http://localhost:7002` (the default `--bind` is `0.0.0.0`, so the API is also reachable from other devices on your LAN at `http://<your-ip>:7002`)
 
@@ -18,6 +18,9 @@ Base URL: `http://localhost:7002` (the default `--bind` is `0.0.0.0`, so the API
 | `POST` | `/api/config/name` | Set the human-readable node name |
 | `GET` | `/api/trends` | Get trending queries and domains |
 | `POST` | `/api/click` | Record a search result click |
+| `POST` | `/api/impression` | Record a search result impression (shown to user) |
+| `POST` | `/api/dwell` | Record dwell time on a result |
+| `POST` | `/api/pogo` | Record a pogo-stick event (quick return from result) |
 | `POST` | `/api/profile/interests` | Record user interests |
 | `GET` | `/api/admin/leaderboard` | Peer contribution rankings |
 | `GET` | `/api/admin/domains` | Domain ownership map (shard assignments) |
@@ -364,6 +367,86 @@ curl -X POST http://localhost:7002/api/click \
 {
   "status": "recorded"
 }
+```
+
+---
+
+## `POST /api/impression`
+
+Records a search result impression — a result being shown to a user at a given position. Used for position-debiased CTR estimation (examination hypothesis) in the learn-to-rank pipeline. The frontend sends this automatically for every result rendered.
+
+### Request Body
+
+```json
+{
+  "query": "golang tutorial",
+  "url": "https://go.dev/tour",
+  "position": 0
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | no | The search query |
+| `url` | string | **yes** | URL of the displayed result |
+| `position` | int | no | 0-indexed position in the result list |
+
+### Response — `202 Accepted`
+
+```json
+{"status": "recorded"}
+```
+
+---
+
+## `POST /api/dwell`
+
+Records dwell time — how long a user spent on a result page before returning to search. Longer dwell times signal higher result quality and feed into the LTR model.
+
+### Request Body
+
+```json
+{
+  "url": "https://go.dev/tour",
+  "dwell_ms": 45000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | string | **yes** | URL of the result page |
+| `dwell_ms` | int | **yes** | Time spent on the page in milliseconds |
+
+### Response — `202 Accepted`
+
+```json
+{"status": "recorded"}
+```
+
+---
+
+## `POST /api/pogo`
+
+Records a pogo-stick event — when a user clicks a result, then quickly returns to the search results page. A strong negative quality signal (the result didn't satisfy the query).
+
+### Request Body
+
+```json
+{
+  "query": "golang tutorial",
+  "url": "https://go.dev/tour"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | no | The search query |
+| `url` | string | **yes** | URL of the result that triggered the return |
+
+### Response — `202 Accepted`
+
+```json
+{"status": "recorded"}
 ```
 
 ---

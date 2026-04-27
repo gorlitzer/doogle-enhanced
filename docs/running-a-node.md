@@ -266,8 +266,6 @@ A reference Python server is included:
 python scripts/embedding-server.py    # requires: pip install sentence-transformers flask
 ```
 
-Or from a pre-built binary: `doogle embeddings` (auto-installs Python deps).
-
 ### Fallback behavior
 
 If the embedding server is unreachable at startup, Doogle falls back to TF-IDF silently. If the connection drops mid-run, it switches to TF-IDF and retries in the background every 30 seconds.

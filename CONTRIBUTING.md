@@ -87,7 +87,9 @@ The coordinator provides the fleet secret in their logs and in `data/fleet.secre
 
 ## Where Help Is Most Needed
 
-This is an honest list of what's incomplete or unvalidated. Pick something and go.
+Straight talk: we shipped this before it was done because the idea is good and sitting on it wasn't going to help anyone. Below is an honest list of what's actually incomplete or unvalidated. Not marketing. Not stretch goals. The real gaps.
+
+Pick something and go. If you're not sure where to start, open an issue and ask.
 
 ### Testing gaps (real testing, not just running unit tests)
 

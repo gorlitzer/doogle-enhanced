@@ -38,7 +38,7 @@
 ## Phase 2.5 — Trust & Safety
 - [x] Sybil resistance (hashcash proof-of-work on URL announcements, difficulty scales with trust)
 - [x] Consensus-based domain blocklist (N-of-M peer agreement to global-block a domain)
-- [x] Trust decay (idle peers lose 0.005/hour, active peers maintain or gain trust)
+- [x] Trust decay (exponential decay, base 0.998/hour, ~14-day half-life for idle peers)
 - [x] Reputation-weighted search (trust [0,1] maps to ranking multiplier [0.85, 1.15])
 - [x] Malicious crawl defense (per-peer gossip rate limiting with automatic blocking)
 - [x] Report audit trail (Ed25519-signed, hash-chained tamper-proof log of all reports)

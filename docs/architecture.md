@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the internal architecture of Doogle v2 — how each subsystem works, how they connect, and how data flows through the network.
+This document describes the internal architecture of Doogle — how each subsystem works, how they connect, and how data flows through the network.
 
 ---
 
