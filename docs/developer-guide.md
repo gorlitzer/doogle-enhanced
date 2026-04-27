@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide is for contributors working on the Doogle v2 codebase. It covers the code structure, how to build and test, how components interact, and conventions to follow.
+This guide is for contributors working on the Doogle codebase. It covers the code structure, how to build and test, how components interact, and conventions to follow.
 
 ---
 
@@ -44,7 +44,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2'   # Terminal
 ## Project Layout
 
 ```
-doogle-v2/
+doogle-enhanced/
 ├── cmd/doogle/main.go          # Entry point — node mode + search subcommand
 ├── internal/                   # Private packages (not importable by external code)
 │   ├── geo/                    # GeoIP peer geolocation (GeoLite2-Country)

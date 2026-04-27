@@ -59,60 +59,83 @@ docker compose up -d node1 node2 node3   # 3-node cluster
 
 ## Heads Up
 
-This is a vibe-coded project. It was built fast, with ambition, and with a lot of help from AI. There will be bugs. Some features are half-baked. The architecture might make you raise an eyebrow. That's fine — it works, it's fun, and it's getting better.
+Let's be real: this entire thing was vibe-coded. Us and Claude, going full send on features until we ran out of time and decided to just ship it. Zero regrets.
 
-If you find something broken, open an issue. If you want to fix it, even better. Contributions of any size are welcome — from typo fixes to entire subsystems. This is an ongoing project and help is genuinely appreciated.
+There are bugs. Some features are half-baked. Some are three-quarters-baked. A couple might make you raise an eyebrow if you look too closely. **The core pipeline works** — crawl → index → search → P2P all function — but we are not going to pretend we crossed every t and dotted every i before open-sourcing, because we didn't.
+
+We're shipping it now because the idea is solid and it's more useful in your hands than sitting on a hard drive waiting to be "finished" (it was never going to be finished, that's not how this works).
+
+If you break something, open an issue. If you fix something, you're a legend. If you find something embarrassingly incomplete, that's on us — but the PR queue is open and we won't judge.
 
 ## Calling All Coders (and Bots)
 
-We built this fast — humans and AI together, vibing it out. The core works. The idea is real. But we're out of time and we know it's not done.
+Here's the situation: we built a decentralized search engine fast, with AI, with big ambitions, and with full awareness that some of it isn't done. Then we ran out of time. So instead of letting it rot, we're doing the responsible thing and throwing it over the fence to the open-source community.
 
-So we're handing it off to the community.
+**The idea is good. The foundation is real. We just need more hands.**
 
-If you're a coder, a vibe-coder, a bot, or some combination — you're welcome here. The canvas is wide open.
+You're welcome here whether you're a seasoned Go engineer, a first-time contributor, a vibe-coder who learned to code last week with an LLM, or literally a bot. We don't care. If you make it better, you're in.
 
-### What needs real-world testing (not just unit tests)
+### Current state: what works, what doesn't
 
-| Area | What to try | Why it matters |
-|------|------------|----------------|
-| **P2P at scale** | Run 50+ nodes simultaneously | Never tested beyond a handful of peers — DHT routing untested at real scale |
-| **LTR ranking** | Feed it real clicks from real users | Click model exists and trains, but it's blind without production data |
-| **Neural search** | A/B test `--ollama` vs TF-IDF on a real corpus | Quality gap at scale is unknown |
-| **Crawl stability** | Let it run for days on a 10K+ URL seed list | go-rod headless Chrome is finicky under sustained load |
-| **Trust system** | Simulate a Sybil attack or malicious peer | Novel consensus logic, zero adversarial testing done |
-| **Full pipeline** | Crawl → index → search end-to-end | No integration tests exist, only unit tests |
-| **QUIC transport** | Multi-peer connections under load | Recently fixed, not battle-tested |
+| Area | State | Notes |
+|------|-------|-------|
+| Crawl → index → search pipeline | ✅ Works | Core path is solid |
+| P2P discovery + DHT | ✅ Works | Auto-discovers peers via IPFS public DHT |
+| BM25 hybrid search | ✅ Works | Benchmarked on synthetic test suite (20 queries) |
+| Trust & safety system | ✅ Code complete | Zero adversarial testing done |
+| LTR ranking model | ⚠️ Code complete | Needs real click data — blind without production traffic |
+| Neural search (Ollama) | ⚠️ Works | Quality vs TF-IDF unvalidated at scale |
+| P2P at 50+ nodes | ❌ Untested | Never run beyond a handful of peers |
+| Crawl stability (days-long runs) | ❌ Untested | Headless Chrome is finicky under sustained load |
+| Integration tests | ❌ Missing | Only unit tests exist — no full pipeline test |
+| Dark web / Tor | ❌ Not started | Design-only, blocked on legal review |
+| Linux / Windows / Android | ⚠️ Unverified | Builds cross-compile fine, not confirmed running |
 
-### Good first issues
+### Where the community can help most
 
-- Run it on Linux (amd64 or arm64) and report what breaks
-- Run it on Windows and help write a Windows-compatible Makefile
-- Write a `systemd` service file for Linux deployments
-- Add HTTPS/TLS support to the API server (port 7002 is HTTP-only)
+**High impact, hard:**
+- Run 50+ nodes and stress-test DHT routing, shard distribution, gossip propagation
+- Simulate a Sybil attack against the trust system — does the PoW gate actually hold?
 - Write an integration test for the full crawl→index→search pipeline
-- Test the fleet coordinator+worker setup and document pain points
+- Validate LTR ranking quality with a real click dataset
 
-Open an issue for any of the above — or just send a PR. Contributions of any size welcome.
+**Medium impact, doable:**
+- Run it on Linux (amd64 / arm64) and report what breaks — open an issue with your findings
+- Run it on Windows and help write a Windows-compatible Makefile
+- Add HTTPS/TLS support to the API server (port 7002 is plain HTTP, that's a problem for public deployments)
+- Add a `systemd` service file for Linux deployments
+
+**Good first issues (lower effort):**
+- Write a seed URL list useful for bootstrapping a fresh node
+- Test the `doogle dump` / `doogle restore` backup cycle end-to-end
+- Test the fleet coordinator+worker setup and document any pain points
+- Run the node for 24h+ and report memory/CPU profile
+
+Open an issue for any of the above, or just send a PR. No gatekeeping here.
 
 ---
 
 ## Project Status
 
-> **Alpha** — core features work, needs community testing at scale.
+> **Alpha. Shipped before it was "finished". That's the point.**
 
-**Solid:**
-- P2P networking, crawler, full-text search (BM25 + hybrid vector), 12-stage indexer, trust & safety, admin dashboard, fleet management, backup & restore, Docker
-- Search quality benchmarks: NDCG@10=0.971, MRR=1.000 across 20 test queries
-- P2P version compatibility (peers exchange versions, incompatible nodes rejected gracefully)
-- Neural semantic search via Ollama integration (`--ollama` flag)
-- Query relaxation (AND→OR fallback when stopwords kill a query)
+**Works today:**
+- Single binary deployment — `make run` and you're crawling
+- P2P discovery (IPFS DHT, mDNS), GossipSub URL propagation, shard routing, replication
+- BM25 + TF-IDF vector hybrid search with RRF fusion
+- 12-signal quality indexer (PageRank, E-E-A-T, freshness, spam, readability, Core Web Vitals…)
+- Trust & safety system (peer reputation, Sybil PoW, consensus blocklist, audit trail)
+- Admin dashboard, fleet management, backup & restore, Docker
 
-**WIP / needs testing:**
-- LTR model (trains from clicks, untested in production)
-- Large-scale P2P (needs stress testing with 50+ peers)
-- Neural search quality vs TF-IDF (needs A/B comparison with real corpus)
+**Works but unvalidated at scale:**
+- LTR ranking — trains from real clicks, but has never seen real production traffic
+- Neural search — Ollama integration works, quality vs TF-IDF unknown on a real corpus
+- Benchmarks are NDCG@10=0.971 / MRR=1.000 across a **20-query synthetic test suite** — not real-world validation
+- Trust/Sybil resistance — implemented but zero adversarial testing done
 
-**Planned:** Browser extension, mobile client, incentive layer, governance, plugin system. See [full roadmap](docs/roadmap.md).
+**Not started:**
+- Dark web / Tor (blocked on legal review — see [roadmap](docs/roadmap.md))
+- Browser extension, mobile client, incentive layer, governance, plugin system
 
 ## Features
 
