@@ -63,6 +63,39 @@ This is a vibe-coded project. It was built fast, with ambition, and with a lot o
 
 If you find something broken, open an issue. If you want to fix it, even better. Contributions of any size are welcome — from typo fixes to entire subsystems. This is an ongoing project and help is genuinely appreciated.
 
+## Calling All Coders (and Bots)
+
+We built this fast — humans and AI together, vibing it out. The core works. The idea is real. But we're out of time and we know it's not done.
+
+So we're handing it off to the community.
+
+If you're a coder, a vibe-coder, a bot, or some combination — you're welcome here. The canvas is wide open.
+
+### What needs real-world testing (not just unit tests)
+
+| Area | What to try | Why it matters |
+|------|------------|----------------|
+| **P2P at scale** | Run 50+ nodes simultaneously | Never tested beyond a handful of peers — DHT routing untested at real scale |
+| **LTR ranking** | Feed it real clicks from real users | Click model exists and trains, but it's blind without production data |
+| **Neural search** | A/B test `--ollama` vs TF-IDF on a real corpus | Quality gap at scale is unknown |
+| **Crawl stability** | Let it run for days on a 10K+ URL seed list | go-rod headless Chrome is finicky under sustained load |
+| **Trust system** | Simulate a Sybil attack or malicious peer | Novel consensus logic, zero adversarial testing done |
+| **Full pipeline** | Crawl → index → search end-to-end | No integration tests exist, only unit tests |
+| **QUIC transport** | Multi-peer connections under load | Recently fixed, not battle-tested |
+
+### Good first issues
+
+- Run it on Linux (amd64 or arm64) and report what breaks
+- Run it on Windows and help write a Windows-compatible Makefile
+- Write a `systemd` service file for Linux deployments
+- Add HTTPS/TLS support to the API server (port 7002 is HTTP-only)
+- Write an integration test for the full crawl→index→search pipeline
+- Test the fleet coordinator+worker setup and document pain points
+
+Open an issue for any of the above — or just send a PR. Contributions of any size welcome.
+
+---
+
 ## Project Status
 
 > **Alpha** — core features work, needs community testing at scale.
