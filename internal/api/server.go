@@ -40,6 +40,12 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		MaxAge:           3600,
 	}))
 	r.Use(SecurityHeaders)
+	// Reject requests whose Host header isn't an allowed value. This defeats
+	// DNS-rebinding attacks, where a malicious web page rebinds its own domain
+	// to 127.0.0.1 to reach the loopback-gated admin API from the victim's
+	// browser. When bound to a wildcard/public address we can't enumerate valid
+	// hosts, so validation is limited to the loopback default.
+	r.Use(HostAllowlist(bind))
 	r.Use(Logger)
 	r.Use(RateLimiter(20, 40)) // 20 req/s per IP, burst of 40
 
@@ -109,12 +115,18 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 		}
 	})
 
-	// Debug profiling (localhost only — behind existing CORS/bind)
-	r.HandleFunc("/debug/pprof/*", pprof.Index)
-	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	// Debug profiling — loopback only. These endpoints dump process memory
+	// (heap/goroutine profiles can leak secrets such as the fleet token and key
+	// material) and can be used for CPU/trace DoS, so they must never be exposed
+	// to the network. CORS does not gate non-browser clients, so gate explicitly.
+	r.Group(func(r chi.Router) {
+		r.Use(LoopbackOnly)
+		r.HandleFunc("/debug/pprof/*", pprof.Index)
+		r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		r.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		r.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	})
 
 	// Serve embedded static files
 	staticContent, err := fs.Sub(web.StaticFS, "static")
@@ -126,6 +138,13 @@ func NewServer(bind string, port int, deps *Deps) *Server {
 	}
 
 	addr := fmt.Sprintf("%s:%d", bind, port)
+	if !isLoopbackHost(bind) {
+		log.Printf("api: WARNING — binding to %q exposes the API to the network. "+
+			"The admin surface (data wipe, restore, binary update) is only protected "+
+			"by loopback + Host checks, and public /api write endpoints are "+
+			"unauthenticated over plaintext HTTP. Only do this behind an "+
+			"authenticating TLS reverse proxy. See docs/running-a-node.md.", bind)
+	}
 	return &Server{
 		router: r,
 		server: &http.Server{
