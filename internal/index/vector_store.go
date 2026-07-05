@@ -29,11 +29,37 @@ type BadgerVectorStore struct {
 }
 
 // NewBadgerVectorStore creates a vector store backed by an existing BadgerDB.
+// Pass dim <= 0 to make the store dimension-adaptive: it infers the embedding
+// dimension from existing data (or from the first Upsert). This lets the
+// embedding model change (e.g. all-minilm=384 → nomic-embed-text=768) without a
+// hardcoded dimension mismatch; vectors of a different dimension are simply
+// ignored at query time (CosineSimilarity returns 0 for length mismatch).
 func NewBadgerVectorStore(db *badger.DB, dim int) *BadgerVectorStore {
+	vs := &BadgerVectorStore{db: db, dim: dim}
 	if dim <= 0 {
-		dim = embeddingDim
+		vs.dim = peekVectorDim(db) // 0 if no vectors stored yet; set on first Upsert
 	}
-	return &BadgerVectorStore{db: db, dim: dim}
+	return vs
+}
+
+// peekVectorDim reads one stored embedding to infer the dimension, or 0 if none.
+func peekVectorDim(db *badger.DB) int {
+	dim := 0
+	_ = db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = []byte(vecPrefix)
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Seek([]byte(vecPrefix)); it.ValidForPrefix([]byte(vecPrefix)); it.Next() {
+			_ = it.Item().Value(func(val []byte) error {
+				dim = len(val) / 4
+				return nil
+			})
+			break
+		}
+		return nil
+	})
+	return dim
 }
 
 const vecPrefix = "vec:"
@@ -41,8 +67,18 @@ const vecMetaPrefix = "vecmeta:"
 
 // Upsert stores or updates an embedding for a document.
 func (vs *BadgerVectorStore) Upsert(docID string, embedding []float32, metadata map[string]string) error {
-	if len(embedding) != vs.dim {
-		return fmt.Errorf("embedding dimension mismatch: got %d, want %d", len(embedding), vs.dim)
+	if len(embedding) == 0 {
+		return fmt.Errorf("refusing to store empty embedding")
+	}
+	// Adaptive dimension: learn it from the first embedding stored.
+	vs.mu.Lock()
+	if vs.dim == 0 {
+		vs.dim = len(embedding)
+	}
+	want := vs.dim
+	vs.mu.Unlock()
+	if len(embedding) != want {
+		return fmt.Errorf("embedding dimension mismatch: got %d, want %d", len(embedding), want)
 	}
 
 	// Encode embedding as raw bytes (4 bytes per float32)

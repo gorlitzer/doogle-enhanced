@@ -225,7 +225,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--searxng-url` | — | Custom SearXNG instance URL (overrides auto public instances) |
 | `--ollama` | `false` | Enable neural embeddings via Ollama (auto-detects localhost:11434) |
 | `--ollama-url` | — | Custom Ollama server URL (default http://localhost:11434) |
-| `--ollama-model` | `all-minilm` | Ollama embedding model name |
+| `--ollama-model` | `nomic-embed-text` | Ollama embedding model name (use `all-minilm` for a smaller/faster model) |
 | `--embedding-url` | — | Generic neural embedding server URL (for non-Ollama servers) |
 
 All settings are controlled via CLI flags. Run `./bin/doogle --help` for the full list.
@@ -268,9 +268,11 @@ By default, Doogle uses TF-IDF embeddings for vector search — good for keyword
 If you have [Ollama](https://ollama.com) installed:
 
 ```bash
-ollama pull all-minilm       # ~23MB one-time download
-./bin/doogle --ollama        # auto-connects to localhost:11434
+ollama pull nomic-embed-text  # ~274MB one-time download (better quality, default)
+./bin/doogle --ollama         # auto-connects to localhost:11434
 ```
+
+Prefer a smaller/faster model? Use `ollama pull all-minilm` (~23MB) and `--ollama-model all-minilm`. The vector store adapts to whichever model's dimension you choose.
 
 Custom Ollama setup:
 

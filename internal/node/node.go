@@ -436,7 +436,9 @@ func (n *Node) init() error {
 		n.activeEmbedder = index.NewHTTPEmbedder(n.cfg.Index.EmbeddingURL, multiEmbedder)
 	}
 
-	vectorStore := index.NewBadgerVectorStore(n.badger.DB(), 384)
+	// Dimension-adaptive (0): infer from existing data / first embedding so the
+	// embedding model (and thus vector dimension) can change without a mismatch.
+	vectorStore := index.NewBadgerVectorStore(n.badger.DB(), 0)
 	n.indexer.SetEmbedder(n.activeEmbedder)
 	n.indexer.SetVectorStore(vectorStore)
 
@@ -867,7 +869,7 @@ func (n *Node) init() error {
 				url = n.cfg.Index.OllamaURL
 				model = n.cfg.Index.OllamaModel
 				if model == "" {
-					model = "all-minilm"
+					model = "nomic-embed-text"
 				}
 			} else {
 				provider = "custom"
@@ -903,7 +905,7 @@ func (n *Node) init() error {
 				embURL = "http://localhost:11434"
 			}
 			if model == "" {
-				model = "all-minilm"
+				model = "nomic-embed-text"
 			}
 			emb := index.NewOllamaEmbedder(embURL, model, n.fallbackEmbedder)
 			n.activeEmbedder = emb

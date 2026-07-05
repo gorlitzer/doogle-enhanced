@@ -84,7 +84,7 @@ No bootstrap config needed — they'll discover each other within ~60 seconds.
 For true semantic search ("car" also finds "automobile"):
 
 ```bash
-ollama pull all-minilm
+ollama pull nomic-embed-text
 ./bin/doogle --ollama
 ```
 
