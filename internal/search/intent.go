@@ -3,9 +3,28 @@ package search
 import (
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/doogle/doogle-v2/internal/models"
 )
+
+// containsWord reports whether pattern occurs in raw. A single-token pattern
+// must match a whole word (so "book" does not fire on "facebook", "store" on
+// "restore", "rent" on "different"); a multi-word pattern is matched as a
+// phrase substring, as before.
+func containsWord(raw, pattern string) bool {
+	if strings.ContainsAny(pattern, " \t") {
+		return strings.Contains(raw, pattern)
+	}
+	for _, tok := range strings.FieldsFunc(raw, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	}) {
+		if tok == pattern {
+			return true
+		}
+	}
+	return false
+}
 
 // IntentType classifies the user's search intent.
 type IntentType int
@@ -100,7 +119,7 @@ func ClassifyIntent(pq *models.ParsedQuery) QueryIntent {
 
 	// Navigational phrases
 	for _, pat := range navigationalPatterns {
-		if strings.Contains(raw, pat) {
+		if containsWord(raw, pat) {
 			return QueryIntent{Type: IntentNavigational, Confidence: 0.8, Signals: []string{"nav_phrase:" + pat}}
 		}
 	}
@@ -112,7 +131,7 @@ func ClassifyIntent(pq *models.ParsedQuery) QueryIntent {
 
 	// --- Local detection ---
 	for _, pat := range localPatterns {
-		if strings.Contains(raw, pat) {
+		if containsWord(raw, pat) {
 			return QueryIntent{Type: IntentLocal, Confidence: 0.85, Signals: []string{"local_phrase:" + pat}}
 		}
 	}
@@ -120,7 +139,7 @@ func ClassifyIntent(pq *models.ParsedQuery) QueryIntent {
 	// --- Transactional detection ---
 	var txSignals []string
 	for _, word := range transactionalWords {
-		if strings.Contains(raw, word) {
+		if containsWord(raw, word) {
 			txSignals = append(txSignals, "tx_word:"+word)
 		}
 	}
