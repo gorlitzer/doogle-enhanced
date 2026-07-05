@@ -437,15 +437,15 @@ func (c *Crawler) fetch(rawURL string) (*models.Document, []string, error) {
 }
 
 func (c *Crawler) fetchHTTP(rawURL string) (*models.Document, []string, []byte, error) {
-	client := &http.Client{
-		Timeout: c.requestTimeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return fmt.Errorf("too many redirects")
-			}
-			return nil
-		},
-	}
+	// SafeHTTPClient refuses to connect to private/loopback/link-local/metadata
+	// addresses at dial time — on the initial request and on every redirect hop —
+	// which is the authoritative SSRF defense (defeats DNS rebinding).
+	client := urlutil.SafeHTTPClient(c.requestTimeout, func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		return nil
+	})
 
 	req, err := http.NewRequestWithContext(c.ctx, "GET", rawURL, nil)
 	if err != nil {

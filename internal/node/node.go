@@ -1770,6 +1770,14 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 	// Schedule discovered URLs (unless noindex+nofollow)
 	if !skipLinks {
 		for _, u := range discoveredURLs {
+			// Cheap SSRF pre-filter: don't even schedule links pointing at
+			// internal/private/metadata hosts. The dial-time guard in the crawler
+			// is the authoritative backstop (and catches DNS rebinding), but this
+			// avoids polluting the frontier with links a page tried to plant.
+			if !urlutil.IsSafeURL(u) {
+				continue
+			}
+
 			domain := urlutil.ExtractDomain(u)
 
 			// Skip URLs blocked by operator filter

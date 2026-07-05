@@ -24,9 +24,7 @@ type DocumentFetcher struct {
 // NewDocumentFetcher creates a fetcher for non-HTML documents.
 func NewDocumentFetcher(userAgent string, timeout time.Duration) *DocumentFetcher {
 	return &DocumentFetcher{
-		client: &http.Client{
-			Timeout: timeout,
-		},
+		client:    urlutil.SafeHTTPClient(timeout, nil),
 		userAgent: userAgent,
 		maxSize:   10 * 1024 * 1024, // 10 MB
 	}
