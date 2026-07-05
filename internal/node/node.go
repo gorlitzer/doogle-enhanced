@@ -1582,10 +1582,32 @@ const peerGeoPrefix = "geo:"
 
 // setPeerGeo stores a peer's country in memory and persists it to BadgerDB.
 func (n *Node) setPeerGeo(peerID, country string) {
+	// country is peer-supplied via the shard catalog and is later rendered in
+	// the admin UI. Only accept a valid ISO 3166-1 alpha-2 code (two ASCII
+	// letters); reject anything else so no markup/control chars are ever stored
+	// or persisted. This is the server-side half of the countryBadge XSS fix.
+	if !isValidCountryCode(country) {
+		return
+	}
+	country = strings.ToUpper(country)
 	n.peerGeoMu.Lock()
 	n.peerGeo[peerID] = country
 	n.peerGeoMu.Unlock()
 	_ = n.badger.Set([]byte(peerGeoPrefix+peerID), []byte(country))
+}
+
+// isValidCountryCode reports whether s is exactly two ASCII letters.
+func isValidCountryCode(s string) bool {
+	if len(s) != 2 {
+		return false
+	}
+	for i := 0; i < 2; i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 // PeerGeo returns the country code for a peer, or empty if unknown.
