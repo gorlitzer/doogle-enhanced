@@ -60,7 +60,7 @@ docker compose up -d
 |--|--|
 | 🔍 **Search** | Type a query, get results from your local index + connected peers. Supports `site:`, `lang:`, `filetype:`, boolean operators, spelling correction, and more. |
 | 🕷️ **Crawl** | Point it at seed URLs and it crawls the web — respects robots.txt, handles JavaScript pages, extracts PDFs and documents. |
-| 🌐 **P2P network** | Your node automatically finds other Doogle nodes on the internet. No manual setup. Crawl work is split across peers so nobody duplicates effort. |
+| 🌐 **P2P network** | Your node automatically finds other Doogle nodes on the internet. No manual setup. Crawl work is split across peers so nobody duplicates effort. *(Heads-up: participating in the public P2P network reveals your node's IP address to peers — see [Privacy](#privacy) below.)* |
 | 🤖 **Smart ranking** | Results are ranked by quality, freshness, trust, and relevance — not by who paid. Optional neural search via [Ollama](https://ollama.com). |
 | 🛡️ **Trust & safety** | Peer reputation system, spam reporting, Sybil resistance, consensus-based domain blocking. |
 | ⚙️ **Admin dashboard** | Live crawl feed, network graph, stats, 6 themes, full node control — all in the browser. |
@@ -144,6 +144,14 @@ We ran out of time and handed it to the community. **You're welcome here** — c
 ## Third-Party Data
 
 Uses GeoLite2 data by MaxMind (not bundled — run `make geoip` to download). Subject to [MaxMind's EULA](https://www.maxmind.com/en/geolite2/eula).
+
+## Privacy
+
+We're transparent about this: **"no tracking" means Doogle doesn't log, profile, or monetize your searches — it does *not* mean network-level anonymity.**
+
+Running a node on the public P2P network **reveals your IP address to peers.** That's inherent to peer-to-peer: to trade search results or crawl work, peers connect to your node and therefore see its address. By default the node also advertises itself into the public IPFS DHT and tries to open a reachable port.
+
+You can *reduce* (not eliminate) this with `--dht-client-mode`, a VPN, or by running from an IP you don't mind revealing. Onion routing (Tor) is a roadmap goal but **not implemented today** — don't assume anonymity. Full details: [Privacy in the node guide](docs/running-a-node.md#-privacy-your-node-reveals-its-ip-address-to-peers).
 
 ## Security
 

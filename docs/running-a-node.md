@@ -215,6 +215,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--workers` | `4` | Number of concurrent crawl workers |
 | `--mdns` | `true` | Enable mDNS for LAN peer discovery |
 | `--dht-discovery` | `true` | Enable automatic peer discovery via IPFS public DHT |
+| `--dht-client-mode` | `false` | Run the DHT in client-only mode to reduce how widely your node's IP is advertised (see Privacy below) |
 | `--headless` | `false` | Enable headless browser rendering for JS-heavy pages |
 | `--light` | `false` | Light node mode: search + relay only, no crawling or indexing |
 | `--log-level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
@@ -228,6 +229,24 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--embedding-url` | — | Generic neural embedding server URL (for non-Ollama servers) |
 
 All settings are controlled via CLI flags. Run `./bin/doogle --help` for the full list.
+
+### 🔒 Privacy: your node reveals its IP address to peers
+
+**Running a node on the public peer-to-peer network exposes your IP address. This is inherent to how P2P works and cannot be fully eliminated while you participate in the public network.** Be transparent with yourself about this before running a public node:
+
+- **Peers you exchange data with see your IP.** To send you search results or receive crawl work, a peer must connect to your node — which reveals your IP address to that peer, by definition.
+- **The DHT can publish your address.** By default the node runs as a DHT *server* (`ModeAutoServer`) when it's publicly reachable, which advertises your address into the shared IPFS DHT so other peers can find you.
+- **UPnP/NAT-PMP may open a public port.** The node attempts to make itself directly reachable, which can map a port on your router to your machine.
+
+**What you can do to reduce (not remove) exposure:**
+
+- `--dht-client-mode` — run the DHT in client-only mode. Your node still finds peers, but it won't answer DHT queries or advertise itself as a server in other peers' routing tables, so its address is published less widely. Peers you actually exchange data with still learn your IP.
+- Run behind a VPN or from a host whose IP you don't mind revealing.
+- Don't run a public node from an IP you consider sensitive.
+
+**What is *not* yet available:** onion routing (Tor) transport is a design goal (see the roadmap) but is **not implemented** — do not assume any anonymity today.
+
+If you only want to search and never expose a node, you can run in a more limited mode, but any participation in the public network involves the trade-offs above. We'd rather state this plainly than let the "no tracking" framing imply network-level anonymity it doesn't provide.
 
 ### ⚠️ Security: exposing the API (`--bind`)
 
