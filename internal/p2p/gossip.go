@@ -124,6 +124,13 @@ func (g *Gossip) Subscribe(ctx context.Context) (*models.URLAnnouncement, error)
 		return nil, fmt.Errorf("unmarshal announcement: %w", err)
 	}
 
+	// Bind the announcement to its authenticated author. PeerID is otherwise a
+	// self-asserted field that a peer could set to impersonate another node (to
+	// evade its own rate limit / quarantine or borrow a trusted node's lower PoW
+	// difficulty). GossipSub's default StrictSign policy makes GetFrom the
+	// verified publisher.
+	ann.PeerID = msg.GetFrom().String()
+
 	// Reject announcements carrying an unreasonable number of URLs — a single
 	// message can otherwise schedule thousands of tiny URLs (amplification).
 	if len(ann.URLs) > maxURLsPerAnnouncement {
@@ -166,7 +173,7 @@ func (g *Gossip) SubscribeShardCatalog(ctx context.Context) (*ShardCatalog, erro
 	}
 
 	if len(msg.Data) > maxGossipMessageSize {
-		log.Printf("gossip: dropping oversized shard catalog (%d bytes) from %s", len(msg.Data), msg.ReceivedFrom.String()[:12])
+		log.Printf("gossip: dropping oversized shard catalog (%d bytes) from %s", len(msg.Data), truncPeerID(msg.ReceivedFrom.String()))
 		return nil, nil
 	}
 
@@ -174,6 +181,9 @@ func (g *Gossip) SubscribeShardCatalog(ctx context.Context) (*ShardCatalog, erro
 	if err := json.Unmarshal(msg.Data, &catalog); err != nil {
 		return nil, fmt.Errorf("unmarshal shard catalog: %w", err)
 	}
+	// Bind the catalog to its authenticated author so a peer cannot publish a
+	// catalog (node name, country, domain claims) on behalf of another peer.
+	catalog.PeerID = msg.GetFrom().String()
 	return &catalog, nil
 }
 
@@ -199,7 +209,7 @@ func (g *Gossip) SubscribeSpamReport(ctx context.Context) (*models.SpamReport, e
 	}
 
 	if len(msg.Data) > maxGossipMessageSize {
-		log.Printf("gossip: dropping oversized spam report (%d bytes) from %s", len(msg.Data), msg.ReceivedFrom.String()[:12])
+		log.Printf("gossip: dropping oversized spam report (%d bytes) from %s", len(msg.Data), truncPeerID(msg.ReceivedFrom.String()))
 		return nil, nil
 	}
 
@@ -208,8 +218,15 @@ func (g *Gossip) SubscribeSpamReport(ctx context.Context) (*models.SpamReport, e
 		return nil, fmt.Errorf("unmarshal spam report: %w", err)
 	}
 
+	// Bind the report to its authenticated author. ReporterID was a self-asserted
+	// field, which let a single peer forge multiple distinct reporter identities
+	// and single-handedly reach the domain-block consensus threshold (network-wide
+	// censorship). Overwriting with the StrictSign-verified publisher means a peer
+	// can only ever report as itself.
+	report.ReporterID = msg.GetFrom().String()
+
 	// Basic validation
-	if report.URL == "" || report.ReporterID == "" || report.Reason == "" {
+	if report.URL == "" || report.Reason == "" {
 		return nil, nil
 	}
 
