@@ -2,7 +2,7 @@ package crawler
 
 import (
 	"log"
-	"sync"
+	"sync/atomic"
 
 	"github.com/doogle/doogle-v2/internal/models"
 	"github.com/doogle/doogle-v2/internal/store"
@@ -13,8 +13,7 @@ import (
 type Scheduler struct {
 	urlStore     *store.URLStore
 	pending      chan *models.CrawlTask
-	maxQueueSize int64
-	mu           sync.Mutex
+	maxQueueSize atomic.Int64
 }
 
 // NewScheduler creates a scheduler with the given buffer size.
@@ -27,9 +26,7 @@ func NewScheduler(urlStore *store.URLStore, bufferSize int) *Scheduler {
 
 // SetMaxQueueSize sets the maximum queue size. 0 = unlimited.
 func (s *Scheduler) SetMaxQueueSize(max int64) {
-	s.mu.Lock()
-	s.maxQueueSize = max
-	s.mu.Unlock()
+	s.maxQueueSize.Store(max)
 }
 
 // Schedule adds a URL to the crawl queue if not already seen.
@@ -40,24 +37,24 @@ func (s *Scheduler) Schedule(task *models.CrawlTask) bool {
 	}
 
 	// Reject if queue is at capacity
-	if s.maxQueueSize > 0 && int64(s.Pending()) >= s.maxQueueSize {
+	if max := s.maxQueueSize.Load(); max > 0 && int64(s.Pending()) >= max {
 		return false
 	}
 
-	s.urlStore.MarkSeen(normalized)
-
-	// Try non-blocking send, fall back to persistent queue
+	// Enqueue first, then mark seen. Marking seen before a failed enqueue would
+	// permanently drop the URL from the frontier: HasSeen would report it visited
+	// even though it was never actually crawled.
 	select {
 	case s.pending <- task:
-		return true
 	default:
 		// Channel full, enqueue to persistent store
 		if err := s.urlStore.Enqueue(task); err != nil {
 			log.Printf("scheduler: failed to enqueue %s: %v", task.URL, err)
 			return false
 		}
-		return true
 	}
+	s.urlStore.MarkSeen(normalized)
+	return true
 }
 
 // Next returns the next crawl task. Blocks until one is available.
@@ -115,7 +112,7 @@ func (s *Scheduler) Drain() {
 // ScheduleRecrawl adds a URL to the crawl queue, bypassing the seen-URL dedup check.
 func (s *Scheduler) ScheduleRecrawl(task *models.CrawlTask) bool {
 	// Reject if queue is at capacity
-	if s.maxQueueSize > 0 && int64(s.Pending()) >= s.maxQueueSize {
+	if max := s.maxQueueSize.Load(); max > 0 && int64(s.Pending()) >= max {
 		return false
 	}
 

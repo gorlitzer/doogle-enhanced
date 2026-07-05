@@ -25,6 +25,14 @@ type Rebalancer struct {
 // Returns the number of documents successfully transferred.
 type TransferFn func(ctx context.Context, peerID string, docs []*IndexDocument) (int, error)
 
+// truncID safely truncates an ID for logging without panicking on short values.
+func truncID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
+}
+
 // NewRebalancer creates a rebalancer that watches for ring changes.
 func NewRebalancer(shards *ShardManager, store *BleveStore, selfID string, rf int, transferFn TransferFn) *Rebalancer {
 	members := make(map[string]bool)
@@ -145,8 +153,10 @@ func (r *Rebalancer) rebalanceForNewNodes(ctx context.Context, newNodes []string
 
 	totalTransferred := 0
 	for peerID, peerDomains := range toTransfer {
-		// Collect documents for these domains
+		// Collect documents for these domains, keeping each doc's ID alongside it
+		// so we delete exactly what we transferred (and nothing indexed since).
 		var docs []*IndexDocument
+		var docIDs []string
 		for _, domain := range peerDomains {
 			ids, err := r.store.ListIDsByDomain(domain)
 			if err != nil {
@@ -158,6 +168,7 @@ func (r *Rebalancer) rebalanceForNewNodes(ctx context.Context, newNodes []string
 					continue
 				}
 				docs = append(docs, doc)
+				docIDs = append(docIDs, id)
 			}
 		}
 
@@ -165,8 +176,10 @@ func (r *Rebalancer) rebalanceForNewNodes(ctx context.Context, newNodes []string
 			continue
 		}
 
-		// Transfer in batches of 50
+		// Transfer in batches of 50.
 		batchSize := 50
+		transferredForPeer := 0
+		transferOK := true
 		for i := 0; i < len(docs); i += batchSize {
 			end := i + batchSize
 			if end > len(docs) {
@@ -176,22 +189,28 @@ func (r *Rebalancer) rebalanceForNewNodes(ctx context.Context, newNodes []string
 
 			transferred, err := r.transferFn(ctx, peerID, batch)
 			if err != nil {
-				log.Printf("rebalancer: transfer to %s failed: %v", peerID[:12], err)
+				log.Printf("rebalancer: transfer to %s failed: %v", truncID(peerID), err)
+				transferOK = false
 				break
 			}
-			totalTransferred += transferred
+			transferredForPeer += transferred
 		}
+		totalTransferred += transferredForPeer
 
-		// Delete transferred domains from local index
-		for _, domain := range peerDomains {
-			ids, _ := r.store.ListIDsByDomain(domain)
-			for _, id := range ids {
+		// Only delete local copies when EVERY document was transferred and
+		// acknowledged. Deleting on a failed or partial transfer risks destroying
+		// the last replica of a document — permanent data loss. When in doubt we
+		// keep the local copy; a later rebalance pass will retry.
+		if transferOK && transferredForPeer == len(docs) {
+			for _, id := range docIDs {
 				_ = r.store.Delete(id)
 			}
+			log.Printf("rebalancer: transferred and removed %d domains (%d docs) to %s",
+				len(peerDomains), len(docs), truncID(peerID))
+		} else {
+			log.Printf("rebalancer: keeping %d local docs for %s — transfer incomplete (%d/%d acknowledged)",
+				len(docs), truncID(peerID), transferredForPeer, len(docs))
 		}
-
-		log.Printf("rebalancer: transferred %d domains (%d docs) to %s",
-			len(peerDomains), len(docs), peerID[:12])
 	}
 
 	if totalTransferred > 0 {
@@ -289,14 +308,14 @@ func (r *Rebalancer) rebalanceForRemovedNodes(ctx context.Context, removedNodes 
 
 			repaired, err := r.transferFn(ctx, peerID, batch)
 			if err != nil {
-				log.Printf("rebalancer: repair to %s failed: %v", peerID[:12], err)
+				log.Printf("rebalancer: repair to %s failed: %v", truncID(peerID), err)
 				break
 			}
 			totalRepaired += repaired
 		}
 
 		log.Printf("rebalancer: repaired %d domains (%d docs) to %s",
-			len(peerDomains), len(docs), peerID[:12])
+			len(peerDomains), len(docs), truncID(peerID))
 	}
 
 	if totalRepaired > 0 {
