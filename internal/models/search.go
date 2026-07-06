@@ -86,6 +86,7 @@ type SearchResult struct {
 	OriginPeerID   string  `json:"origin_peer_id,omitempty"`
 	OriginPeerName string  `json:"origin_peer_name,omitempty"`
 	Source         string  `json:"source,omitempty"` // "doogle" (default), "searxng"
+	ContentHash    string  `json:"-"`                // for near-duplicate/mirror dedup
 
 	// Scoring signals (used by ranker, exposed for transparency)
 	PageRankScore     float64   `json:"pagerank_score,omitempty"`
