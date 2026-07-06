@@ -109,3 +109,17 @@ func TestMaybeRerank_NoRerankerIsPassthrough(t *testing.T) {
 		t.Fatalf("expected passthrough, got %v", out)
 	}
 }
+
+// TestFindHighlights_RuneOffsets verifies highlight offsets are rune (code-point)
+// positions, not byte positions, so multibyte text aligns for JS consumers.
+func TestFindHighlights_RuneOffsets(t *testing.T) {
+	// "café " is 5 runes but 6 bytes (é = 2 bytes); "menu" starts at rune 5.
+	text := "café menu"
+	hs := findHighlights(text, []string{"menu"})
+	if len(hs) != 1 {
+		t.Fatalf("expected 1 highlight, got %d", len(hs))
+	}
+	if hs[0].Start != 5 || hs[0].End != 9 {
+		t.Fatalf("expected rune offsets [5,9], got [%d,%d] (byte offsets would be [6,10])", hs[0].Start, hs[0].End)
+	}
+}

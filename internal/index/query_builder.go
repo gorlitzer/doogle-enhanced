@@ -87,6 +87,33 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 			)
 		}
 
+		// Cross-field recall: the per-field clauses above only match a document
+		// when a SINGLE field contains all terms, so a multi-term query whose
+		// terms are naturally split across fields (title + body) failed the
+		// primary tier and survived only via the low-precision full-OR relaxation.
+		// Add a clause requiring every term to appear in AT LEAST ONE field
+		// (cross-field AND), boosted below single-field matches so exact
+		// single-field hits still rank first.
+		if len(pq.Terms) >= 2 && !pq.UseOR {
+			fields := []string{"title", "url_text", "headings_text", "description", "content", "anchor_text"}
+			var termConjuncts []query.Query
+			for _, t := range pq.Terms {
+				perTerm := make([]query.Query, 0, len(fields))
+				for _, f := range fields {
+					mq := bleve.NewMatchQuery(t)
+					mq.SetField(f)
+					if langAnalyzer != "" {
+						mq.Analyzer = langAnalyzer
+					}
+					perTerm = append(perTerm, mq)
+				}
+				termConjuncts = append(termConjuncts, bleve.NewDisjunctionQuery(perTerm...))
+			}
+			crossField := bleve.NewConjunctionQuery(termConjuncts...)
+			crossField.SetBoost(0.8)
+			primaryClauses = append(primaryClauses, crossField)
+		}
+
 		// Auto phrase boost: when query has 2+ terms, add a phrase match
 		// so pages where terms appear together rank much higher.
 		if len(pq.Terms) >= 2 {
