@@ -256,24 +256,24 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		boolQ.AddMust(ftQ)
 	}
 
-	// before:/after: date range on crawled_at (stored as Unix nanoseconds)
+	// before:/after: date range on crawled_at. crawled_at is indexed as a Bleve
+	// DateTime field, so it must be queried with a date-range query — the old
+	// numeric-range query on a datetime field matched nothing.
 	if pq.Before != "" || pq.After != "" {
-		var minFloat, maxFloat *float64
-		if pq.After != "" {
-			if t, err := time.Parse("2006-01-02", pq.After); err == nil {
-				v := float64(t.UnixNano())
-				minFloat = &v
-			}
+		after := time.Time{}                                   // open lower bound
+		before := time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC) // open upper bound
+		parsed := false
+		if t, err := time.Parse("2006-01-02", pq.After); err == nil {
+			after = t
+			parsed = true
 		}
-		if pq.Before != "" {
-			if t, err := time.Parse("2006-01-02", pq.Before); err == nil {
-				v := float64(t.UnixNano())
-				maxFloat = &v
-			}
+		if t, err := time.Parse("2006-01-02", pq.Before); err == nil {
+			before = t
+			parsed = true
 		}
-		if minFloat != nil || maxFloat != nil {
+		if parsed {
 			inclusive := true
-			dateQ := bleve.NewNumericRangeInclusiveQuery(minFloat, maxFloat, &inclusive, &inclusive)
+			dateQ := bleve.NewDateRangeInclusiveQuery(after, before, &inclusive, &inclusive)
 			dateQ.SetField("crawled_at")
 			boolQ.AddMust(dateQ)
 		}

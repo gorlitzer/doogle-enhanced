@@ -149,6 +149,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			Country:              hit.Doc.Country,
 			Score:                hit.Score,
 			BM25:                 hit.Score, // immutable relevance baseline (see ranker)
+			ContentHash:          hit.Doc.ContentHash,
 			OriginPeerID:         hit.Doc.OriginPeerID,
 			PageRankScore:        hit.Doc.PageRankScore,
 			EEATScore:            hit.Doc.EEATScore,
@@ -184,6 +185,12 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 
 	// Re-rank with intent awareness
 	RerankWithIntent(results, &intent)
+
+	// Collapse exact URL and near-duplicate (same content hash) results, then
+	// apply per-domain diversity — previously done only in the distributed path,
+	// so single-node deployments got neither.
+	results = DedupeResults(results)
+	results = ApplyDomainDiversity(results, 2, 10)
 
 	// Paginate after re-ranking
 	if offset >= len(results) {

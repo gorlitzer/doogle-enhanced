@@ -56,3 +56,28 @@ func TestIntent_WordBoundary(t *testing.T) {
 		t.Error(`"buy running shoes" should be transactional`)
 	}
 }
+
+// TestDedupeResults covers near-duplicate collapsing: exact URL, canonicalized
+// URL variants (trailing slash / http vs https), and identical content hashes
+// under different URLs all collapse to the first (best-ranked) occurrence.
+func TestDedupeResults(t *testing.T) {
+	in := []models.SearchResult{
+		{URL: "https://a.com/page", ContentHash: "h1"},
+		{URL: "https://a.com/page/", ContentHash: "h1"},   // trailing-slash variant → same canonical URL
+		{URL: "http://a.com/page", ContentHash: "h1"},      // scheme variant → same canonical URL
+		{URL: "https://mirror.com/copy", ContentHash: "h1"}, // different URL, same content → near-dup
+		{URL: "https://b.com/other", ContentHash: "h2"},     // distinct
+		{URL: "https://c.com/nohash", ContentHash: ""},      // no hash → dedup by URL only
+	}
+	out := DedupeResults(in)
+	if len(out) != 3 {
+		urls := make([]string, len(out))
+		for i, r := range out {
+			urls[i] = r.URL
+		}
+		t.Fatalf("expected 3 deduped results, got %d: %v", len(out), urls)
+	}
+	if out[0].URL != "https://a.com/page" {
+		t.Errorf("expected best-ranked original to survive, got %s", out[0].URL)
+	}
+}

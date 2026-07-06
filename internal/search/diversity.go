@@ -5,7 +5,33 @@ import (
 	"strings"
 
 	"github.com/doogle/doogle-v2/internal/models"
+	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
+
+// DedupeResults removes exact-URL duplicates and near-duplicates (documents with
+// an identical content hash — mirrors, syndicated copies, http/https or
+// trailing-slash variants). URLs are canonicalized so those variants collapse.
+// Input is assumed already ranked, so the first (best) occurrence wins.
+func DedupeResults(results []models.SearchResult) []models.SearchResult {
+	seenURL := make(map[string]struct{}, len(results))
+	seenHash := make(map[string]struct{}, len(results))
+	out := make([]models.SearchResult, 0, len(results))
+	for _, r := range results {
+		key := urlutil.Normalize(r.URL)
+		if _, ok := seenURL[key]; ok {
+			continue
+		}
+		if r.ContentHash != "" {
+			if _, ok := seenHash[r.ContentHash]; ok {
+				continue // near-duplicate content under a different URL
+			}
+			seenHash[r.ContentHash] = struct{}{}
+		}
+		seenURL[key] = struct{}{}
+		out = append(out, r)
+	}
+	return out
+}
 
 // ApplyDomainDiversity caps results per domain in the top N positions.
 // Demoted results are pushed below topN, not removed.

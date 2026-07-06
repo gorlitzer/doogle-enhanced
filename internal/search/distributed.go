@@ -159,17 +159,9 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 	// Re-rank merged results with intent awareness
 	RerankWithIntent(allResults, &intent)
 
-	// Deduplicate by URL
-	seen := make(map[string]bool)
-	var deduped []models.SearchResult
-	for _, r := range allResults {
-		if !seen[r.URL] {
-			seen[r.URL] = true
-			deduped = append(deduped, r)
-		}
-	}
-
-	// Apply domain diversity: max 2 per domain in top 10
+	// Deduplicate by canonical URL and near-duplicate content hash (mirrors),
+	// then apply domain diversity: max 2 per domain in top 10.
+	deduped := DedupeResults(allResults)
 	deduped = ApplyDomainDiversity(deduped, 2, 10)
 
 	// Paginate the merged/deduped/diversified set. Previously this always sliced
