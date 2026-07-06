@@ -148,14 +148,16 @@ func (t *LTRTrainer) getFeatureVectors(query string, records []store.ClickRecord
 		return nil
 	}
 
-	// Build query context for interaction features
-	qctx := &QueryContext{
-		RawQuery: query,
-		Terms:    pq.Terms,
-		Embedder: t.embedder,
-	}
-
-	// Build URL → features map from search results
+	// Build URL → features map from search results.
+	//
+	// IMPORTANT: train and serve must use the SAME feature extractor. Inference
+	// (ranker.computeLTRScore) only has the document-side signals, so it uses
+	// ExtractFeatures (features 0–13). Previously training used
+	// ExtractFeaturesWithQuery (28 features incl. query-interaction signals
+	// 14–27), so the model learned to split on features that were always 0 at
+	// serving time — a train/serve skew that degraded the served ranking. Train
+	// on the same 14 features until the query context is threaded into inference
+	// (tracked follow-up).
 	urlFeatures := make(map[string][FeatureCount]float64, len(hits))
 	for _, hit := range hits {
 		r := models.SearchResult{
@@ -179,7 +181,7 @@ func (t *LTRTrainer) getFeatureVectors(query string, records []store.ClickRecord
 			PerfScore:            hit.Doc.PerfScore,
 			MobileScore:          hit.Doc.MobileScore,
 		}
-		urlFeatures[hit.Doc.URL] = ExtractFeaturesWithQuery(&r, qctx, t.clickStore)
+		urlFeatures[hit.Doc.URL] = ExtractFeatures(&r)
 	}
 
 	return urlFeatures

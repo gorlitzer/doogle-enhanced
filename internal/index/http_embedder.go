@@ -70,7 +70,7 @@ func NewOllamaEmbedder(baseURL, model string, fallback TextEmbedder) *HTTPEmbedd
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
 	if model == "" {
-		model = "all-minilm"
+		model = "nomic-embed-text"
 	}
 	e := &HTTPEmbedder{
 		url:      baseURL + "/api/embed",

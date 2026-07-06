@@ -75,7 +75,7 @@ services:
       - ollama-data:/root/.ollama
     restart: unless-stopped
     # Pull the embedding model on first start:
-    #   docker exec doogle-ollama ollama pull all-minilm
+    #   docker exec doogle-ollama ollama pull nomic-embed-text
 
   # ---- Node with neural search (connects to Ollama) ----
   node1-neural:

@@ -11,6 +11,7 @@ import (
 // projected to a fixed dimensionality (384 to match MiniLM).
 type TFIDFEmbedder struct {
 	vocab    map[string]int // word → index mapping
+	df       map[string]int // document frequency: number of docs each term appears in
 	idf      []float64      // inverse document frequency per vocab term
 	vocabCap int
 	docCount int
@@ -24,6 +25,7 @@ const embeddingDim = 384
 func NewTFIDFEmbedder() *TFIDFEmbedder {
 	return &TFIDFEmbedder{
 		vocab:    make(map[string]int),
+		df:       make(map[string]int),
 		vocabCap: defaultVocabCap,
 	}
 }
@@ -37,19 +39,27 @@ func (e *TFIDFEmbedder) AddDocument(text string) {
 			continue
 		}
 		seen[w] = true
+		// Count real document frequency so Finalize can compute a genuine IDF
+		// (rare, discriminative terms weighted above common ones).
+		e.df[w]++
 		if _, exists := e.vocab[w]; !exists && len(e.vocab) < e.vocabCap {
 			e.vocab[w] = len(e.vocab)
 		}
 	}
 }
 
-// Finalize computes IDF values after all documents have been added.
+// Finalize computes IDF values after all documents have been added, using the
+// real per-term document frequency (BM25-style smoothed IDF). Previously every
+// term got the same constant IDF, which made the "TF-IDF" vectors effectively
+// TF-only — rare and common terms were weighted identically.
 func (e *TFIDFEmbedder) Finalize() {
+	n := float64(e.docCount)
 	e.idf = make([]float64, len(e.vocab))
-	// We use a simple IDF approximation since we don't store per-doc term presence.
-	// Default IDF = log(docCount / 1) for unseen terms.
-	for i := range e.idf {
-		e.idf[i] = math.Log(float64(e.docCount+1) / 2.0) // smoothed IDF
+	for word, idx := range e.vocab {
+		df := float64(e.df[word])
+		// BM25 IDF: log(1 + (N - df + 0.5)/(df + 0.5)). Always positive, and
+		// monotonically decreasing in df, so rarer terms score higher.
+		e.idf[idx] = math.Log(1.0 + (n-df+0.5)/(df+0.5))
 	}
 }
 
