@@ -1666,7 +1666,7 @@ func (n *Node) checkPeerCompat(catalog *p2p.ShardCatalog) bool {
 	// They require a newer protocol than we support — we're outdated
 	if peerCompat > p2p.CompatLevel {
 		slog.Warn("peer requires newer protocol — consider updating",
-			"peer", catalog.PeerID[:12], "their_compat", peerCompat, "our_compat", p2p.CompatLevel)
+			"peer", truncPeer(catalog.PeerID), "their_compat", peerCompat, "our_compat", p2p.CompatLevel)
 		n.updateNeeded.Store(true)
 		return false
 	}
@@ -1674,7 +1674,7 @@ func (n *Node) checkPeerCompat(catalog *p2p.ShardCatalog) bool {
 	// We require a newer protocol than they support — they're outdated
 	if p2p.MinRequiredCompat > 0 && peerCompat < p2p.MinRequiredCompat {
 		slog.Warn("peer too old — disconnecting",
-			"peer", catalog.PeerID[:12], "their_compat", peerCompat, "our_min_required", p2p.MinRequiredCompat)
+			"peer", truncPeer(catalog.PeerID), "their_compat", peerCompat, "our_min_required", p2p.MinRequiredCompat)
 		return false
 	}
 
@@ -1802,9 +1802,15 @@ func (n *Node) onDocumentCrawled(doc *models.Document, discoveredURLs []string) 
 			PeerID:    n.peerID.String(),
 		}
 
-		// Attach proof-of-work (Sybil resistance)
+		// Attach proof-of-work (Sybil resistance). Compute at the difficulty a
+		// neutral-trust receiver requires — not the bare baseline — otherwise a
+		// receiver that has no reputation record for us (the common case for a
+		// new peer, trust = defaultTrustScore) demands a higher difficulty than
+		// we produced and drops the announcement. Receivers who trust us more
+		// require less, so a higher proof still satisfies them; receivers who
+		// trust us less (known-bad) still escalate, as intended.
 		challenge := p2p.PoWChallenge(n.peerID.String(), discoveredURLs)
-		pow := p2p.ComputePoW(challenge, p2p.DefaultPoWDifficulty)
+		pow := p2p.ComputePoW(challenge, p2p.PoWDifficultyForTrust(defaultTrustScore))
 		ann.PoWNonce = pow.Nonce
 		ann.PoWTimestamp = pow.Timestamp
 		ann.PoWDifficulty = pow.Difficulty
@@ -1937,7 +1943,22 @@ func (n *Node) routeSeedURL(rawURL string) {
 }
 
 // gossipLoop listens for URL announcements from peers.
+// recoverLoop is deferred at the top of each background gossip loop. A panic in
+// any goroutine crashes the whole process, so an unexpected panic (e.g. from
+// malformed peer input) must be contained: it is logged and the loop restarted
+// unless the node is shutting down.
+func (n *Node) recoverLoop(name string, restart func()) {
+	if r := recover(); r != nil {
+		slog.Error("background loop panicked; restarting", "loop", name, "panic", r)
+		if n.ctx.Err() == nil {
+			time.Sleep(time.Second)
+			go restart()
+		}
+	}
+}
+
 func (n *Node) gossipLoop() {
+	defer n.recoverLoop("gossipLoop", n.gossipLoop)
 	for {
 		ann, err := n.gossip.Subscribe(n.ctx)
 		if err != nil {
@@ -1960,20 +1981,21 @@ func (n *Node) gossipLoop() {
 			continue
 		}
 
-		// Verify proof-of-work if present (Sybil resistance)
-		if ann.PoWTimestamp > 0 {
-			challenge := p2p.PoWChallenge(ann.PeerID, ann.URLs)
-			pow := p2p.ProofOfWork{
-				Nonce:      ann.PoWNonce,
-				Timestamp:  ann.PoWTimestamp,
-				Difficulty: ann.PoWDifficulty,
-			}
-			trust := n.trustManager.TrustScore(ann.PeerID)
-			minDiff := p2p.PoWDifficultyForTrust(trust)
-			if err := p2p.VerifyPoW(challenge, pow, minDiff); err != nil {
-				slog.Debug("gossip: invalid PoW from peer", "peer", ann.PeerID[:12], "err", err)
-				continue
-			}
+		// Require proof-of-work on every announcement (Sybil resistance).
+		// Verifying "only if present" was trivially bypassable — a peer could
+		// omit the proof entirely to flood cheap announcements. A missing proof
+		// (zero timestamp/nonce) now fails VerifyPoW and is dropped.
+		challenge := p2p.PoWChallenge(ann.PeerID, ann.URLs)
+		pow := p2p.ProofOfWork{
+			Nonce:      ann.PoWNonce,
+			Timestamp:  ann.PoWTimestamp,
+			Difficulty: ann.PoWDifficulty,
+		}
+		trust := n.trustManager.TrustScore(ann.PeerID)
+		minDiff := p2p.PoWDifficultyForTrust(trust)
+		if err := p2p.VerifyPoW(challenge, pow, minDiff); err != nil {
+			slog.Debug("gossip: invalid/missing PoW from peer", "peer", truncPeer(ann.PeerID), "err", err)
+			continue
 		}
 
 		// Light nodes relay gossip automatically via GossipSub mesh subscription
@@ -2019,6 +2041,7 @@ func (n *Node) gossipLoop() {
 
 // shardCatalogLoop listens for shard catalog updates from peers.
 func (n *Node) shardCatalogLoop() {
+	defer n.recoverLoop("shardCatalogLoop", n.shardCatalogLoop)
 	for {
 		catalog, err := n.gossip.SubscribeShardCatalog(n.ctx)
 		if err != nil {
@@ -2064,7 +2087,7 @@ func (n *Node) shardCatalogLoop() {
 			}
 			n.peerRelayInfoMu.Unlock()
 		}
-		slog.Debug("shard catalog: received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "version", catalog.Version, "type", catalog.NodeType, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
+		slog.Debug("shard catalog: received", "peer", truncPeer(catalog.PeerID), "name", catalog.NodeName, "version", catalog.Version, "type", catalog.NodeType, "domains", len(catalog.Domains), "docs", catalog.DocCount, "gen", catalog.Generation)
 	}
 }
 
@@ -2144,7 +2167,7 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 	// Check protocol compatibility
 	if !n.checkPeerCompat(catalog) {
 		n.disconnectIncompatPeer(catalog.PeerID)
-		return fmt.Errorf("incompatible peer %s (compat %d)", catalog.PeerID[:12], catalog.MinCompatVersion)
+		return fmt.Errorf("incompatible peer %s (compat %d)", truncPeer(catalog.PeerID), catalog.MinCompatVersion)
 	}
 
 	n.shards.AddNode(catalog.PeerID)
@@ -2168,7 +2191,7 @@ func (n *Node) handleShardCatalog(catalog *p2p.ShardCatalog) error {
 		}
 		n.peerRelayInfoMu.Unlock()
 	}
-	slog.Debug("shard protocol: catalog received", "peer", catalog.PeerID[:12], "name", catalog.NodeName, "version", catalog.Version, "type", catalog.NodeType, "docs", catalog.DocCount)
+	slog.Debug("shard protocol: catalog received", "peer", truncPeer(catalog.PeerID), "name", catalog.NodeName, "version", catalog.Version, "type", catalog.NodeType, "docs", catalog.DocCount)
 	return nil
 }
 
@@ -2352,6 +2375,7 @@ func (n *Node) resolveQuarantines() {
 
 // spamReportLoop listens for incoming spam reports from peers.
 func (n *Node) spamReportLoop() {
+	defer n.recoverLoop("spamReportLoop", n.spamReportLoop)
 	for {
 		report, err := n.gossip.SubscribeSpamReport(n.ctx)
 		if err != nil {
@@ -2364,15 +2388,28 @@ func (n *Node) spamReportLoop() {
 			continue
 		}
 
+		// ReporterID is now bound to the authenticated gossip sender (see
+		// SubscribeSpamReport), so these checks can't be evaded by ID rotation.
+
 		// Don't accept reports from quarantined peers
 		if n.trustManager.IsQuarantined(report.ReporterID) {
-			slog.Warn("trust: ignoring report from quarantined peer", "peer", report.ReporterID[:12])
+			slog.Warn("trust: ignoring report from quarantined peer", "peer", truncPeer(report.ReporterID))
 			continue
 		}
 
 		// Rate limit reports per peer
 		if !n.reportLimiter.Allow(report.ReporterID) {
-			slog.Warn("trust: rate-limiting reports from peer", "peer", report.ReporterID[:12])
+			slog.Warn("trust: rate-limiting reports from peer", "peer", truncPeer(report.ReporterID))
+			continue
+		}
+
+		// Age-gate unknown / brand-new peers. A freshly-spun-up Sybil identity
+		// has no (or near-zero-age) reputation record; accepting its reports into
+		// the domain-block consensus would let cheap identity churn drive
+		// censorship. HandleReport gates peers we already know to be new; this
+		// closes the gap for peers we've never seen.
+		if rep, _ := n.trustStore.GetReputation(report.ReporterID); rep == nil || rep.FirstSeen.IsZero() || time.Since(rep.FirstSeen) < time.Hour {
+			slog.Debug("trust: ignoring report from unknown/new peer", "peer", truncPeer(report.ReporterID))
 			continue
 		}
 

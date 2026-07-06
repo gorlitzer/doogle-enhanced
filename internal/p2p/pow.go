@@ -19,11 +19,13 @@ type ProofOfWork struct {
 
 const (
 	// DefaultPoWDifficulty is the baseline difficulty (leading zero bits).
-	// 16 bits ≈ ~65k hashes ≈ ~10ms on modern hardware.
-	DefaultPoWDifficulty uint8 = 16
+	// 20 bits ≈ ~1M hashes ≈ ~100ms on modern hardware. The old 16-bit baseline
+	// (~10ms) was too cheap to meaningfully deter Sybil flooding.
+	DefaultPoWDifficulty uint8 = 20
 
 	// MaxPoWDifficulty caps the difficulty for low-trust peers.
-	MaxPoWDifficulty uint8 = 24
+	// 26 bits ≈ ~67M hashes ≈ a few seconds.
+	MaxPoWDifficulty uint8 = 26
 
 	// PoW proofs expire after this window to prevent replay.
 	PoWMaxAge = 5 * time.Minute
