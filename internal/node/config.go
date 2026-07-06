@@ -160,7 +160,11 @@ func DefaultConfig() *Config {
 		},
 		API: APIConfig{
 			Port: 7002,
-			Bind: "0.0.0.0",
+			// Bind to loopback by default. The API exposes unauthenticated
+			// write endpoints (crawl, config) and a localhost-gated admin
+			// surface with destructive operations; binding to 0.0.0.0 exposes
+			// them to the whole network. Operators must opt in explicitly.
+			Bind: "127.0.0.1",
 		},
 		Crawler: CrawlerConfig{
 			Workers:           4,
@@ -257,7 +261,7 @@ func ParseFlags(cfg *Config) {
 	flag.StringVar(&cfg.NodeName, "name", cfg.NodeName, "Human-readable node name")
 	flag.IntVar(&cfg.P2P.Port, "port", cfg.P2P.Port, "libp2p listen port")
 	flag.IntVar(&cfg.API.Port, "api-port", cfg.API.Port, "HTTP API port")
-	flag.StringVar(&cfg.API.Bind, "bind", cfg.API.Bind, "API server bind address (default 0.0.0.0)")
+	flag.StringVar(&cfg.API.Bind, "bind", cfg.API.Bind, "API server bind address (default 127.0.0.1; use 0.0.0.0 to expose to the network — see docs, exposes admin API)")
 	flag.StringVar(&cfg.Storage.DataDir, "data-dir", cfg.Storage.DataDir, "Data directory")
 	flag.StringVar(&bootstrap, "bootstrap", "", "Bootstrap peer multiaddr")
 	flag.StringVar(&seed, "seed", "", "Seed URL(s) to crawl (comma-separated)")

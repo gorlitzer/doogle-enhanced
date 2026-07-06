@@ -15,6 +15,19 @@ import (
 
 const maxGossipMessageSize = 64 * 1024 // 64 KB
 
+// maxURLsPerAnnouncement bounds how many URLs a single gossip announcement may
+// carry, preventing a peer from scheduling thousands of URLs in one message.
+const maxURLsPerAnnouncement = 100
+
+// truncPeerID safely truncates a peer ID string for logging without panicking
+// on short (attacker-supplied) values.
+func truncPeerID(id string) string {
+	if len(id) <= 12 {
+		return id
+	}
+	return id[:12]
+}
+
 // Gossip manages GossipSub pub/sub for the URL frontier, shard catalog, and spam reports.
 type Gossip struct {
 	ps             *pubsub.PubSub
@@ -109,6 +122,14 @@ func (g *Gossip) Subscribe(ctx context.Context) (*models.URLAnnouncement, error)
 	var ann models.URLAnnouncement
 	if err := json.Unmarshal(msg.Data, &ann); err != nil {
 		return nil, fmt.Errorf("unmarshal announcement: %w", err)
+	}
+
+	// Reject announcements carrying an unreasonable number of URLs — a single
+	// message can otherwise schedule thousands of tiny URLs (amplification).
+	if len(ann.URLs) > maxURLsPerAnnouncement {
+		log.Printf("gossip: dropping announcement with %d URLs (max %d) from %s",
+			len(ann.URLs), maxURLsPerAnnouncement, truncPeerID(msg.ReceivedFrom.String()))
+		return nil, nil
 	}
 
 	// Validate URL format — reject if any URL is invalid.

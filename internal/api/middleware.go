@@ -115,6 +115,44 @@ func isLoopback(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// isLoopbackHost reports whether a bind address string refers to loopback.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// HostAllowlist rejects requests whose Host header is not an accepted value.
+// This defeats DNS-rebinding: a malicious page cannot reach a loopback-bound
+// server via its own (rebound) hostname because the Host header won't match.
+//
+// When the server is bound to loopback, only loopback Host values are allowed.
+// When bound to a wildcard or public address, the operator has explicitly opted
+// into network exposure and the set of valid external hostnames is unknown, so
+// Host validation is skipped (defense shifts to the reverse proxy / firewall).
+func HostAllowlist(bind string) func(http.Handler) http.Handler {
+	enforce := isLoopbackHost(bind)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if enforce {
+				host := r.Host
+				if h, _, err := net.SplitHostPort(host); err == nil {
+					host = h
+				}
+				if !isLoopbackHost(host) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					w.Write([]byte(`{"error":"invalid host header"}`))
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // BearerAuth returns middleware that checks for a valid Bearer token.
 // Also accepts ?_token=... query param for iframe embedding.
 func BearerAuth(token string) func(http.Handler) http.Handler {

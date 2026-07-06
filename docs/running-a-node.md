@@ -208,7 +208,7 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--name` | — | Human-readable node name shown in UI and to peers |
 | `--port` | `7001` | libp2p listen port (TCP and QUIC) |
 | `--api-port` | `7002` | HTTP API and web UI port |
-| `--bind` | `0.0.0.0` | API server bind address (LAN-accessible by default) |
+| `--bind` | `127.0.0.1` | API server bind address. Loopback-only by default — see the security warning below before changing it |
 | `--data-dir` | `./data/doogle` | Where to store all persistent data |
 | `--bootstrap` | — | Multiaddr of a bootstrap peer |
 | `--seed` | — | Comma-separated seed URLs to crawl |
@@ -228,6 +228,15 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--embedding-url` | — | Generic neural embedding server URL (for non-Ollama servers) |
 
 All settings are controlled via CLI flags. Run `./bin/doogle --help` for the full list.
+
+### ⚠️ Security: exposing the API (`--bind`)
+
+The API binds to `127.0.0.1` (loopback) by default. **Do not change this unless you understand the exposure.** The API server:
+
+- Serves an **admin surface** (`/api/admin/*`) with **destructive, unauthenticated** operations — `DELETE /api/admin/data` wipes your index, `/api/admin/restore` writes arbitrary data, `/api/admin/update` swaps the running binary. These are gated to loopback + a Host-header allowlist only.
+- Exposes **unauthenticated write endpoints** on `/api` (e.g. `/api/crawl`) over **plaintext HTTP**.
+
+Binding to `0.0.0.0` (or a LAN IP) exposes all of this to every host that can reach the port. If you need remote access, put Doogle **behind a reverse proxy that terminates TLS and authenticates requests**, and firewall the raw port. The node logs a loud warning at startup when bound to a non-loopback address.
 
 ---
 
