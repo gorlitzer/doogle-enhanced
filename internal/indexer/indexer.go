@@ -160,6 +160,19 @@ func (ix *Indexer) Stats() *models.IndexerInfo {
 
 // Index processes a crawled document through the full pipeline.
 func (ix *Indexer) Index(doc *models.Document) error {
+	return ix.indexDoc(doc, false)
+}
+
+// IndexReplica indexes a document received via replication / anti-entropy
+// repair. It skips cross-URL content-duplicate detection: a replicated doc must
+// be stored under its own ID even if another URL on this node happens to share
+// its content, otherwise it never lands on the replica and anti-entropy re-sends
+// it every round (livelock).
+func (ix *Indexer) IndexReplica(doc *models.Document) error {
+	return ix.indexDoc(doc, true)
+}
+
+func (ix *Indexer) indexDoc(doc *models.Document, skipDedup bool) error {
 	// 0. Safety net: refuse to index documents with noindex directive
 	if doc.NoIndex {
 		log.Printf("indexer: noindex directive, refusing to index %s", doc.URL)
@@ -173,11 +186,14 @@ func (ix *Indexer) Index(doc *models.Document) error {
 		return nil
 	}
 
-	// 2. Duplicate detection via content fingerprinting
-	if dup, existingID := ix.dedup.IsDuplicate(doc.ID, doc.Content); dup {
-		ix.duplicatesSkipped.Add(1)
-		log.Printf("indexer: duplicate of %s, skipping %s", existingID, doc.URL)
-		return nil
+	// 2. Duplicate detection via content fingerprinting (skipped on the
+	//    replication path — see IndexReplica).
+	if !skipDedup {
+		if dup, existingID := ix.dedup.IsDuplicate(doc.ID, doc.Content); dup {
+			ix.duplicatesSkipped.Add(1)
+			log.Printf("indexer: duplicate of %s, skipping %s", existingID, doc.URL)
+			return nil
+		}
 	}
 
 	// 3. Enrich document with NLP analysis

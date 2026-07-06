@@ -65,13 +65,20 @@ func (n *Node) runAntiEntropy() {
 			continue
 		}
 
-		ids, err := n.bleveIdx.ListIDsByDomain(domain)
+		idHashes, err := n.bleveIdx.ListIDHashesByDomain(domain)
 		if err != nil {
-			log.Printf("anti-entropy: list IDs for %s error: %v", domain, err)
+			log.Printf("anti-entropy: list id hashes for %s error: %v", domain, err)
 			continue
 		}
 
-		localRoot := p2p.ComputeMerkleRoot(ids)
+		// Fingerprints fold each doc's content hash into the Merkle root, so a
+		// replica that has the same URLs but stale CONTENT is now detected as
+		// diverged (previously the ID-only root reported it in sync forever).
+		fps := make([]string, 0, len(idHashes))
+		for id, h := range idHashes {
+			fps = append(fps, p2p.Fingerprint(id, h))
+		}
+		localRoot := p2p.ComputeMerkleRoot(fps)
 
 		// Get replica peers for this domain, skip self
 		owners := n.shards.Owners(domain, rf)
@@ -91,7 +98,7 @@ func (n *Node) runAntiEntropy() {
 			req := &p2p.AntiEntropyRequest{
 				Domain:     domain,
 				MerkleRoot: localRoot,
-				DocIDs:     ids,
+				DocIDs:     fps,
 			}
 
 			resp, err := p2p.SendAntiEntropyRequest(n.ctx, n.host, pid, req, 30*time.Second)
@@ -116,12 +123,21 @@ func (n *Node) runAntiEntropy() {
 
 // handleAntiEntropyRequest processes an incoming anti-entropy request from a peer.
 func (n *Node) handleAntiEntropyRequest(req *p2p.AntiEntropyRequest) (*p2p.AntiEntropyResponse, error) {
-	localIDs, err := n.bleveIdx.ListIDsByDomain(req.Domain)
+	localIDHashes, err := n.bleveIdx.ListIDHashesByDomain(req.Domain)
 	if err != nil {
 		return &p2p.AntiEntropyResponse{Status: "error"}, err
 	}
 
-	localRoot := p2p.ComputeMerkleRoot(localIDs)
+	// Build local fingerprints (id+content hash) to match the requester's root.
+	localFPs := make([]string, 0, len(localIDHashes))
+	localSet := make(map[string]struct{}, len(localIDHashes))
+	for id, h := range localIDHashes {
+		fp := p2p.Fingerprint(id, h)
+		localFPs = append(localFPs, fp)
+		localSet[fp] = struct{}{}
+	}
+
+	localRoot := p2p.ComputeMerkleRoot(localFPs)
 
 	if localRoot == req.MerkleRoot {
 		return &p2p.AntiEntropyResponse{
@@ -130,16 +146,13 @@ func (n *Node) handleAntiEntropyRequest(req *p2p.AntiEntropyRequest) (*p2p.AntiE
 		}, nil
 	}
 
-	// Compute set difference: IDs in remote's list that we don't have locally
-	localSet := make(map[string]struct{}, len(localIDs))
-	for _, id := range localIDs {
-		localSet[id] = struct{}{}
-	}
-
+	// A requester fingerprint we don't have means either a doc we're missing or
+	// one whose content diverged (same ID, different hash). Either way we want
+	// the requester's copy, so return the underlying doc ID for repair.
 	var missingIDs []string
-	for _, id := range req.DocIDs {
-		if _, exists := localSet[id]; !exists {
-			missingIDs = append(missingIDs, id)
+	for _, fp := range req.DocIDs {
+		if _, exists := localSet[fp]; !exists {
+			missingIDs = append(missingIDs, p2p.FingerprintID(fp))
 		}
 	}
 
