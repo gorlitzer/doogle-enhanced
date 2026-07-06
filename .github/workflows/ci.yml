@@ -43,10 +43,11 @@ jobs:
 
       - name: govulncheck (known CVEs in deps and stdlib)
         # Report-only: stdlib CVEs are cleared by the 'stable' Go toolchain above
-        # and the x/net html vulns are fixed by the pinned x/net@v0.55.0, but the
-        # residual quic-go / webtransport-go CVEs are transitively pinned by
-        # go-libp2p and can't be bumped without upgrading libp2p (tracked
-        # follow-up). Don't fail the build on those; keep the report visible.
+        # and dependency CVEs were remediated by upgrading go-libp2p (v0.48),
+        # go-libp2p-kad-dht (v0.41), x/net (v0.55) and chi (v5.3). The single
+        # residual advisory (go-libp2p-kad-dht GO-2024-3218, DHT resource abuse)
+        # has NO upstream fix available ("Fixed in: N/A"), so it can't be cleared
+        # by bumping — keep the report visible without blocking the build.
         continue-on-error: true
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
