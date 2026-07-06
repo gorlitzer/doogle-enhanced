@@ -63,7 +63,22 @@ func (bi *BatchIndexer) Flush() error {
 	bi.mu.Unlock()
 
 	if err := bi.store.IndexBatch(batch); err != nil {
-		log.Printf("batch indexer: flush error (%d docs): %v", len(batch), err)
+		// The buffer was already swapped out above, so on error these docs would
+		// be lost even though the crawler already counted them as indexed.
+		// Requeue them (ahead of anything buffered while we were writing) for the
+		// next flush to retry. Bound the retained buffer so a persistently
+		// failing store can't grow memory without limit.
+		bi.mu.Lock()
+		combined := append(batch, bi.buf...)
+		maxRetain := bi.maxBatch * 10
+		if len(combined) > maxRetain {
+			dropped := len(combined) - maxRetain
+			combined = combined[len(combined)-maxRetain:]
+			log.Printf("batch indexer: retry buffer full, dropped %d oldest docs", dropped)
+		}
+		bi.buf = combined
+		bi.mu.Unlock()
+		log.Printf("batch indexer: flush error (%d docs): %v — requeued for retry", len(batch), err)
 		return err
 	}
 	log.Printf("batch indexer: flushed %d docs", len(batch))

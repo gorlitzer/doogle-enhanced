@@ -2498,8 +2498,11 @@ func (n *Node) maintenanceLoop() {
 				}
 			}
 
-			// Cleanup rate limiter expired entries
+			// Cleanup rate limiter expired entries. Both limiters accumulate one
+			// entry per unique peer ID; reportLimiter was previously never swept,
+			// leaking memory over time.
 			n.gossipLimiter.Cleanup()
+			n.reportLimiter.Cleanup()
 
 			// Trend maintenance: recompute averages and prune
 			if n.trendStore != nil {
