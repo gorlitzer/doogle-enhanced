@@ -120,6 +120,11 @@ type Node struct {
 	startedAt time.Time
 	ctx       context.Context
 	cancel    context.CancelFunc
+	// bgWg tracks the long-lived background loops (gossip, shard catalog,
+	// anti-entropy, spam report, maintenance) so Shutdown can join them before
+	// closing the underlying stores — otherwise a loop mid-operation would touch
+	// a closed Bleve/Badger handle and panic or corrupt data.
+	bgWg sync.WaitGroup
 }
 
 // relayInfo tracks light-node stats learned from ShardCatalog broadcasts.
@@ -1010,7 +1015,9 @@ func (n *Node) Run() error {
 		}
 	}
 
-	// Start gossip listeners
+	// Start gossip listeners. Add to the WaitGroup before spawning (not inside
+	// the goroutine) so Shutdown's Wait can never race an Add.
+	n.bgWg.Add(6)
 	go n.gossipLoop()
 	go n.shardCatalogLoop()
 	go n.shardCatalogPublisher()
@@ -1055,6 +1062,21 @@ func (n *Node) Run() error {
 }
 
 // Shutdown gracefully stops all subsystems in dependency order.
+// waitBackground blocks until all tracked background loops have returned, or
+// until timeout elapses (so a stuck loop can't hang shutdown forever).
+func (n *Node) waitBackground(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		n.bgWg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		slog.Warn("node: background loops did not finish within shutdown timeout", "timeout", timeout)
+	}
+}
+
 func (n *Node) Shutdown() {
 	slog.Info("node: shutting down")
 	n.cancel() // 1. cancel root ctx — stops background goroutines
@@ -1084,6 +1106,11 @@ func (n *Node) Shutdown() {
 
 	// 7. persist indexer stats
 	n.indexer.FlushStats()
+
+	// 7a. wait for background loops to exit before closing the stores they use
+	//     (anti-entropy, maintenance, gossip, spam-report), so none touches a
+	//     closed Bleve/Badger handle.
+	n.waitBackground(5 * time.Second)
 
 	// 8. close P2P subsystems
 	n.gossip.Close()
@@ -1125,6 +1152,7 @@ func (n *Node) ShutdownForRestart() {
 	}
 	n.batchIndexer.Stop()
 	n.indexer.FlushStats()
+	n.waitBackground(5 * time.Second)
 	n.gossip.Close()
 	n.discovery.Close()
 	n.host.Close()
@@ -1984,13 +2012,21 @@ func (n *Node) recoverLoop(name string, restart func()) {
 	if r := recover(); r != nil {
 		slog.Error("background loop panicked; restarting", "loop", name, "panic", r)
 		if n.ctx.Err() == nil {
-			time.Sleep(time.Second)
-			go restart()
+			// Account for the restarted goroutine now, before this (crashed)
+			// goroutine's deferred bgWg.Done() runs, so the WaitGroup counter
+			// never dips to zero mid-restart. The restarted loop's own
+			// `defer n.bgWg.Done()` balances this Add.
+			n.bgWg.Add(1)
+			go func() {
+				time.Sleep(time.Second)
+				restart()
+			}()
 		}
 	}
 }
 
 func (n *Node) gossipLoop() {
+	defer n.bgWg.Done()
 	defer n.recoverLoop("gossipLoop", n.gossipLoop)
 	for {
 		ann, err := n.gossip.Subscribe(n.ctx)
@@ -2074,6 +2110,7 @@ func (n *Node) gossipLoop() {
 
 // shardCatalogLoop listens for shard catalog updates from peers.
 func (n *Node) shardCatalogLoop() {
+	defer n.bgWg.Done()
 	defer n.recoverLoop("shardCatalogLoop", n.shardCatalogLoop)
 	for {
 		catalog, err := n.gossip.SubscribeShardCatalog(n.ctx)
@@ -2126,6 +2163,7 @@ func (n *Node) shardCatalogLoop() {
 
 // shardCatalogPublisher periodically publishes our shard catalog.
 func (n *Node) shardCatalogPublisher() {
+	defer n.bgWg.Done()
 	// Publish once shortly after startup so peers learn our name immediately
 	// rather than waiting for the first 60-second tick.
 	select {
@@ -2408,6 +2446,7 @@ func (n *Node) resolveQuarantines() {
 
 // spamReportLoop listens for incoming spam reports from peers.
 func (n *Node) spamReportLoop() {
+	defer n.bgWg.Done()
 	defer n.recoverLoop("spamReportLoop", n.spamReportLoop)
 	for {
 		report, err := n.gossip.SubscribeSpamReport(n.ctx)
@@ -2483,6 +2522,7 @@ func (n *Node) auditTrailEntries(limit int) []interface{} {
 
 // maintenanceLoop periodically runs BadgerDB GC and store pruning.
 func (n *Node) maintenanceLoop() {
+	defer n.bgWg.Done()
 	interval := n.cfg.Storage.GCInterval
 	if interval <= 0 {
 		interval = 5 * time.Minute

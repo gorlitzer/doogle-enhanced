@@ -15,6 +15,7 @@ import (
 
 // antiEntropyLoop runs periodic Merkle-based consistency checks with replica peers.
 func (n *Node) antiEntropyLoop() {
+	defer n.bgWg.Done()
 	interval := n.cfg.Index.AntiEntropyInterval
 	if interval <= 0 {
 		interval = 2 * time.Minute

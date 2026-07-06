@@ -139,7 +139,16 @@ func (r *Ring) rebuildLocked() {
 		}
 	}
 	sort.Slice(r.ring, func(i, j int) bool {
-		return r.ring[i].hash < r.ring[j].hash
+		if r.ring[i].hash != r.ring[j].hash {
+			return r.ring[i].hash < r.ring[j].hash
+		}
+		// Deterministic tie-break on hash collision. Without it, two vnodes that
+		// hash to the same 32-bit value could order differently on different
+		// nodes (sort.Slice is not stable and map iteration order varies), so a
+		// key landing on that boundary would resolve to different owners on
+		// different nodes — a split-brain / inconsistent-replication risk that
+		// becomes likely (birthday bound) at ~1k nodes.
+		return r.ring[i].node < r.ring[j].node
 	})
 }
 
