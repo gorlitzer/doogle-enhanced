@@ -78,12 +78,54 @@ func (t *LTRTrainer) TrainFromClicks() *LTRModel {
 		return nil
 	}
 
-	slog.Info("ltr: training model", "pairs", len(pairs))
+	// Hold out every 5th pair for validation so we can gate promotion on a set
+	// the model didn't train on. Fall back to training on everything (no gate)
+	// only when the split would leave too few training pairs.
+	var train, val []ClickPair
+	for i, p := range pairs {
+		if i%5 == 0 {
+			val = append(val, p)
+		} else {
+			train = append(train, p)
+		}
+	}
+	if len(train) < MinClickPairs {
+		train, val = pairs, nil
+	}
+
+	slog.Info("ltr: training model", "train_pairs", len(train), "val_pairs", len(val))
 	start := time.Now()
-	model := Train(pairs, DefaultTrainConfig())
+	model := Train(train, DefaultTrainConfig())
 	slog.Info("ltr: training complete", "trees", len(model.Trees), "duration", time.Since(start).Round(time.Millisecond))
 
+	// Held-out gate: refuse to promote a model that can't beat a coin flip at
+	// ordering held-out click pairs. This stops a degenerate model (e.g. from
+	// sparse/noisy clicks) from replacing a working ranker.
+	if len(val) > 0 {
+		acc := pairwiseAccuracy(model, val)
+		slog.Info("ltr: held-out pairwise accuracy", "accuracy", acc, "val_pairs", len(val))
+		if acc < 0.5 {
+			slog.Warn("ltr: new model failed held-out gate, keeping current model", "accuracy", acc)
+			return nil
+		}
+	}
+
 	return model
+}
+
+// pairwiseAccuracy returns the fraction of held-out pairs the model orders
+// correctly (winner scored above loser).
+func pairwiseAccuracy(m *LTRModel, pairs []ClickPair) float64 {
+	if len(pairs) == 0 {
+		return 0
+	}
+	correct := 0
+	for _, p := range pairs {
+		if m.Predict(p.Winner) > m.Predict(p.Loser) {
+			correct++
+		}
+	}
+	return float64(correct) / float64(len(pairs))
 }
 
 // buildClickPairs generates pairwise training examples from click data.

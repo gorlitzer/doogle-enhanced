@@ -133,6 +133,11 @@ type SearchConfig struct {
 	LTRRetrainInterval   time.Duration `yaml:"ltr_retrain_interval"`
 	LTRMinSignals        int           `yaml:"ltr_min_signals"`
 
+	// Optional second-stage LLM reranker (off by default). Requires Ollama.
+	RerankEnabled bool   `yaml:"rerank_enabled"`
+	RerankModel   string `yaml:"rerank_model"` // Ollama instruct model, e.g. qwen2.5:0.5b-instruct
+	RerankTopN    int    `yaml:"rerank_top_n"` // number of head candidates to rerank (default 20)
+
 	// SearXNG metasearch fallback
 	SearXNG SearXNGConfig `yaml:"searxng"`
 }
@@ -290,6 +295,8 @@ func ParseFlags(cfg *Config) {
 	flag.BoolVar(&ollamaFlag, "ollama", false, "Enable neural embeddings via Ollama (auto-detects on localhost:11434)")
 	flag.StringVar(&cfg.Index.OllamaURL, "ollama-url", cfg.Index.OllamaURL, "Ollama server URL (default http://localhost:11434)")
 	flag.StringVar(&cfg.Index.OllamaModel, "ollama-model", cfg.Index.OllamaModel, "Ollama embedding model (default nomic-embed-text; use all-minilm for a smaller/faster model)")
+	flag.BoolVar(&cfg.Search.RerankEnabled, "rerank", cfg.Search.RerankEnabled, "Enable optional second-stage LLM reranker via Ollama (experimental, adds latency)")
+	flag.StringVar(&cfg.Search.RerankModel, "rerank-model", cfg.Search.RerankModel, "Ollama instruct model for reranking (default qwen2.5:0.5b-instruct)")
 	flag.Parse()
 
 	// --ollama flag sets defaults

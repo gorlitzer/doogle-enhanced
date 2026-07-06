@@ -274,6 +274,17 @@ ollama pull nomic-embed-text  # ~274MB one-time download (better quality, defaul
 
 Prefer a smaller/faster model? Use `ollama pull all-minilm` (~23MB) and `--ollama-model all-minilm`. The vector store adapts to whichever model's dimension you choose.
 
+### Optional: second-stage reranker (experimental)
+
+For higher result quality you can enable an LLM-based reranker that re-scores the top candidates for each query:
+
+```bash
+ollama pull qwen2.5:0.5b-instruct
+./bin/doogle --ollama --rerank
+```
+
+This is **off by default** and **experimental**. Note the trade-off: Ollama has no native cross-encoder rerank API, so this uses a small instruct model as a relevance judge over the top ~20 results — it improves ordering but **adds latency per query**. It fails open: if the model is slow or unavailable, search falls back to the first-stage ranking. Pick the model with `--rerank-model`.
+
 Custom Ollama setup:
 
 ```bash

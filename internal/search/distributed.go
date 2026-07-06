@@ -162,6 +162,7 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 	// Deduplicate by canonical URL and near-duplicate content hash (mirrors),
 	// then apply domain diversity: max 2 per domain in top 10.
 	deduped := DedupeResults(allResults)
+	deduped = MaybeRerank(req.Query, deduped)
 	deduped = ApplyDomainDiversity(deduped, 2, 10)
 
 	// Paginate the merged/deduped/diversified set. Previously this always sliced
