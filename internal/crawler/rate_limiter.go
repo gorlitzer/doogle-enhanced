@@ -51,16 +51,23 @@ func (rl *RateLimiter) Wait(domain string, maxRequests int, window time.Duration
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	limit, exists := rl.limits[domain]
-	if !exists {
-		limit = &domainLimit{
-			maxRequests: maxRequests,
-			windowSize:  window,
-			windowStart: time.Now(),
+	// getLimit fetches (or recreates) the domain's limit. It is re-called after
+	// every unlock/sleep because Cleanup may have deleted the entry meanwhile —
+	// mutating the old orphaned pointer would silently lose the rate accounting.
+	getLimit := func() *domainLimit {
+		limit, exists := rl.limits[domain]
+		if !exists {
+			limit = &domainLimit{
+				maxRequests: maxRequests,
+				windowSize:  window,
+				windowStart: time.Now(),
+			}
+			rl.limits[domain] = limit
 		}
-		rl.limits[domain] = limit
+		return limit
 	}
 
+	limit := getLimit()
 	now := time.Now()
 
 	// Reset window if expired
@@ -76,8 +83,10 @@ func (rl *RateLimiter) Wait(domain string, maxRequests int, window time.Duration
 			rl.mu.Unlock()
 			time.Sleep(waitTime)
 			rl.mu.Lock()
+			limit = getLimit() // entry may have been deleted during the sleep
+			now = time.Now()   // the pre-sleep 'now' is stale
 			limit.requestCount = 0
-			limit.windowStart = time.Now()
+			limit.windowStart = now
 		}
 	}
 
@@ -92,6 +101,7 @@ func (rl *RateLimiter) Wait(domain string, maxRequests int, window time.Duration
 			rl.mu.Unlock()
 			time.Sleep(delay - elapsed)
 			rl.mu.Lock()
+			limit = getLimit() // re-fetch after sleep
 		}
 	}
 

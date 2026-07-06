@@ -34,6 +34,10 @@ type Indexer struct {
 	vectorStore VectorStore
 	entityStore EntityStore
 
+	// embedSem bounds concurrent embedding jobs so a slow embedding backend
+	// (e.g. remote Ollama) doesn't block or overwhelm the crawl workers.
+	embedSem chan struct{}
+
 	// Stats tracking
 	totalIndexed      atomic.Int64
 	spamRejected      atomic.Int64
@@ -73,6 +77,7 @@ func New(store index.Store, batch *index.BatchIndexer, genStore *store.Generatio
 	}
 
 	ix := &Indexer{
+		embedSem:    make(chan struct{}, 8), // up to 8 concurrent embeddings
 		store:       store,
 		batch:       batch,
 		genStore:    genStore,
@@ -232,7 +237,12 @@ func (ix *Indexer) Index(doc *models.Document) error {
 		}
 	}
 
-	// 10. Compute and store embedding (async-safe, non-blocking)
+	// 10. Compute and store embedding off the crawl worker's critical path.
+	// Embedding a document can be a network round-trip (remote Ollama/HTTP
+	// embedder); doing it inline here serialized and throttled the entire crawl
+	// pipeline. Hand it to a bounded pool instead — if the pool is saturated we
+	// skip the embedding for this doc (it is still indexed lexically) rather than
+	// block crawling.
 	if ix.embedder != nil && ix.vectorStore != nil {
 		embeddingText := doc.Title
 		if doc.Description != "" {
@@ -241,9 +251,17 @@ func (ix *Indexer) Index(doc *models.Document) error {
 			embeddingText += ". " + doc.Summary
 		}
 		if embeddingText != "" {
-			if vec, err := ix.embedder.Embed(embeddingText); err == nil {
-				meta := map[string]string{"url": doc.URL, "domain": doc.Domain, "title": doc.Title}
-				_ = ix.vectorStore.Upsert(doc.ID, vec, meta)
+			select {
+			case ix.embedSem <- struct{}{}:
+				go func(id, url, domain, title, text string) {
+					defer func() { <-ix.embedSem }()
+					if vec, err := ix.embedder.Embed(text); err == nil {
+						meta := map[string]string{"url": url, "domain": domain, "title": title}
+						_ = ix.vectorStore.Upsert(id, vec, meta)
+					}
+				}(doc.ID, doc.URL, doc.Domain, doc.Title, embeddingText)
+			default:
+				// embedding pool saturated — skip to keep crawling unblocked
 			}
 		}
 	}
