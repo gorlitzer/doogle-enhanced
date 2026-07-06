@@ -181,41 +181,70 @@ func edits(word string) []string {
 	return results
 }
 
-// rebuildDictionary extracts term frequencies from the Bleve index.
+// rebuildDictionary builds the term-frequency dictionary from the raw,
+// unstemmed surface text of stored documents (title + description).
+//
+// The previous implementation pulled terms from Bleve's FieldDict, which
+// returns post-analysis STEMS ("beauti", "run") with stopwords removed. That
+// made the spell checker flag correctly-spelled surface forms ("beautiful",
+// "running") as unknown and "correct" them toward non-word stems. Building from
+// stored surface text (title/description are indexed with Store=true) yields
+// real words for both detection and suggestion, without a reindex.
 func (sc *SpellChecker) rebuildDictionary(idx bleve.Index) {
 	start := time.Now()
 	dict := make(map[string]int, sc.maxTerms)
 
-	// Use the "content" field dictionary — it has the broadest term coverage
-	for _, field := range []string{"content", "title"} {
-		fieldDict, err := idx.FieldDict(field)
+	const pageSize = 500
+	offset := 0
+	q := bleve.NewMatchAllQuery()
+	for {
+		req := bleve.NewSearchRequestOptions(q, pageSize, offset, false)
+		req.Fields = []string{"title", "description"}
+		result, err := idx.Search(req)
 		if err != nil {
-			log.Printf("spellcheck: field dict error for %s: %v", field, err)
-			continue
+			log.Printf("spellcheck: search error: %v", err)
+			break
 		}
-		for {
-			entry, err := fieldDict.Next()
-			if err != nil || entry == nil {
-				break
-			}
-			term := entry.Term
-			// Skip very short terms, numbers, and terms with special chars
-			if len(term) < 3 || isNumeric(term) || !isAlpha(term) {
-				continue
-			}
-			dict[term] += int(entry.Count)
-			if len(dict) >= sc.maxTerms {
-				break
+		if len(result.Hits) == 0 {
+			break
+		}
+		for _, hit := range result.Hits {
+			for _, f := range []string{"title", "description"} {
+				text, _ := hit.Fields[f].(string)
+				for _, word := range surfaceWords(text) {
+					dict[word]++
+				}
 			}
 		}
-		fieldDict.Close()
+		offset += len(result.Hits)
+		if len(dict) >= sc.maxTerms || uint64(offset) >= result.Total {
+			break
+		}
 	}
 
 	sc.mu.Lock()
 	sc.dictionary = dict
 	sc.mu.Unlock()
 
-	log.Printf("spellcheck: rebuilt dictionary with %d terms in %dms", len(dict), time.Since(start).Milliseconds())
+	log.Printf("spellcheck: rebuilt dictionary with %d surface-form terms in %dms", len(dict), time.Since(start).Milliseconds())
+}
+
+// surfaceWords lowercases text and splits it into alphabetic word tokens of
+// length >= 3 (the unit the spell checker operates on).
+func surfaceWords(text string) []string {
+	if text == "" {
+		return nil
+	}
+	fields := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r)
+	})
+	out := fields[:0]
+	for _, w := range fields {
+		if len(w) >= 3 {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 func isNumeric(s string) bool {

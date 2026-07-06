@@ -153,3 +153,38 @@ func TestNewSpellChecker_WithBleveIndex(t *testing.T) {
 		t.Error("known word should not generate suggestion")
 	}
 }
+
+// TestRebuildDictionary_SurfaceForms is the regression test for A8: the
+// dictionary must contain unstemmed surface words from stored title/description,
+// so correctly-spelled words like "beautiful"/"running" are NOT flagged as
+// misspelled, while a real typo still gets corrected.
+func TestRebuildDictionary_SurfaceForms(t *testing.T) {
+	idx, err := bleve.NewMemOnly(bleve.NewIndexMapping())
+	if err != nil {
+		t.Fatalf("mem index: %v", err)
+	}
+	defer idx.Close()
+
+	docs := map[string]map[string]interface{}{
+		"1": {"title": "Beautiful Running Shoes", "description": "comfortable running gear"},
+		"2": {"title": "Photography Tutorial", "description": "learn beautiful photography"},
+	}
+	for id, d := range docs {
+		if err := idx.Index(id, d); err != nil {
+			t.Fatalf("index: %v", err)
+		}
+	}
+
+	sc := NewSpellChecker(idx)
+
+	// Surface forms must be known (no "correction" toward a stem).
+	for _, w := range []string{"beautiful", "running", "photography"} {
+		if got, ok := sc.Suggest(w); ok {
+			t.Errorf("%q should be known, but was corrected to %q", w, got)
+		}
+	}
+	// A genuine typo one edit away should be corrected.
+	if got, ok := sc.Suggest("beutiful"); !ok || got != "beautiful" {
+		t.Errorf("expected 'beutiful' -> 'beautiful', got %q ok=%v", got, ok)
+	}
+}
