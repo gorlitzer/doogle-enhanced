@@ -1,5 +1,7 @@
 # ---- Build stage ----
-FROM golang:1.22-alpine AS builder
+# Use a current patched Go toolchain so the compiled stdlib is free of the CVEs
+# that govulncheck flags on older releases.
+FROM golang:1.26-alpine AS builder
 
 ARG VERSION=dev
 ARG COMMIT=none
