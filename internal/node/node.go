@@ -2290,7 +2290,7 @@ func (n *Node) handleReplicateRequest(senderPeerID string, req *p2p.ReplicateReq
 			doc.OriginPeerID = senderPeerID
 		}
 
-		if err := n.indexer.Index(doc); err != nil {
+		if err := n.indexer.IndexReplica(doc); err != nil {
 			slog.Error("replicate: index error", "url", doc.URL, "err", err)
 			continue
 		}

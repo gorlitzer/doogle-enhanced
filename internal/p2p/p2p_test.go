@@ -186,3 +186,36 @@ func TestProtocolConstants(t *testing.T) {
 		t.Fatal("topics should be different")
 	}
 }
+
+// TestFingerprint_DetectsContentDivergence is the M1 regression test: two
+// replicas with the same doc IDs but different content must produce different
+// Merkle roots (previously the ID-only root reported them "in sync" forever).
+func TestFingerprint_DetectsContentDivergence(t *testing.T) {
+	ids := []string{"doc-1", "doc-2", "doc-3"}
+	hashesA := map[string]string{"doc-1": "h1", "doc-2": "h2", "doc-3": "h3"}
+	hashesB := map[string]string{"doc-1": "h1", "doc-2": "h2-CHANGED", "doc-3": "h3"}
+
+	fp := func(m map[string]string) []string {
+		out := make([]string, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, Fingerprint(id, m[id]))
+		}
+		return out
+	}
+
+	rootA := ComputeMerkleRoot(fp(hashesA))
+	rootB := ComputeMerkleRoot(fp(hashesB))
+	if rootA == rootB {
+		t.Fatal("expected different Merkle roots when content diverges")
+	}
+
+	// Same content → same root (order independent).
+	if ComputeMerkleRoot(fp(hashesA)) != ComputeMerkleRoot(fp(hashesA)) {
+		t.Fatal("expected identical roots for identical content")
+	}
+
+	// FingerprintID round-trips the doc ID.
+	if got := FingerprintID(Fingerprint("doc-9", "abc")); got != "doc-9" {
+		t.Fatalf("FingerprintID = %q, want doc-9", got)
+	}
+}

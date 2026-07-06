@@ -406,6 +406,39 @@ func (bs *BleveStore) ListIDsByDomain(domain string) ([]string, error) {
 	return ids, nil
 }
 
+// ListIDHashesByDomain returns id -> content hash for every document in a
+// domain, so anti-entropy can detect content divergence (not just missing IDs).
+func (bs *BleveStore) ListIDHashesByDomain(domain string) (map[string]string, error) {
+	q := bleve.NewTermQuery(domain)
+	q.SetField("domain")
+
+	out := make(map[string]string)
+	pageSize := 500
+	offset := 0
+	for {
+		req := bleve.NewSearchRequestOptions(q, pageSize, offset, false)
+		req.Fields = []string{"content_hash"}
+		req.SortBy([]string{"_id"})
+
+		result, err := bs.index.Search(req)
+		if err != nil {
+			return nil, fmt.Errorf("bleve list id hashes by domain: %w", err)
+		}
+		if len(result.Hits) == 0 {
+			break
+		}
+		for _, hit := range result.Hits {
+			h, _ := hit.Fields["content_hash"].(string)
+			out[hit.ID] = h
+		}
+		offset += len(result.Hits)
+		if uint64(offset) >= result.Total {
+			break
+		}
+	}
+	return out, nil
+}
+
 // ListDomains returns all distinct domains in the index using a term facet.
 func (bs *BleveStore) ListDomains() ([]string, error) {
 	q := bleve.NewMatchAllQuery()
