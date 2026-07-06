@@ -190,6 +190,8 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 	// apply per-domain diversity — previously done only in the distributed path,
 	// so single-node deployments got neither.
 	results = DedupeResults(results)
+	// Optional second-stage reranker (off unless the operator enabled it).
+	results = MaybeRerank(req.Query, results)
 	results = ApplyDomainDiversity(results, 2, 10)
 
 	// Paginate after re-ranking

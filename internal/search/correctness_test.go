@@ -81,3 +81,31 @@ func TestDedupeResults(t *testing.T) {
 		t.Errorf("expected best-ranked original to survive, got %s", out[0].URL)
 	}
 }
+
+func TestParseRerankScores(t *testing.T) {
+	// Well-formed JSON.
+	s := parseRerankScores(`{"0": 8, "1": 3, "2": 10}`, 3)
+	if s == nil || s[0] != 8 || s[1] != 3 || s[2] != 10 {
+		t.Fatalf("clean parse failed: %v", s)
+	}
+	// Noisy output with surrounding prose still parses.
+	s = parseRerankScores("Here are the scores: {\"0\": 5, \"1\": 9}", 2)
+	if s == nil || s[1] != 9 {
+		t.Fatalf("noisy parse failed: %v", s)
+	}
+	// Out-of-range indices ignored; unparseable → nil (fail-open).
+	if parseRerankScores("no scores here", 3) != nil {
+		t.Fatal("expected nil for unparseable output")
+	}
+}
+
+// TestMaybeRerank_NoRerankerIsPassthrough verifies the pipeline hook is a no-op
+// when no reranker is configured (the default).
+func TestMaybeRerank_NoRerankerIsPassthrough(t *testing.T) {
+	ActiveReranker = nil
+	in := []models.SearchResult{{URL: "a"}, {URL: "b"}, {URL: "c"}}
+	out := MaybeRerank("q", in)
+	if len(out) != 3 || out[0].URL != "a" {
+		t.Fatalf("expected passthrough, got %v", out)
+	}
+}

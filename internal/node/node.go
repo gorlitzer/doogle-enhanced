@@ -576,6 +576,17 @@ func (n *Node) init() error {
 	n.localEng.SetEntityStore(n.entityStore)
 	n.localEng.SetClusterComputer(n.clusterStore)
 
+	// 12a-ii. Optional second-stage LLM reranker (off unless --rerank). Uses the
+	// Ollama server; note this adds per-query latency and is experimental.
+	if n.cfg.Search.RerankEnabled {
+		ollamaURL := n.cfg.Index.OllamaURL
+		if ollamaURL == "" {
+			ollamaURL = "http://localhost:11434"
+		}
+		search.ActiveReranker = search.NewOllamaReranker(ollamaURL, n.cfg.Search.RerankModel, n.cfg.Search.RerankTopN)
+		slog.Info("search: LLM reranker enabled (experimental)", "model", n.cfg.Search.RerankModel)
+	}
+
 	// 12b. Hash ring rebalancer — transfers documents when topology changes
 	n.rebalancer = index.NewRebalancer(n.shards, bleveIdx, peerID.String(), n.cfg.Index.ReplicationFactor,
 		func(ctx context.Context, peerIDStr string, docs []*index.IndexDocument) (int, error) {
