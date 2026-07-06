@@ -1,6 +1,8 @@
 package updater
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -152,7 +154,79 @@ func DownloadAsset(asset *GHAsset, token, destPath string) error {
 	return nil
 }
 
-// VerifyBinary runs the downloaded binary with "version --json" to check it's valid.
+// ChecksumFileName is the release asset that lists SHA-256 sums of each binary.
+const ChecksumFileName = "checksums.txt"
+
+// FetchChecksums downloads and parses the release's checksums.txt into a map of
+// filename -> lowercase hex SHA-256.
+func FetchChecksums(release *GHRelease, token string) (map[string]string, error) {
+	asset, err := FindAsset(release, ChecksumFileName)
+	if err != nil {
+		return nil, fmt.Errorf("release is missing %s, cannot verify integrity: %w", ChecksumFileName, err)
+	}
+
+	assetURL := fmt.Sprintf("%s/repos/%s/%s/releases/assets/%d", APIBase, RepoOwner, RepoName, asset.ID)
+	req, err := http.NewRequest("GET", assetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/octet-stream")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download checksums: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("download checksums (%d): %s", resp.StatusCode, string(body))
+	}
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	sums := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		// sha256sum format is "<hex>  <name>"; name may carry a leading '*'.
+		name := strings.TrimPrefix(fields[1], "*")
+		sums[name] = strings.ToLower(fields[0])
+	}
+	return sums, nil
+}
+
+// VerifyChecksum computes the SHA-256 of the file at path and compares it to the
+// expected hex digest. This is the integrity gate for auto-update: it ensures
+// the downloaded binary is exactly what the release published.
+func VerifyChecksum(path, expectedHex string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(got, expectedHex) {
+		return fmt.Errorf("checksum mismatch: got %s, expected %s", got, expectedHex)
+	}
+	return nil
+}
+
+// VerifyBinary runs the downloaded binary with "version --json" as a basic
+// sanity check that it executes. NOTE: this is NOT an integrity check — a
+// malicious replacement would also run fine. Integrity is enforced separately
+// by VerifyChecksum against the release's signed-in-transit checksums.txt.
 func VerifyBinary(path string) error {
 	cmd := exec.Command(path, "version", "--json")
 	out, err := cmd.Output()
@@ -261,6 +335,23 @@ func ApplyUpdate(currentVersion string) (newVersion string, err error) {
 	if err := os.Chmod(tmpPath, 0755); err != nil {
 		os.Remove(tmpPath)
 		return "", err
+	}
+
+	// Integrity check: the downloaded binary must match the SHA-256 published in
+	// the release's checksums.txt before we ever execute or install it.
+	sums, err := FetchChecksums(release, token)
+	if err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("cannot verify update integrity: %w", err)
+	}
+	expected, ok := sums[AssetName()]
+	if !ok {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("no checksum published for %s, refusing to update", AssetName())
+	}
+	if err := VerifyChecksum(tmpPath, expected); err != nil {
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("update integrity check failed: %w", err)
 	}
 
 	if err := VerifyBinary(tmpPath); err != nil {

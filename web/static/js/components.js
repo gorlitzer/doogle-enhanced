@@ -76,12 +76,17 @@ export function countryName(code) {
 }
 
 // countryBadge renders a small flag + code badge.
+// The country code is peer-supplied (advertised over the shard catalog), so it
+// must be treated as untrusted. Valid ISO 3166-1 alpha-2 codes are exactly two
+// ASCII letters; anything else is rejected outright, which prevents HTML/JS
+// injection through this field (e.g. a peer advertising `"><img onerror=...>`).
 export function countryBadge(code, opts = {}) {
-  if (!code) return '';
-  const flag = countryFlag(code);
-  const name = countryName(code);
+  if (typeof code !== 'string' || !/^[A-Za-z]{2}$/.test(code)) return '';
+  const upper = code.toUpperCase();
+  const flag = countryFlag(upper);
+  const name = countryName(upper); // safe: name is from our static map or the 2-letter code
   const size = opts.size || '0.85em';
-  return `<span class="country-badge" title="${name}" style="font-size:${size};display:inline-flex;align-items:center;gap:3px">${flag} <span style="opacity:0.8">${code.toUpperCase()}</span></span>`;
+  return `<span class="country-badge" title="${name}" style="font-size:${size};display:inline-flex;align-items:center;gap:3px">${flag} <span style="opacity:0.8">${upper}</span></span>`;
 }
 
 // ============================================================

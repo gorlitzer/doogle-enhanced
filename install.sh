@@ -64,6 +64,34 @@ main() {
     curl -fsSL -o "${TMPFILE}" "${DOWNLOAD_URL}" \
         || { rm -f "${TMPFILE}"; die "download failed"; }
 
+    # Verify integrity against the release checksums.txt before installing.
+    CHECKSUM_URL=$(echo "${RELEASE_JSON}" | \
+        grep -o "\"browser_download_url\":\"[^\"]*checksums.txt\"" | \
+        head -1 | cut -d'"' -f4)
+    if [ -z "${CHECKSUM_URL}" ]; then
+        rm -f "${TMPFILE}"; die "release has no checksums.txt — refusing to install unverified binary"
+    fi
+    SUMFILE=$(mktemp)
+    curl -fsSL -o "${SUMFILE}" "${CHECKSUM_URL}" \
+        || { rm -f "${TMPFILE}" "${SUMFILE}"; die "failed to download checksums"; }
+
+    EXPECTED=$(grep "${ASSET_NAME}" "${SUMFILE}" | head -1 | awk '{print $1}')
+    if [ -z "${EXPECTED}" ]; then
+        rm -f "${TMPFILE}" "${SUMFILE}"; die "no checksum published for ${ASSET_NAME}"
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        ACTUAL=$(sha256sum "${TMPFILE}" | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        ACTUAL=$(shasum -a 256 "${TMPFILE}" | awk '{print $1}')
+    else
+        rm -f "${TMPFILE}" "${SUMFILE}"; die "no sha256 tool (sha256sum/shasum) available to verify download"
+    fi
+    rm -f "${SUMFILE}"
+    if [ "${ACTUAL}" != "${EXPECTED}" ]; then
+        rm -f "${TMPFILE}"; die "checksum mismatch — got ${ACTUAL}, expected ${EXPECTED}. Aborting."
+    fi
+    echo "Checksum verified."
+
     chmod +x "${TMPFILE}"
 
     # Install
