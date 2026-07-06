@@ -184,3 +184,38 @@ func TestRing_DefaultReplicas(t *testing.T) {
 		t.Fatalf("expected default replicas=64, got %d", r.replicas)
 	}
 }
+
+// TestRing_OrderIndependentOwnership verifies that ownership is identical
+// regardless of the order nodes were added (M3): the deterministic tie-break in
+// rebuildLocked means two nodes with the same membership always agree on owners,
+// even if map iteration / a hash collision would otherwise reorder vnodes.
+func TestRing_OrderIndependentOwnership(t *testing.T) {
+	nodes := []string{"node-alpha-01", "node-bravo-02", "node-charlie-3", "node-delta-04", "node-echo-0005"}
+
+	a := NewRing(64)
+	for _, n := range nodes {
+		a.Add(n)
+	}
+	// Same set, reverse insertion order.
+	b := NewRing(64)
+	for i := len(nodes) - 1; i >= 0; i-- {
+		b.Add(nodes[i])
+	}
+
+	for i := 0; i < 2000; i++ {
+		key := fmt.Sprintf("doc-%d", i)
+		if a.Get(key) != b.Get(key) {
+			t.Fatalf("ownership disagreement for %q: %s vs %s", key, a.Get(key), b.Get(key))
+		}
+		// Replica sets must match too.
+		ra, rb := a.GetN(key, 3), b.GetN(key, 3)
+		if len(ra) != len(rb) {
+			t.Fatalf("replica count mismatch for %q", key)
+		}
+		for j := range ra {
+			if ra[j] != rb[j] {
+				t.Fatalf("replica[%d] disagreement for %q: %s vs %s", j, key, ra[j], rb[j])
+			}
+		}
+	}
+}
