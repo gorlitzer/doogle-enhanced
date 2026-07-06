@@ -51,6 +51,9 @@ type P2PConfig struct {
 	DHTRendezvous        string        `yaml:"dht_rendezvous"`
 	DHTDiscoveryInterval time.Duration `yaml:"dht_discovery_interval"`
 	DHTMaxPeers          int           `yaml:"dht_max_peers"`
+	// DHTClientMode runs the DHT in client-only mode to reduce how widely this
+	// node's network address is advertised. See docs/running-a-node.md#privacy.
+	DHTClientMode        bool          `yaml:"dht_client_mode"`
 }
 
 type APIConfig struct {
@@ -268,6 +271,7 @@ func ParseFlags(cfg *Config) {
 	flag.IntVar(&cfg.Crawler.Workers, "workers", cfg.Crawler.Workers, "Crawler worker count")
 	flag.BoolVar(&cfg.P2P.MDNS, "mdns", cfg.P2P.MDNS, "Enable mDNS discovery")
 	flag.BoolVar(&cfg.P2P.DHTDiscovery, "dht-discovery", cfg.P2P.DHTDiscovery, "Enable DHT-based peer discovery via IPFS bootstrap nodes")
+	flag.BoolVar(&cfg.P2P.DHTClientMode, "dht-client-mode", cfg.P2P.DHTClientMode, "Run the DHT in client-only mode to reduce how widely this node's IP/address is advertised (privacy)")
 	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
 	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level: debug, info, warn, error")
 	flag.StringVar(&cfg.Fleet.Role, "fleet-role", cfg.Fleet.Role, "Fleet role: coordinator (default), worker, standalone")

@@ -232,6 +232,7 @@ func (n *Node) init() error {
 		DHTRendezvous:        n.cfg.P2P.DHTRendezvous,
 		DHTDiscoveryInterval: n.cfg.P2P.DHTDiscoveryInterval,
 		DHTMaxPeers:          n.cfg.P2P.DHTMaxPeers,
+		DHTClientMode:        n.cfg.P2P.DHTClientMode,
 		OnDooglePeerConnected: func(pid peer.ID) {
 			pidStr := pid.String()
 			n.shards.AddNode(pidStr)
