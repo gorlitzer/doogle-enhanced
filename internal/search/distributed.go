@@ -88,8 +88,9 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 		localResp.Results[i].OriginPeerName = ds.resolveOriginName(localResp.Results[i].OriginPeerID)
 	}
 
-	// Always re-rank local results with quality signals
-	RerankResults(localResp.Results)
+	// Local results were already re-ranked inside localEngine.Search; the merged
+	// set is re-ranked once below (with intent), so re-ranking again here is
+	// redundant. (Scoring is now idempotent, but avoid the wasted pass.)
 
 	// Get target peers (shard-aware or full fan-out)
 	targetPeers := ds.selectTargetPeers(req)
@@ -171,19 +172,31 @@ func (ds *DistributedSearch) Search(ctx context.Context, req *models.SearchReque
 	// Apply domain diversity: max 2 per domain in top 10
 	deduped = ApplyDomainDiversity(deduped, 2, 10)
 
-	// Paginate
+	// Paginate the merged/deduped/diversified set. Previously this always sliced
+	// the first pageSize regardless of req.Page, so pages 2+ returned page 1.
 	pageSize := req.PageSize
 	if pageSize < 1 {
 		pageSize = 10
 	}
-	if len(deduped) > pageSize {
-		deduped = deduped[:pageSize]
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+	total := len(deduped)
+	offset := (page - 1) * pageSize
+	switch {
+	case offset >= len(deduped):
+		deduped = nil
+	case offset+pageSize >= len(deduped):
+		deduped = deduped[offset:]
+	default:
+		deduped = deduped[offset : offset+pageSize]
 	}
 
 	resp := &models.SearchResponse{
 		Query:          req.Query,
 		Results:        deduped,
-		Total:          len(deduped),
+		Total:          total,
 		Page:           req.Page,
 		PageSize:       pageSize,
 		TookMs:         time.Since(start).Milliseconds(),

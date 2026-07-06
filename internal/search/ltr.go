@@ -28,7 +28,7 @@ var FeatureNames = [FeatureCount]string{
 // ExtractFeatures builds a feature vector from a search result.
 func ExtractFeatures(r *models.SearchResult) [FeatureCount]float64 {
 	return [FeatureCount]float64{
-		r.Score,                                                                    // 0: bm25
+		relevanceInput(r),                                                          // 0: bm25 (immutable; see ranker)
 		r.EEATScore,                                                                // 1: eeat
 		r.QualityScore,                                                             // 2: quality
 		r.PageRankScore,                                                            // 3: pagerank
@@ -49,7 +49,7 @@ func ExtractFeatures(r *models.SearchResult) [FeatureCount]float64 {
 func ExtractFeaturesWithQuery(r *models.SearchResult, qctx *QueryContext, clickStore *store.ClickStore) [FeatureCount]float64 {
 	var f [FeatureCount]float64
 	// Base 14 features
-	f[0] = r.Score
+	f[0] = relevanceInput(r)
 	f[1] = r.EEATScore
 	f[2] = r.QualityScore
 	f[3] = r.PageRankScore

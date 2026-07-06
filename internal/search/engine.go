@@ -80,12 +80,19 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 		pageSize = 50
 	}
 
-	// Over-fetch from Bleve so re-ranking can re-order across a wider pool.
-	fetchSize := pageSize * 5
+	offset := (page - 1) * pageSize
+
+	// Over-fetch from Bleve so re-ranking can re-order across a wider pool, and
+	// crucially fetch enough to actually cover the requested page — otherwise
+	// deep pages (offset beyond the pool) returned empty even though more
+	// results existed. Cap to avoid pathological deep-paging cost.
+	fetchSize := offset + pageSize*5
 	if fetchSize < 100 {
 		fetchSize = 100
 	}
-	offset := (page - 1) * pageSize
+	if fetchSize > 5000 {
+		fetchSize = 5000
+	}
 
 	// Choose search backend: hybrid (BM25+vector) or BM25-only
 	searchMode := "bm25"
@@ -141,6 +148,7 @@ func (e *Engine) Search(req *models.SearchRequest) (*models.SearchResponse, erro
 			Language:             hit.Doc.Language,
 			Country:              hit.Doc.Country,
 			Score:                hit.Score,
+			BM25:                 hit.Score, // immutable relevance baseline (see ranker)
 			OriginPeerID:         hit.Doc.OriginPeerID,
 			PageRankScore:        hit.Doc.PageRankScore,
 			EEATScore:            hit.Doc.EEATScore,

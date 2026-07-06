@@ -40,8 +40,23 @@ func RerankWithIntent(results []models.SearchResult, intent *QueryIntent) {
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
+		if results[i].Score != results[j].Score {
+			return results[i].Score > results[j].Score
+		}
+		// Deterministic tie-break so equal scores don't shuffle between runs.
+		return results[i].URL < results[j].URL
 	})
+}
+
+// relevanceInput returns the immutable BM25 relevance for a result. Re-ranking
+// overwrites Score, so reading Score as the relevance input would compound the
+// quality multiplier on every pass. Fall back to Score for results that never
+// had BM25 populated (e.g. peer results ranked remotely).
+func relevanceInput(r *models.SearchResult) float64 {
+	if r.BM25 != 0 {
+		return r.BM25
+	}
+	return r.Score
 }
 
 // computeLTRScore uses the trained gradient-boosted model for scoring,
@@ -75,7 +90,7 @@ func computeLTRScore(r *models.SearchResult, intent *QueryIntent) float64 {
 //	URLQuality: 0.05, Readability: 0.08, Citation: 0.08, Link: 0.05,
 //	SEO: 0.05, AuthorCredibility: 0.05, Relevance: 0.06, Freshness: 0.08
 func computeFinalScore(r *models.SearchResult, intent *QueryIntent) float64 {
-	bm25 := r.Score
+	bm25 := relevanceInput(r)
 
 	// --- Quality multiplier ---
 	var qualityMultiplier float64

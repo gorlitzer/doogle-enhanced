@@ -77,6 +77,10 @@ type SearchResult struct {
 	Language     string  `json:"language,omitempty"`
 	Country      string  `json:"country,omitempty"`
 	Score        float64 `json:"score"`
+	// BM25 is the immutable raw lexical relevance score from the index. Score is
+	// mutated by re-ranking, so scorers read BM25 (not Score) as their relevance
+	// input — otherwise repeated re-ranking compounds the quality multiplier.
+	BM25         float64 `json:"-"`
 	PeerID         string  `json:"peer_id,omitempty"`
 	PeerName       string  `json:"peer_name,omitempty"`
 	OriginPeerID   string  `json:"origin_peer_id,omitempty"`
