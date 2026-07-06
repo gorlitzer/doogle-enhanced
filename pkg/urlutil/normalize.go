@@ -127,21 +127,33 @@ func IsSafeURL(rawURL string) bool {
 
 	ip := net.ParseIP(host)
 	if ip == nil {
-		// hostname, not IP — allow (DNS resolution happens at crawl time).
+		// Hostname, not a literal IP. We can't know the target address until DNS
+		// resolves at connect time, so this is only a cheap pre-filter — the
+		// authoritative SSRF defense is the dial-time guard (see SafeDialControl),
+		// which re-checks the *resolved* IP and defeats DNS rebinding.
 		return true
 	}
 
-	// Reject private, loopback, link-local, and reserved ranges.
+	return IsSafeResolvedIP(ip)
+}
+
+// IsSafeResolvedIP reports whether a concrete IP address is a safe crawl target:
+// a public, routable unicast address. It rejects loopback, private (incl. IPv6
+// unique-local), link-local, unspecified, and cloud metadata addresses. This is
+// the single source of truth for both the URL pre-filter and the dial-time guard.
+func IsSafeResolvedIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified() ||
+		ip.IsInterfaceLocalMulticast() {
 		return false
 	}
-
-	// Reject cloud metadata IPs (169.254.169.254).
-	if ip.Equal(net.ParseIP("169.254.169.254")) {
+	// Cloud metadata endpoints (AWS/GCP/Azure IMDS and its IPv6 alias).
+	if ip.Equal(net.ParseIP("169.254.169.254")) || ip.Equal(net.ParseIP("fd00:ec2::254")) {
 		return false
 	}
-
 	return true
 }
 

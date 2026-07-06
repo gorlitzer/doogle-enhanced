@@ -84,6 +84,10 @@ func newSearXNGClient(urls []string, timeout time.Duration, maxResults int, cate
 		maxResults:   maxResults,
 		categories:   categories,
 		scorePenalty: scorePenalty,
+		// NOTE: intentionally a plain client — a SearXNG instance is an
+		// admin-configured, commonly-localhost service, so it must be allowed to
+		// reach internal addresses. The admin API that sets this URL is
+		// loopback-gated, so the SSRF surface is limited to a local operator.
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},

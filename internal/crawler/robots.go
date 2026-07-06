@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
 // RobotsCache caches robots.txt data per domain (RFC 9309 compliant).
@@ -133,7 +134,7 @@ func (rc *RobotsCache) evaluateRules(rules []robotsRule, path string) bool {
 func (rc *RobotsCache) fetch(domain, userAgent string) *robotsEntry {
 	entry := &robotsEntry{fetchedAt: time.Now()}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := urlutil.SafeHTTPClient(10*time.Second, nil)
 	resp, err := client.Get(fmt.Sprintf("https://%s/robots.txt", domain))
 	if err != nil {
 		// Try HTTP fallback

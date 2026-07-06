@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
 // SitemapURL represents a single URL entry from a sitemap.
@@ -47,9 +49,7 @@ type SitemapFetcher struct {
 // NewSitemapFetcher creates a new sitemap fetcher.
 func NewSitemapFetcher(userAgent string) *SitemapFetcher {
 	return &SitemapFetcher{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client:       urlutil.SafeHTTPClient(30*time.Second, nil),
 		userAgent:    userAgent,
 		maxURLs:      50000,
 		maxFileBytes: 50 << 20, // 50MB
