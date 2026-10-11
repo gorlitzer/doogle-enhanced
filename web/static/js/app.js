@@ -1,5 +1,5 @@
 // Doogle v2 — SPA Router & App Shell
-import { api, peerNames } from './api.js';
+import { api } from './api.js';
 import { initTheme, createThemePicker } from './theme-switcher.js';
 import { renderHome } from './pages/home.js';
 import { renderSearch } from './pages/search.js';
@@ -9,19 +9,14 @@ import { renderIndexer } from './pages/indexer.js';
 import { renderNetwork } from './pages/network.js';
 import { renderDocs } from './pages/docs.js';
 import { renderAbout } from './pages/about.js';
-import { renderHowItWorks } from './pages/howitworks.js';
 import { renderWizard } from './pages/wizard.js';
 import { renderActions } from './pages/actions.js';
 import { renderTrust } from './pages/trust.js';
 import { renderFleet } from './pages/fleet.js';
 import { renderLeaderboard } from './pages/leaderboard.js';
-import { renderProfile } from './pages/profile.js';
-import { renderRoadmap } from './pages/roadmap.js';
 import { initBgAnimation } from './bg-animation.js';
 import { initLogoAnimation } from './logo-animation.js';
-import { initLiteMode, pollInterval } from './lite-mode.js';
 import { initTabIdentity, updateNodeIdentity } from './tab-identity.js';
-import { bumpNavGen } from './nav-gen.js';
 
 const routes = {
   '':            { render: renderHome,   layout: 'home' },
@@ -34,12 +29,9 @@ const routes = {
   'admin/trust':   { render: renderTrust,   layout: 'admin' },
   'admin/fleet':   { render: renderFleet,   layout: 'admin' },
   'admin/leaderboard': { render: renderLeaderboard, layout: 'admin' },
-  'admin/profile': { render: renderProfile, layout: 'admin' },
   'docs':        { render: renderDocs,   layout: 'search' },
   'about':       { render: renderAbout,  layout: 'search' },
-  'howitworks':  { render: renderHowItWorks, layout: 'search' },
   'wizard':      { render: renderWizard, layout: 'search' },
-  'roadmap':     { render: renderRoadmap, layout: 'search' },
 };
 
 let statusInterval = null;
@@ -81,9 +73,6 @@ function render() {
   const navLinks = document.querySelector('.nav-links');
   if (navLinks) navLinks.classList.remove('open');
 
-  // Bump generation so stale async renders bail out
-  bumpNavGen();
-
   // Clear any existing intervals from previous page
   if (window._pageInterval) {
     clearInterval(window._pageInterval);
@@ -112,17 +101,16 @@ function startStatusPolling() {
   async function poll() {
     try {
       const s = await api.status();
-      peerNames.update(s);
       updateNodeIdentity(s);
       const badge = document.getElementById('node-badge-text');
       if (badge) {
-        const name = s.node_name || 'Anonymous Node';
+        const name = s.node_name || `${s.peer_id.slice(0, 12)}...`;
         badge.textContent = `${name} | ${s.indexed_docs} docs | ${s.connected_peers} peers`;
       }
       // Update sidebar wizard status icon.
       const wizardLink = document.getElementById('sidebar-wizard');
       if (wizardLink) {
-        const done = s.indexed_docs > 0 || !!localStorage.getItem('doogle_wizard_dismissed');
+        const done = !!localStorage.getItem('doogle_wizard_dismissed') || s.indexed_docs > 0;
         const dot = done
           ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle" title="Setup complete"></span>'
           : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);margin-right:6px;vertical-align:middle" title="Setup pending"></span>';
@@ -131,15 +119,8 @@ function startStatusPolling() {
 
       if (firstPoll) {
         firstPoll = false;
-        // Detect a fresh/nuked node: zero indexed docs and node started
-        // recently (under 2 minutes). crawled_urls can race ahead of
-        // indexed_docs so it is not a reliable signal.
-        const uptimeSec = s.started_at
-          ? (Date.now() - new Date(s.started_at).getTime()) / 1000
-          : Infinity;
-        const isFreshNode = s.indexed_docs === 0 && uptimeSec < 120;
-
-        if (isFreshNode) {
+        // Fresh node (no data at all) — clear stale wizard dismissal from previous runs.
+        if (s.indexed_docs === 0 && s.crawled_urls === 0) {
           localStorage.removeItem('doogle_wizard_dismissed');
         }
         if (s.indexed_docs === 0 && !localStorage.getItem('doogle_wizard_dismissed')) {
@@ -152,13 +133,12 @@ function startStatusPolling() {
     }
   }
   poll();
-  statusInterval = setInterval(poll, pollInterval(10000));
+  statusInterval = setInterval(poll, 10000);
 }
 
 // Boot
 window.addEventListener('hashchange', render);
 window.addEventListener('DOMContentLoaded', () => {
-  initLiteMode();
   initTheme();
   createThemePicker();
   initBgAnimation();

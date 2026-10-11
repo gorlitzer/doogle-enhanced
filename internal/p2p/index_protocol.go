@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"log"
-	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -21,7 +20,6 @@ type IndexDocHandler func(senderPeerID string, doc *models.Document) error
 func RegisterIndexProtocol(h host.Host, handler IndexDocHandler) {
 	h.SetStreamHandler(IndexProtocol, func(s network.Stream) {
 		defer s.Close()
-		s.SetDeadline(time.Now().Add(30 * time.Second))
 
 		senderPeerID := s.Conn().RemotePeer().String()
 

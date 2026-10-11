@@ -123,14 +123,10 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	headingsTextField := bleve.NewTextFieldMapping()
 	headingsTextField.Analyzer = analyzer
 
-	summaryField := bleve.NewTextFieldMapping()
-	summaryField.Analyzer = analyzer
-
 	// --- Primary text fields ---
 	docMapping.AddFieldMappingsAt("title", titleField)
 	docMapping.AddFieldMappingsAt("description", descField)
 	docMapping.AddFieldMappingsAt("content", textField)
-	docMapping.AddFieldMappingsAt("summary", summaryField)
 	docMapping.AddFieldMappingsAt("keywords", textField)
 	docMapping.AddFieldMappingsAt("categories", textField)
 	docMapping.AddFieldMappingsAt("anchor_text", anchorField)
@@ -142,7 +138,6 @@ func buildDocMapping(analyzer string) *mapping.DocumentMapping {
 	docMapping.AddFieldMappingsAt("domain", keywordField)
 	docMapping.AddFieldMappingsAt("content_hash", keywordField)
 	docMapping.AddFieldMappingsAt("language", keywordField)
-	docMapping.AddFieldMappingsAt("country", keywordField)
 	docMapping.AddFieldMappingsAt("origin_peer_id", keywordField)
 
 	// --- Numeric fields ---
@@ -288,11 +283,6 @@ func (bs *BleveStore) SearchAdvanced(pq *models.ParsedQuery, offset, limit int) 
 	return hits, int(result.Total), nil
 }
 
-// Delete removes a document from the index by ID.
-func (bs *BleveStore) Delete(id string) error {
-	return bs.index.Delete(id)
-}
-
 // DocCount returns the number of indexed documents.
 func (bs *BleveStore) DocCount() (uint64, error) {
 	return bs.index.DocCount()
@@ -404,39 +394,6 @@ func (bs *BleveStore) ListIDsByDomain(domain string) ([]string, error) {
 		}
 	}
 	return ids, nil
-}
-
-// ListIDHashesByDomain returns id -> content hash for every document in a
-// domain, so anti-entropy can detect content divergence (not just missing IDs).
-func (bs *BleveStore) ListIDHashesByDomain(domain string) (map[string]string, error) {
-	q := bleve.NewTermQuery(domain)
-	q.SetField("domain")
-
-	out := make(map[string]string)
-	pageSize := 500
-	offset := 0
-	for {
-		req := bleve.NewSearchRequestOptions(q, pageSize, offset, false)
-		req.Fields = []string{"content_hash"}
-		req.SortBy([]string{"_id"})
-
-		result, err := bs.index.Search(req)
-		if err != nil {
-			return nil, fmt.Errorf("bleve list id hashes by domain: %w", err)
-		}
-		if len(result.Hits) == 0 {
-			break
-		}
-		for _, hit := range result.Hits {
-			h, _ := hit.Fields["content_hash"].(string)
-			out[hit.ID] = h
-		}
-		offset += len(result.Hits)
-		if uint64(offset) >= result.Total {
-			break
-		}
-	}
-	return out, nil
 }
 
 // ListDomains returns all distinct domains in the index using a term facet.
@@ -578,10 +535,8 @@ func fieldsToDoc(id string, fields map[string]interface{}) *IndexDocument {
 	doc.Content = fieldString(fields, "content")
 	doc.ContentHash = fieldString(fields, "content_hash")
 	doc.Language = fieldString(fields, "language")
-	doc.Country = fieldString(fields, "country")
 	doc.Categories = fieldString(fields, "categories")
 	doc.Keywords = fieldString(fields, "keywords")
-	doc.Summary = fieldString(fields, "summary")
 	doc.AnchorText = fieldString(fields, "anchor_text")
 	doc.URLText = fieldString(fields, "url_text")
 	doc.HeadingsText = fieldString(fields, "headings_text")

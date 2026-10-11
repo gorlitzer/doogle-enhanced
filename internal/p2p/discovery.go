@@ -27,12 +27,6 @@ type DiscoveryConfig struct {
 	DHTRendezvous         string
 	DHTDiscoveryInterval  time.Duration
 	DHTMaxPeers           int
-	// DHTClientMode runs the Kademlia DHT in client-only mode. The node still
-	// discovers peers, but does not act as a DHT server: it won't answer DHT
-	// queries or advertise itself in other peers' routing tables, which reduces
-	// (but does not eliminate) how widely its address is published. Peers it
-	// exchanges data with still learn its IP — see docs/running-a-node.md.
-	DHTClientMode         bool
 	OnDooglePeerConnected func(peer.ID) // called when a verified Doogle peer connects
 }
 
@@ -54,14 +48,8 @@ func NewDiscovery(ctx context.Context, h host.Host, cfg DiscoveryConfig) (*Disco
 		cfg:    cfg,
 	}
 
-	// Create Kademlia DHT. Default to auto-server (become a DHT server when
-	// publicly reachable); client mode is an opt-in privacy/footprint reduction.
-	dhtMode := dht.ModeAutoServer
-	if cfg.DHTClientMode {
-		dhtMode = dht.ModeClient
-		slog.Info("DHT running in client-only mode (reduced network footprint)")
-	}
-	kadDHT, err := dht.New(ctx, h, dht.Mode(dhtMode))
+	// Create Kademlia DHT
+	kadDHT, err := dht.New(ctx, h, dht.Mode(dht.ModeAutoServer))
 	if err != nil {
 		return nil, fmt.Errorf("create DHT: %w", err)
 	}

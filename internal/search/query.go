@@ -11,7 +11,6 @@ var (
 	phraseRe   = regexp.MustCompile(`"([^"]+)"`)
 	siteRe     = regexp.MustCompile(`(?i)site:(\S+)`)
 	langRe     = regexp.MustCompile(`(?i)lang:(\S+)`)
-	countryRe  = regexp.MustCompile(`(?i)country:(\S+)`)
 	intitleRe  = regexp.MustCompile(`(?i)intitle:(\S+)`)
 	inurlRe    = regexp.MustCompile(`(?i)inurl:(\S+)`)
 	intextRe   = regexp.MustCompile(`(?i)(?:intext|inbody):(\S+)`)
@@ -187,13 +186,6 @@ func ParseQuery(raw string) *models.ParsedQuery {
 		pq.Language = strings.ToLower(langMatch[1])
 	}
 	remaining = langRe.ReplaceAllString(remaining, " ")
-
-	// 2b2. Extract country:XX
-	countryMatch := countryRe.FindStringSubmatch(remaining)
-	if len(countryMatch) > 1 {
-		pq.Country = strings.ToUpper(countryMatch[1])
-	}
-	remaining = countryRe.ReplaceAllString(remaining, " ")
 
 	// 2c. Extract search dorks
 	if m := intitleRe.FindStringSubmatch(remaining); len(m) > 1 {

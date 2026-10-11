@@ -1,22 +1,8 @@
 // Doogle v2 — P2P Network with interactive graph visualization
 import { api } from '../api.js';
-import { navGen } from '../nav-gen.js';
-import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba, countryBadge } from '../components.js';
+import { NetworkGraph, cardSkeleton, escapeHtml, getCSS, hexToRgba } from '../components.js';
 
 let graph = null;
-
-function peerTier(score, quarantineCount, strikes = 0) {
-  // Strike-based tiers take priority (the "bounty board")
-  if (strikes >= 15) return 'excommunicado';
-  if (strikes >= 8) return 'quarantined';
-  if (strikes >= 5) return 'throttled';
-  if (strikes >= 3) return 'warning';
-  // Fall back to trust score
-  if (score >= 0.3) return 'trusted';
-  if (score >= 0.2) return 'warning';
-  if (score >= 0.1) return 'throttled';
-  return 'quarantined';
-}
 
 export function renderNetwork(container) {
   container.innerHTML = `
@@ -34,20 +20,11 @@ export function renderNetwork(container) {
 }
 
 async function loadNetwork() {
-  const gen = navGen();
   try {
-    const [status, peers, trustData] = await Promise.all([
+    const [status, peers] = await Promise.all([
       api.status(),
       api.peers().catch(() => []),
-      api.trust().catch(() => ({})),
     ]);
-    if (gen !== navGen()) return; // navigated away
-
-    // Build trust lookup: peer_id → reputation
-    const trustMap = new Map();
-    for (const p of (trustData.all_peers || [])) {
-      trustMap.set(p.peer_id, p);
-    }
 
     const peerList = Array.isArray(peers) && peers.length > 0 ? peers : (status.peer_list || []).map(id => ({ peer_id: id, addrs: [] }));
 
@@ -58,7 +35,7 @@ async function loadNetwork() {
       <div class="card-grid">
         <div class="card">
           <div class="card-label">This Node</div>
-          <div class="card-value">${escapeHtml(status.node_name || 'Anonymous Node')}</div>
+          <div class="card-value">${status.node_name ? escapeHtml(status.node_name) : '<span style="font-size:0.85em;word-break:break-all;font-family:monospace">' + status.peer_id.slice(0, 16) + '...</span>'}</div>
         </div>
         <div class="card">
           <div class="card-label">Connected Peers</div>
@@ -87,10 +64,8 @@ async function loadNetwork() {
           </div>
           <div class="graph-legend">
             <span><span class="dot" style="background:var(--accent)"></span> This node</span>
-            <span><span class="dot" style="background:var(--green)"></span> Trusted</span>
-            <span><span class="dot" style="background:var(--amber)"></span> Warning</span>
-            <span><span class="dot" style="background:var(--red)"></span> Quarantined</span>
-            <span><span class="dot" style="background:var(--purple)"></span> Excommunicado</span>
+            <span><span class="dot" style="background:var(--green)"></span> Connected peer</span>
+            <span><span class="dot" style="background:var(--border-light)"></span> Connection</span>
           </div>
         </div>
       </div>
@@ -154,7 +129,6 @@ async function loadNetwork() {
                   <tr>
                     <th>Name</th>
                     <th>Peer ID</th>
-                    <th>Trust</th>
                     <th>Addresses</th>
                     <th>Status</th>
                   </tr>
@@ -164,21 +138,10 @@ async function loadNetwork() {
                     const id = typeof p === 'string' ? p : p.peer_id;
                     const addrs = typeof p === 'string' ? [] : (p.addrs || []);
                     const name = typeof p === 'string' ? '' : (p.node_name || '');
-                    const country = typeof p === 'string' ? '' : (p.country || '');
-                    const rep = trustMap.get(id);
-                    const trustScore = rep ? rep.trust_score : null;
-                    const qCount = rep ? (rep.quarantine_count || 0) : 0;
-                    const tier = trustScore !== null ? peerTier(trustScore, qCount, rep.strikes || 0) : 'new';
-                    const tierColors = { trusted: 'green', warning: 'amber', throttled: 'amber', quarantined: 'red', excommunicado: 'purple', new: 'default' };
                     return `
                       <tr>
-                        <td>${escapeHtml(name || 'Anonymous Node')} ${countryBadge(country)}</td>
+                        <td>${name ? escapeHtml(name) : '<span style="color:var(--text-muted)">—</span>'}</td>
                         <td class="mono" style="font-size:0.8em">${escapeHtml(id).slice(0, 24)}...</td>
-                        <td>
-                          ${trustScore !== null
-                            ? `<span class="badge badge-${tierColors[tier]}">${tier}</span> <span style="font-size:0.8em;color:var(--text-muted)">${trustScore.toFixed(2)}</span>`
-                            : '<span class="badge badge-default">new</span>'}
-                        </td>
                         <td class="mono" style="font-size:0.75em;color:var(--text-muted)">${addrs.length > 0 ? addrs.map(a => escapeHtml(a)).join('<br>') : '—'}</td>
                         <td><span class="badge badge-green">connected</span></td>
                       </tr>
@@ -206,11 +169,11 @@ async function loadNetwork() {
     `;
 
     // Build and render network graph
-    buildGraph(status, peerList, trustMap);
+    buildGraph(status, peerList);
 
     document.getElementById('graph-reset')?.addEventListener('click', () => {
       if (graph) { graph.stop(); graph = null; }
-      buildGraph(status, peerList, trustMap);
+      buildGraph(status, peerList);
     });
 
   } catch (err) {
@@ -221,15 +184,7 @@ async function loadNetwork() {
   }
 }
 
-const TIER_COLORS = () => ({
-  trusted:        getCSS('--green'),
-  warning:        getCSS('--amber') || '#f59e0b',
-  throttled:      getCSS('--amber') || '#f59e0b',
-  quarantined:    getCSS('--red') || '#ef4444',
-  excommunicado:  getCSS('--purple') || '#a855f7',
-});
-
-function buildGraph(status, peerList, trustMap) {
+function buildGraph(status, peerList) {
   // Stop previous graph
   if (graph) graph.stop();
 
@@ -237,75 +192,39 @@ function buildGraph(status, peerList, trustMap) {
 
   const nodes = [];
   const edges = [];
-  const connectedIds = new Set();
-  const colors = TIER_COLORS();
 
   // This node (center, larger)
   nodes.push({
     id: status.peer_id,
-    label: status.node_name || 'Anonymous Node',
-    version: status.version || '',
-    tooltip: (status.node_name ? status.node_name + ' — ' : '') + (status.version ? 'v' + status.version + ' — ' : '') + status.peer_id.slice(0, 24) + '...',
+    label: status.node_name || 'You',
+    tooltip: (status.node_name ? status.node_name + ' — ' : '') + status.peer_id.slice(0, 24) + '...',
     type: 'self',
     color: getCSS('--accent'),
     radius: 20,
   });
 
-  // Connected peers (colored by trust tier)
-  peerList.forEach(p => {
+  // Connected peers
+  peerList.forEach((p, i) => {
     const id = typeof p === 'string' ? p : p.peer_id;
-    connectedIds.add(id);
-    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : 'Anonymous Node';
-    const peerVersion = (typeof p !== 'string' && p.version) ? p.version : '';
-    const rep = trustMap?.get(id);
-    const tier = rep ? peerTier(rep.trust_score || 0, rep.quarantine_count || 0, rep.strikes || 0) : 'trusted';
-    const edgeColor = tier === 'quarantined' ? hexToRgba(colors.quarantined, 0.4)
-                    : tier === 'excommunicado'      ? hexToRgba(colors.banned, 0.25)
-                    : tier === 'warning'     ? hexToRgba(colors.warning, 0.4)
-                    : hexToRgba(getCSS('--green'), 0.4);
+    const peerName = (typeof p !== 'string' && p.node_name) ? p.node_name : `Peer ${i + 1}`;
     nodes.push({
-      id,
+      id: id,
       label: peerName,
-      version: peerVersion,
-      tooltip: peerName + (peerVersion ? ' v' + peerVersion : '') + ' — ' + id.slice(0, 20) + '... [' + tier + ']',
-      type: tier === 'quarantined' ? 'quarantined' : tier === 'excommunicado' ? 'banned' : 'peer',
-      color: colors[tier] || colors.trusted,
-      radius: tier === 'excommunicado' ? 10 : 14,
+      tooltip: (typeof p !== 'string' && p.node_name ? p.node_name + ' — ' : '') + id.slice(0, 20) + '...',
+      type: 'peer',
+      color: getCSS('--green'),
+      radius: 14,
     });
     edges.push({
       from: status.peer_id,
       to: id,
-      color: edgeColor,
-      width: (tier === 'quarantined' || tier === 'excommunicado') ? 1 : 2,
-      dashed: tier === 'quarantined' || tier === 'excommunicado',
+      color: hexToRgba(getCSS('--green'), 0.4),
+      width: 2,
     });
   });
 
-  // Add quarantined/banned peers from trust data that aren't currently connected
-  for (const [peerId, rep] of trustMap) {
-    if (connectedIds.has(peerId) || peerId === status.peer_id) continue;
-    const tier = peerTier(rep.trust_score || 0, rep.quarantine_count || 0, rep.strikes || 0);
-    if (tier !== 'quarantined' && tier !== 'banned') continue;
-
-    nodes.push({
-      id: peerId,
-      label: 'Anonymous Node',
-      tooltip: peerId.slice(0, 20) + '... [' + tier + ' — disconnected]',
-      type: tier,
-      color: colors[tier],
-      radius: tier === 'excommunicado' ? 8 : 11,
-    });
-    edges.push({
-      from: status.peer_id,
-      to: peerId,
-      color: hexToRgba(colors[tier], 0.15),
-      width: 1,
-      dashed: true,
-    });
-  }
-
-  // If no peers at all, add ghost nodes for visual appeal
-  if (peerList.length === 0 && trustMap.size === 0) {
+  // If no peers, add ghost nodes for visual appeal
+  if (peerList.length === 0) {
     for (let i = 0; i < 3; i++) {
       const id = `ghost-${i}`;
       nodes.push({

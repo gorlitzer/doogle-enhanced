@@ -1,6 +1,5 @@
 // Doogle v2 — About Page: Interactive, visual, simple explanations (tabbed layout)
 import { api } from '../api.js';
-import { navGen } from '../nav-gen.js';
 import { icon, getCSS, hexToRgba, showModal } from '../components.js';
 
 let activeTab = 'overview';
@@ -10,14 +9,13 @@ const pipelineSteps = [
   {
     icon: 'globe', title: 'Seed URL', color: 'var(--accent)',
     eli5: 'You give Doogle a website address, like telling a puppy "go fetch!"',
-    detail: 'A URL is added to the frontier via seed, peer gossip, or discovery. Domain ownership is checked — the URL is routed to the shard owner or crawled locally.',
+    detail: 'A URL is added to the frontier via seed, peer gossip, or discovery. The scheduler deduplicates and prioritizes by domain.',
     modal: `<p>URLs enter the system from three sources:</p>
       <ul>
-        <li><strong>Seed URLs</strong> — manually provided via CLI flag, API, or wizard</li>
+        <li><strong>Seed URLs</strong> — manually provided via CLI flag or API</li>
         <li><strong>Peer Gossip</strong> — discovered URLs broadcast via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a></li>
         <li><strong>Link Discovery</strong> — extracted from crawled pages</li>
       </ul>
-      <p>Before scheduling, each URL goes through a <strong>domain ownership check</strong>: if this node owns the domain in the shard ring, it schedules locally; otherwise, the task is forwarded to the owner via <code>/doogle/crawl/1.0.0</code>. If the owner is offline, the node falls back to crawling locally.</p>
       <p>The frontier scheduler uses persistent URL deduplication (SHA-256 keyed, backed by <a href="https://dgraph.io/badger" target="_blank">BadgerDB</a>) to avoid re-crawling. URLs are prioritized by domain freshness and crawl depth.</p>`,
   },
   {
@@ -36,7 +34,7 @@ const pipelineSteps = [
   {
     icon: 'cpu', title: 'Analyze', color: 'var(--purple)',
     eli5: 'Doogle figures out what the page is about — is it about cats? Coding? Pizza recipes?',
-    detail: 'Readability-style content extraction (Arc90 algorithm) pulls clean body text. TTFB + performance + mobile metrics. Duplicate detection, link graph, and URL quality analysis.',
+    detail: 'Readability-style content extraction (Arc90 algorithm) pulls clean body text. Duplicate detection, link graph, and URL quality analysis.',
     modal: `<p>Every crawled document goes through content analysis:</p>
       <ul>
         <li><strong>Readability Extraction</strong> — Arc90-style algorithm scores block elements (div, article, section) by paragraph count, text length, and class/ID signals to find the main content area, stripping boilerplate</li>
@@ -50,14 +48,13 @@ const pipelineSteps = [
   {
     icon: 'star', title: 'Score', color: 'var(--amber)',
     eli5: 'Doogle gives the page a report card — is it well-written? Trustworthy? Useful?',
-    detail: '28-feature neural-style scoring: 12 base quality signals + 14 query-document interaction features + CTR/dwell/mobile/performance signals. ML learn-to-rank auto-trains from click data every 6h.',
-    modal: `<p>Quality scoring combines <strong>28 features</strong> across three categories:</p>
-      <h4>12 Base Signals (index-time)</h4>
+    detail: '12-signal scoring: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
+    modal: `<p>Quality scoring combines 12 signals into a weighted score:</p>
       <ul>
         <li><strong>E-E-A-T</strong> (15%) — expertise, experience, authority, trust</li>
         <li><strong>Quality</strong> (10%) — content depth, heading structure, media richness</li>
         <li><strong>PageRank</strong> (15%) — graph-based link authority (<a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">Wikipedia</a>)</li>
-        <li><strong>Domain Authority</strong> (10%) — site-level reputation: avg PageRank, avg quality, backlink domains + behavioral CTR/dwell</li>
+        <li><strong>Domain Authority</strong> (10%) — site-level reputation: avg PageRank, avg quality, backlink domains</li>
         <li><strong>Readability</strong> (8%) — Flesch-Kincaid score</li>
         <li><strong>Citation</strong> (8%) — references to/from other sources</li>
         <li><strong>Freshness</strong> (8%) — graduated decay with time-sensitive vs evergreen half-lives</li>
@@ -67,18 +64,7 @@ const pipelineSteps = [
         <li><strong>Link</strong> (5%) — inbound/outbound link structure</li>
         <li><strong>Author Credibility</strong> (5%) — author expertise signals</li>
       </ul>
-      <h4>14 Query-Document Interaction Features (query-time)</h4>
-      <ul>
-        <li><strong>Term Overlap</strong> — title, body, heading, URL term coverage</li>
-        <li><strong>Exact Match</strong> — query substring in title</li>
-        <li><strong>TF-IDF Similarity</strong> — cosine similarity of query/document embeddings</li>
-        <li><strong>Term Proximity</strong> — average distance between query terms in content</li>
-        <li><strong>IDF-Weighted Overlap</strong> — rare query terms in document</li>
-        <li><strong>CTR Score</strong> — position-debiased click-through rate × dwell quality</li>
-        <li><strong>Performance Score</strong> — Core Web Vitals (TTFB, page size, resources)</li>
-        <li><strong>Mobile Score</strong> — viewport meta, responsive CSS, touch-friendliness</li>
-      </ul>
-      <p>These features are combined into a <strong>StaticScore</strong> at index time: <code>(0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code>, then refined at query time by the neural LTR model.</p>`,
+      <p>These signals are combined into a <strong>StaticScore</strong> at index time: <code>(0.5 + weightedSignals * 2.0) * (1.0 - spamScore * 0.8)</code></p>`,
   },
   {
     icon: 'shield', title: 'Filter Spam', color: 'var(--red)',
@@ -104,21 +90,20 @@ const pipelineSteps = [
   {
     icon: 'search', title: 'Search', color: 'var(--accent)',
     eli5: 'You ask a question, and Doogle looks through its filing cabinet super fast to find the best answers.',
-    detail: 'Hybrid BM25+vector search with RRF fusion. 28-feature neural-style LTR with CTR/dwell signals. Intent classification, synonym expansion, entity cards, and multilingual semantic matching.',
+    detail: 'Queries are parsed, intent is classified, synonyms expanded, matched against Bleve, then ranked by 12 signals with domain diversity and spelling suggestions.',
     modal: `<p>The search pipeline parses your query into structured components:</p>
       <ul>
-        <li><strong>Hybrid Search</strong> — BM25 (Bleve) + TF-IDF vector similarity merged via Reciprocal Rank Fusion (RRF, k=60)</li>
-        <li><strong>28-Feature Neural LTR</strong> — gradient-boosted ML model with query-document interaction features, CTR/dwell signals, performance and mobile scores — auto-trains from click data every 6h</li>
-        <li><strong>Entity Cards</strong> — NER-extracted entities appear as knowledge graph cards above search results</li>
-        <li><strong>Multilingual Matching</strong> — cross-lingual dictionary projection enables searching in 9 languages</li>
         <li><strong>Intent Classification</strong> — navigational, informational, transactional, or local — adjusts ranking weights per query</li>
         <li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs (e.g., "js" → "javascript", "k8s" → "kubernetes") added as low-boost clauses</li>
         <li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein against the index dictionary</li>
         <li><strong>Phrases</strong> — <code>"exact match"</code> terms</li>
         <li><strong>Boolean operators</strong> — <code>-exclude</code>, <code>OR</code> disjunctions</li>
+        <li><strong>Site filter</strong> — <code>site:example.com</code></li>
+        <li><strong>Language filter</strong> — <code>lang:de</code> with language-specific stemmers (15 languages)</li>
         <li><strong>Search dorks</strong> — <code>intitle:</code>, <code>inurl:</code>, <code>intext:</code>, <code>filetype:</code>, <code>before:/after:</code>, <code>has:https</code></li>
+        <li><strong>Fuzzy matching</strong> — typo tolerance for short queries</li>
       </ul>
-      <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay * intentMultiplier</code> (or LTR model score when trained)</p>
+      <p>Results are ranked: <code>final = BM25 * StaticScore * freshnessDecay * intentMultiplier</code></p>
       <p><strong>Domain diversity:</strong> max 2 results per domain in top 10 — prevents one site from monopolizing results.</p>
       <p><strong>Passage snippets:</strong> sentence-level extraction with term highlight positions for rich rendering.</p>
       <p>BM25 is the text relevance engine inside <a href="https://blevesearch.com/" target="_blank">Bleve</a>. StaticScore is pre-computed at index time. Freshness uses graduated exponential decay with configurable half-lives (7 days for time-sensitive, 365 days for evergreen).</p>`,
@@ -140,19 +125,10 @@ const pipelineSteps = [
 const capabilities = [
   { icon: 'download', title: 'Distributed Crawling', desc: 'Multi-worker crawl engine with per-domain rate limiting, robots.txt respect, and configurable depth.',
     modal: `<p>The crawler uses a goroutine worker pool (default 4) with per-domain rate limiting. Each domain gets its own crawl queue with configurable max depth. Respects robots.txt exclusion rules and supports custom User-Agent strings.</p><p>Reference: Go's <code>net/http</code> + <a href="https://github.com/PuerkitoBio/goquery" target="_blank">goquery</a> for HTML parsing.</p>` },
-  { icon: 'globe', title: 'Domain-Aware Crawl Routing', desc: 'The shard ring assigns each domain to a specific node. Before crawling, ownership is checked — non-owners forward tasks to the responsible peer automatically.',
-    modal: `<p>Every URL is routed through domain ownership checks before crawling:</p>
-      <ul>
-        <li><strong>Own domain?</strong> Schedule locally in the crawl pipeline</li>
-        <li><strong>Not owned?</strong> Forward the CrawlTask to the shard owner via <code>/doogle/crawl/1.0.0</code></li>
-        <li><strong>Owner offline?</strong> Fall back to local crawl (graceful degradation)</li>
-      </ul>
-      <p>This prevents two nodes from crawling the same domain even if they both select the same seed categories. The consistent hash ring handles domain assignment with 64 virtual nodes per peer for even distribution.</p>
-      <p>Monitoring: the admin dashboard shows forwarded/received task counts per node, owned domains, and a full domain ownership map at <code>/api/admin/domains</code>.</p>` },
   { icon: 'search', title: 'Full-Text Search (BM25)', desc: 'Bleve-powered search with intent classification, synonym expansion, spelling correction, boolean operators, search dorks, 15 language stemmers, domain diversity, and passage snippets.',
     modal: `<p><a href="https://blevesearch.com/" target="_blank">Bleve</a> provides BM25-based full-text search. The pipeline: parse query → classify intent (navigational/informational/transactional/local) → expand synonyms (100+ pairs) → build Bleve query tree → match → intent-aware re-rank → domain diversity (max 2 per domain in top 10) → passage-based snippets with highlights → spelling suggestion ("Did you mean?").</p><p>Field boosts: title (5x), URL text (3x), headings (2x), description (1.5x), content (1x). Boolean operators, search dorks, phrase matching, fuzzy matching, <code>site:</code> and <code>lang:</code> filters (15 language stemmers).</p><p>Reference: <a href="https://en.wikipedia.org/wiki/Okapi_BM25" target="_blank">BM25 algorithm (Wikipedia)</a></p>` },
-  { icon: 'star', title: 'Neural-Style Ranking (28 Features)', desc: '12 base quality signals + 14 query-document interaction features + CTR/dwell/mobile/performance signals. Gradient-boosted LTR model auto-trains from click data.',
-    modal: `<p>28-feature neural-style ranking evaluates pages across multiple dimensions, mirroring Google's quality rater guidelines. <strong>12 base signals</strong>: E-E-A-T (15%), quality (10%), PageRank (15%), domain authority (10%), URL quality (5%), readability (8%), citation (8%), freshness (8%), relevance (6%), SEO (5%), link structure (5%), and author credibility (5%). <strong>14 interaction features</strong>: term overlap (title/body/heading/URL), exact title match, TF-IDF cosine similarity, term proximity, IDF-weighted overlap, CTR score, mobile score, and performance score. Domain authority blends structural signals with behavioral CTR/dwell data when available.</p>` },
+  { icon: 'star', title: 'Quality Scoring (12 Signals)', desc: '12 weighted scoring signals: E-E-A-T, quality, PageRank, domain authority, URL quality, readability, citation, link, SEO, author credibility, relevance, and freshness.',
+    modal: `<p>12-signal scoring evaluates pages across multiple dimensions, mirroring Google's quality rater guidelines and insights from the Yandex ranking factor leak. Signals include E-E-A-T (15%), quality (10%), PageRank (15%), domain authority (10%), URL quality (5%), readability (8%), citation (8%), freshness (8%), relevance (6%), SEO (5%), link structure (5%), and author credibility (5%). Domain authority aggregates site-level reputation from avg PageRank, avg quality, and backlink domains.</p>` },
   { icon: 'cpu', title: 'Content Analysis', desc: 'Readability-style main content extraction (Arc90 algorithm) plus rich metadata: headings, links, images, OG tags, canonical URLs.',
     modal: `<p>Every crawled document goes through Readability-style content extraction: block elements (div, article, section) are scored by paragraph count, text length, comma density, and class/ID signals to isolate the main content area. Boilerplate (sidebars, navs, footers, ads) is stripped. Also extracts: title, meta description, headings (H1-H6), outbound links (internal/external, nofollow), images with alt text, Open Graph tags, and canonical URLs. URL quality signals score path depth, slug readability, and tracking parameter presence.</p>` },
   { icon: 'shield', title: 'Spam Detection', desc: 'Keyword stuffing detection, cloaking analysis, and quality threshold filtering to keep the index clean.',
@@ -161,8 +137,8 @@ const capabilities = [
     modal: `<p>When a page has 3+ <code>&lt;script&gt;</code> tags, the crawler falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a>. This renders React, Vue, Angular, and Next.js SPAs that would otherwise return empty HTML. Chromium is downloaded automatically on first use (~300MB).</p>` },
   { icon: 'network', title: 'P2P Network (Kademlia)', desc: 'libp2p-based peer discovery via Kademlia DHT, IPFS public DHT auto-discovery, and mDNS. Zero config — every node is equal.',
     modal: `<p>Peer discovery uses three mechanisms: (1) <a href="https://docs.libp2p.io/concepts/discovery-routing/kaddht/" target="_blank">Kademlia DHT</a> for internet-wide routing, (2) <strong>IPFS public DHT routing discovery</strong> for automatic zero-config peer finding — nodes connect to IPFS bootstrap peers and advertise under the rendezvous namespace <code>doogle/network/v2</code>, discovering each other within 30–60 seconds with no manual bootstrap needed, and (3) mDNS for local LAN discovery. Every node is a full peer — no central coordinators. Built on <a href="https://docs.libp2p.io/" target="_blank">libp2p</a>.</p>` },
-  { icon: 'megaphone', title: 'GossipSub Frontier', desc: 'Discovered URLs are broadcast to peers via pub/sub. Each peer checks domain ownership before crawling — non-owners forward tasks to the responsible node.',
-    modal: `<p>Newly discovered URLs are broadcast to all connected peers via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a> pub/sub. On receipt, each peer checks domain ownership via the shard ring — only the assigned owner crawls the URL. Non-owners forward the task to the owner via <code>/doogle/crawl/1.0.0</code>, preventing duplicate crawl work across the network.</p>` },
+  { icon: 'megaphone', title: 'GossipSub Frontier', desc: 'Discovered URLs are broadcast to peers via pub/sub, creating a shared crawl frontier across the network.',
+    modal: `<p>Newly discovered URLs are broadcast to all connected peers via <a href="https://docs.libp2p.io/concepts/pubsub/overview/" target="_blank">GossipSub</a> pub/sub. Nodes check if a URL falls in their shard range before scheduling a crawl, preventing duplicate work.</p>` },
   { icon: 'trendingUp', title: 'PageRank Authority', desc: 'Graph-based link analysis computes authority scores. Cross-domain links get 1.5x weight. Updated every 5 minutes.',
     modal: `<p>PageRank computes page authority from the link graph using iterative power method (damping factor = 0.85, 15 iterations). Cross-domain links receive 1.5x weight. Recomputed every 5 minutes. Reference: <a href="https://en.wikipedia.org/wiki/PageRank" target="_blank">PageRank (Wikipedia)</a></p>` },
   { icon: 'link', title: 'Anchor Text Signals', desc: 'Inbound anchor text is aggregated and indexed, boosting pages for terms used to link to them.',
@@ -186,8 +162,8 @@ const capabilities = [
     modal: `<p>Fleet management enables multi-node orchestration:</p><ul><li><strong>Coordinator/Worker Architecture</strong> — one coordinator manages multiple workers via libp2p stream protocols</li><li><strong>Secure Proxy Tunnel</strong> — workers bind API to localhost; remote access only through encrypted libp2p proxy (<code>/doogle/fleet/proxy/1.0.0</code>)</li><li><strong>HMAC-SHA256 Auth</strong> — all fleet messages signed with a shared 256-bit secret</li><li><strong>Heartbeat Monitoring</strong> — workers send heartbeats every 15s; stale after 60s, offline after 180s</li><li><strong>Fleet Dashboard</strong> — Admin → Fleet shows real-time worker status, stats, and proxy access</li></ul>` },
   { icon: 'shield', title: 'Trust & Safety', desc: 'Peer reputation, spam reporting, auto-quarantine, domain flagging, and gossip-level filtering for network integrity.',
     modal: `<p>Trust & safety features protect the network from abuse:</p><ul><li><strong>Peer Reputation</strong> — trust scores track peer behavior over time</li><li><strong>Spam Reporting</strong> — users can report spam URLs, triggering review and potential auto-quarantine</li><li><strong>Auto-Quarantine</strong> — domains exceeding spam thresholds are automatically quarantined from search results</li><li><strong>Domain Flagging</strong> — admins can flag domains for manual review or permanent blocking</li><li><strong>Gossip-Level Filtering</strong> — spam signals propagate to peers via GossipSub for network-wide protection</li></ul>` },
-  { icon: 'zap', title: 'Search Intelligence', desc: 'Hybrid BM25+vector search, learn-to-rank ML model, entity knowledge cards, trending topics, multilingual semantic search, and click-based training.',
-    modal: `<p>Phase 4 Intelligence features bring ML-powered ranking and semantic understanding:</p><ul><li><strong>Hybrid Search (RRF)</strong> — combines BM25 text matching with TF-IDF vector similarity via Reciprocal Rank Fusion (k=60). Weights: BM25 0.7, vector 0.3</li><li><strong>Learn-to-Rank (LTR)</strong> — gradient-boosted decision stumps trained on click pairs (pairwise RankNet loss). 14 features including BM25, quality, E-E-A-T, freshness, PageRank, domain authority. Auto-trains every 6 hours when 200+ click pairs are available</li><li><strong>Entity Knowledge Cards</strong> — NER extraction identifies entities (people, orgs, places, tech) and builds knowledge graph cards shown above search results</li><li><strong>Multilingual Semantic Search</strong> — cross-lingual dictionary projection (~500 words, 9 languages: EN, DE, FR, ES, IT, PT, NL, RU, SV) maps queries and documents into shared vector space without neural models</li><li><strong>Trend Detection</strong> — hourly-bucketed counters with velocity-based spike detection surface trending queries and domains</li><li><strong>Click Tracking</strong> — records search result clicks (query, URL, position) to generate training data for LTR model improvement</li><li><strong>Intent Classification</strong> — navigational, informational, transactional, or local — with per-intent ranking weight adjustments</li><li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein distance</li><li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs added as low-boost query clauses</li></ul>` },
+  { icon: 'zap', title: 'Search Intelligence', desc: 'Intent classification, spelling correction, synonym expansion, domain diversity, and passage snippets with highlights.',
+    modal: `<p>Search intelligence features improve query understanding and result quality:</p><ul><li><strong>Intent Classification</strong> — queries classified as navigational, informational, transactional, or local, with intent-specific ranking weight adjustments</li><li><strong>Spelling Correction</strong> — "Did you mean?" suggestions via Damerau-Levenshtein distance against the index dictionary</li><li><strong>Synonym Expansion</strong> — 100+ bidirectional pairs (e.g., "js" ↔ "javascript") added as low-boost query clauses</li><li><strong>Domain Diversity</strong> — max 2 results per domain in top 10, preventing single-site monopolization</li><li><strong>Passage Snippets</strong> — sentence-level extraction with term highlight positions for rich result rendering</li></ul>` },
   { icon: 'globe', title: 'Onboarding Wizard', desc: 'Guided 5-step setup that auto-triggers on new nodes. Pick from 16 topic categories, see your node identity, and launch crawling.',
     modal: `<p>When a fresh node starts with 0 indexed documents, the <a href="#/wizard">setup wizard</a> auto-triggers. It walks users through 5 steps:</p><ol><li><strong>Welcome</strong> — intro and context</li><li><strong>Node Identity</strong> — Peer ID, addresses, connected peers</li><li><strong>Choose Focus</strong> — 16 topic categories across 4 groups (Knowledge, Lifestyle, Creative, Technology) plus custom URLs. Each group has a select-all toggle.</li><li><strong>Settings Preview</strong> — crawl depth and workers overview with growth estimate</li><li><strong>Launch</strong> — submit seeds via batch API, live polling of crawl/index counters</li></ol><p>Seeds are submitted via <code>POST /api/crawl/batch</code> (up to 200 URLs). The wizard can be re-accessed anytime from the admin sidebar.</p>` },
   { icon: 'eye', title: 'Theme Animations', desc: '6 themes with unique background animations and animated logo text. Matrix rain, bats, storm rain, particle mesh, aurora, and dust motes.',
@@ -209,11 +185,11 @@ const techStack = [
 ];
 
 const limitations = [
-  { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard. Light nodes proxy queries to full nodes, keeping resource usage low.', badge: 'by design' },
-  { title: 'Limited binary format support', desc: 'PDF text extraction is supported. Other binary formats (DOCX, PPTX) are not yet parsed or indexed.', badge: 'partial' },
+  { title: 'Single-node storage limits', desc: 'Index size is bounded by local disk. Sharding distributes load but each node stores its own shard. Light nodes (planned) will bypass this by proxying to full nodes.', badge: 'by design' },
+  { title: 'No PDF/doc extraction', desc: 'Binary document formats like PDF, DOCX, and PPTX are not yet parsed or indexed.', badge: 'planned' },
   { title: 'No login-gated content', desc: 'Pages behind authentication walls cannot be crawled. Only publicly accessible content is indexed.', badge: 'by design' },
   { title: 'Rate-limited by politeness', desc: 'Strict per-domain rate limiting and robots.txt compliance means some sites crawl slowly. This is intentional.', badge: 'by design' },
-  { title: 'Light nodes are relay-only', desc: 'Light nodes (--light) search and relay but do not crawl or index. They depend on full nodes for content.', badge: 'by design' },
+  { title: 'Full nodes only (for now)', desc: 'Every node currently runs all subsystems (~1-2 GB RAM). Light node mode for edge devices is planned — relay-only, ~50 MB.', badge: 'planned' },
   { title: 'No dark web crawling (yet)', desc: '.onion and I2P crawling is on the roadmap (Phase 3). Requires Tor/I2P integration, SOCKS5 proxy support, and content safety layers.', badge: 'planned' },
   { title: 'No P2P anonymity layer', desc: 'Peers currently see each other\'s IPs. Optional libp2p-over-Tor transport is planned to hide peer identities.', badge: 'planned' },
   { title: 'Language coverage varies', desc: '15 language stemmers are available via lang: filter, but stemmer quality varies. English has the best results; other languages are functional but less tuned.', badge: 'by design' },
@@ -354,79 +330,53 @@ function renderOverview(el) {
     </section>
 
     <section class="about-section about-reveal" id="about-your-role">
-      <h2 class="about-section-title">Your Mastery</h2>
-      <p class="about-section-desc">You are the master of your node. Every search you run, every seed you plant, every spam report you file shapes your corner of the web. These are the facets of your mastery — they emerge naturally from how you use your node.</p>
+      <h2 class="about-section-title">Your Role</h2>
+      <p class="about-section-desc">Doogle works because different people care about different things. Your interests shape the network — no commitment needed, just be yourself.</p>
       <div class="about-vision-grid">
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--accent)">${icon('globe', 28)}</div>
-          <h3>Explorer Mastery</h3>
-          <div class="about-role-affinity" data-role="Explorer"></div>
+          <h3>The Explorer</h3>
           <p>You pick topics in the wizard that interest you — cooking, science, gaming, whatever. Your node crawls those corners of the web and shares what it finds. You're building a specialized index just by browsing what you love.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--green)">${icon('shield', 28)}</div>
-          <h3>Guardian Mastery</h3>
-          <div class="about-role-affinity" data-role="Guardian"></div>
+          <h3>The Guardian</h3>
           <p>You flag spam, phishing, and garbage when you see it. Reports spread across the network and bad actors get quarantined. The more people who flag, the cleaner the index gets for everyone.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--blue)">${icon('network', 28)}</div>
-          <h3>Connector Mastery</h3>
-          <div class="about-role-affinity" data-role="Connector"></div>
+          <h3>The Connector</h3>
           <p>You keep your node running and connected. The longer your node is online, the more peers it serves, the more resilient the network becomes. Just leave it on — that's the whole contribution.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--purple)">${icon('search', 28)}</div>
-          <h3>Specialist Mastery</h3>
-          <div class="about-role-affinity" data-role="Specialist"></div>
+          <h3>The Specialist</h3>
           <p>Over time your node becomes an expert in your topics. Other nodes route queries your way when they need answers in your domain. Nodes naturally specialize — some cover science, others cover local news, others cover niche hobbies.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--amber)">${icon('eye', 28)}</div>
-          <h3>Curator Mastery</h3>
-          <div class="about-role-affinity" data-role="Curator"></div>
+          <h3>The Curator</h3>
           <p>You notice what's good and what's noise. Your browsing patterns, flags, and topic choices train the network's quality signals. The pages you keep coming back to rise; the junk you skip fades. You shape relevance without writing a single rule.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--red, #ef4444)">${icon('megaphone', 28)}</div>
-          <h3>Amplifier Mastery</h3>
-          <div class="about-role-affinity" data-role="Amplifier"></div>
+          <h3>The Amplifier</h3>
           <p>You share seeds with friends, tell communities about Doogle, and help people set up their first node. Every person you bring in adds new topics, new perspectives, and new corners of the web to the collective index.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--green)">${icon('trendingUp', 28)}</div>
-          <h3>Archivist Mastery</h3>
-          <div class="about-role-affinity" data-role="Archivist"></div>
+          <h3>The Archivist</h3>
           <p>You keep your node running for months, years. Pages that disappear from the live web still live in your index. Your long-running node becomes a time capsule — preserving knowledge that would otherwise be lost.</p>
         </div>
         <div class="about-vision-card">
           <div class="about-vision-icon" style="color:var(--accent)">${icon('code', 28)}</div>
-          <h3>Builder Mastery</h3>
-          <div class="about-role-affinity" data-role="Builder"></div>
+          <h3>The Builder</h3>
           <p>You see what's missing and build it. A better crawler for a specific content type, a new ranking signal, a browser extension. Doogle is open source — the people who use it are the same people who improve it.</p>
         </div>
       </div>
-      <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These facets aren't assigned — they emerge. The more you use your node, the clearer your mastery profile becomes. <a href="#/admin/profile">Visit your Master Profile</a> to see how your behavior shapes your identity.</p>
+      <p class="about-section-desc" style="margin-top:16px;font-size:0.88em;color:var(--text-secondary)">These roles aren't assigned — they emerge. Some don't exist yet and will take shape as the network grows. You might invent a role we never imagined. That's the point: a system that adapts to the people who use it, not the other way around.</p>
     </section>
   `;
-
-  // Async: inject affinity badges from profile data
-  api.profile().then(profile => {
-    const affinities = profile.role_affinities || {};
-    document.querySelectorAll('.about-role-affinity[data-role]').forEach(el => {
-      const role = el.dataset.role;
-      const val = affinities[role] || 0;
-      if (val > 0) {
-        const pct = Math.round(val * 100);
-        el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin:4px 0 8px">
-          <div style="flex:1;height:5px;border-radius:3px;background:var(--border);overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px"></div>
-          </div>
-          <span style="font-size:0.75em;color:var(--text-muted);font-weight:600">${pct}%</span>
-        </div>`;
-      }
-    });
-  }).catch(() => {}); // non-critical
 }
 
 // ─── Tab: How It Works ────────────────────────────────
@@ -608,7 +558,7 @@ function renderRoadmap(el) {
       items: [
         'P2P networking (libp2p TCP+QUIC, Kademlia DHT, IPFS DHT auto-discovery, mDNS, GossipSub, NAT traversal)',
         'Crawler with rate limiting, robots.txt, headless browser, live feed',
-        'Indexer with 12 quality signals, E-E-A-T, spam detection, PageRank',
+        'Indexer with 10+ quality signals, E-E-A-T, spam, PageRank',
         'BM25 search with boolean operators, search dorks, 15 language stemmers, phrases, fuzzy, site:/lang: filters',
         'Admin dashboard with 6 themes, wizard, network graph',
         'Docker + Compose support',
@@ -616,25 +566,20 @@ function renderRoadmap(el) {
     },
     {
       name: 'Phase 2 — Quality & Scale',
-      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
-      progress: 100,
+      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 56,
       items: [
-        'Boolean operators, multi-language search (15 stemmers), search result caching, CLI search tool',
-        'Spam reporting, domain flagging, backup & restore, production builds, fleet management',
-        'Domain-aware crawl coordination (shard ring gates crawl decisions, auto-forwarding to owners)',
-        'Structured data extraction, PDF/doc indexing',
+        '<strong>Done:</strong> boolean operators, multi-language search, search result caching, CLI search tool, spam reporting, domain flagging, backup & restore, production builds, fleet management',
+        '<strong>Remaining:</strong> horizontal sharding, hash ring rebalancing, persistent dedup improvements, structured data extraction, PDF/doc indexing, content verification, image search',
       ],
     },
     {
       name: 'Phase 2.5 — Trust & Safety',
-      status: 'complete', cls: 'about-roadmap-done', badge: 'badge-green',
-      progress: 100,
+      status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
+      progress: 12,
       items: [
-        'Admin trust dashboard with 6 tabs — overview, peers, quarantined, domains, audit trail, submit report',
-        'Graduated trust tiers (trusted → warning → throttled → quarantined → banned), exponential decay',
-        'Trust-weighted voting, reporter credibility tracking, three-strikes permanent ban',
-        'Report rate limiting, consensus-based domain blocking, gossip broadcast',
-        'Hash-chained audit trail with admin actions (dismiss, confirm, unquarantine, unblock)',
+        '<strong>Done:</strong> admin trust UI',
+        '<strong>Remaining:</strong> sybil resistance, consensus-based blocklists, trust decay model, reputation-weighted search ranking, malicious crawl defense, report audit trail, admin allowlist/denylist',
       ],
     },
     {
@@ -646,29 +591,26 @@ function renderRoadmap(el) {
         'I2P support via SAM bridge for eepsite crawling',
         'Privacy-preserving P2P (libp2p-over-Tor, encrypted queries)',
         'Content safety layer (CSAM hash matching, configurable blocklists)',
-        '<em>On hold — prioritizing Intelligence and Ecosystem phases</em>',
       ],
     },
     {
       name: 'Phase 4 — Intelligence',
       status: 'next', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 90,
+      progress: 59,
       items: [
-        '<strong>Done:</strong> intent classification, spelling correction, synonym expansion, domain diversity, passage snippets, domain authority, URL quality signals, readability (Arc90), freshness scoring, 12-signal ranking',
-        '<strong>Done:</strong> semantic search (TF-IDF embeddings + hybrid BM25/vector), knowledge graph with entity cards, click tracking, automatic summarization, topic clustering, trend detection',
-        '<strong>Done:</strong> ML-based learn-to-rank (gradient-boosted decision stumps from click signals), multilingual semantic search (cross-language retrieval via dictionary projection)',
-        '<strong>Done:</strong> master behavioral profile (role affinities, interests, search topics, domain preferences)',
+        '<strong>Done:</strong> intent classification, spelling correction, synonym expansion, domain diversity, passage snippets, domain authority, URL quality signals, readability extraction (Arc90), graduated freshness scoring, 12-signal ranking model',
+        '<strong>Remaining:</strong> semantic search (sentence embeddings, hybrid BM25 + vector), knowledge graph with entity cards, ML-based ranking, automatic summarization, topic clustering, trend detection, multilingual semantic search',
       ],
     },
     {
       name: 'Phase 5 — Ecosystem',
       status: 'planned', cls: 'about-roadmap-next', badge: 'badge-blue',
-      progress: 30,
+      progress: 0,
       items: [
         'Browser extension, mobile client',
-        '<strong>Done:</strong> Light nodes (--light flag, search + relay, no crawl/index)',
-        '<strong>Done:</strong> Multi-platform releases (Linux, macOS, Windows, Android/arm64)',
-        'Plugin system, public Doogle-specific bootstrap network, community governance',
+        'Light nodes (~50 MB RAM, relay-only)',
+        'Plugin system, multi-platform releases',
+        'Public Doogle-specific bootstrap network, community governance',
       ],
     },
   ];
@@ -897,10 +839,8 @@ function typewriter(text) {
 
 // ---- Live Stats ----
 async function loadStats() {
-  const gen = navGen();
   try {
     const s = await api.status();
-    if (gen !== navGen()) return;
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     set('about-stat-docs', s.indexed_docs?.toLocaleString() ?? '0');
     set('about-stat-crawled', s.crawled_urls?.toLocaleString() ?? '0');
@@ -1278,7 +1218,7 @@ function setupArchDiagram() {
     { id: 'streams', label: 'Streams',         sub: 'req/reply',            x: 0.50, y: 0.40, color: blue, layer: 'p2p',
       desc: '/doogle/search, /doogle/crawl, /doogle/index — request-reply protocols over libp2p streams.' },
     { id: 'shard',   label: 'Sharding',        sub: 'Consistent hash',     x: 0.70, y: 0.40, color: blue, layer: 'p2p',
-      desc: 'Domain-based consistent hashing assigns URLs to shard owners for both storage and crawl coordination. Non-owners forward crawl tasks to the responsible peer.' },
+      desc: 'Domain-based consistent hashing assigns URLs to shard owners. Catalog exchange every 60s.' },
     { id: 'replica',  label: 'Replication',     sub: 'N=3 replicas',        x: 0.90, y: 0.40, color: blue, layer: 'p2p',
       desc: 'Documents replicated to N closest peers. Anti-entropy via Merkle root reconciliation.' },
 

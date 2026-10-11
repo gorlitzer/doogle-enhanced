@@ -86,60 +86,6 @@ func TestShardCatalog_JSON(t *testing.T) {
 	}
 }
 
-func TestShardCatalog_CountryField(t *testing.T) {
-	catalog := ShardCatalog{
-		PeerID:   "QmTestPeer",
-		NodeName: "TestNode",
-		Country:  "DE",
-		DocCount: 42,
-	}
-
-	data, err := json.Marshal(catalog)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var decoded ShardCatalog
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatal(err)
-	}
-
-	if decoded.Country != "DE" {
-		t.Fatalf("expected country DE, got %q", decoded.Country)
-	}
-}
-
-func TestShardCatalog_CountryOmitEmpty(t *testing.T) {
-	catalog := ShardCatalog{
-		PeerID:   "QmTestPeer",
-		DocCount: 10,
-	}
-
-	data, err := json.Marshal(catalog)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Country should be omitted when empty
-	raw := string(data)
-	if contains(raw, `"country"`) {
-		t.Fatalf("expected country to be omitted, got: %s", raw)
-	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && searchString(s, sub)
-}
-
-func searchString(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
-
 // ---- ReplicateRequest serialization tests ----
 
 func TestReplicateRequest_JSON(t *testing.T) {
@@ -184,38 +130,5 @@ func TestProtocolConstants(t *testing.T) {
 	// Topics should be unique
 	if URLFrontierTopic == ShardCatalogTopic {
 		t.Fatal("topics should be different")
-	}
-}
-
-// TestFingerprint_DetectsContentDivergence is the M1 regression test: two
-// replicas with the same doc IDs but different content must produce different
-// Merkle roots (previously the ID-only root reported them "in sync" forever).
-func TestFingerprint_DetectsContentDivergence(t *testing.T) {
-	ids := []string{"doc-1", "doc-2", "doc-3"}
-	hashesA := map[string]string{"doc-1": "h1", "doc-2": "h2", "doc-3": "h3"}
-	hashesB := map[string]string{"doc-1": "h1", "doc-2": "h2-CHANGED", "doc-3": "h3"}
-
-	fp := func(m map[string]string) []string {
-		out := make([]string, 0, len(ids))
-		for _, id := range ids {
-			out = append(out, Fingerprint(id, m[id]))
-		}
-		return out
-	}
-
-	rootA := ComputeMerkleRoot(fp(hashesA))
-	rootB := ComputeMerkleRoot(fp(hashesB))
-	if rootA == rootB {
-		t.Fatal("expected different Merkle roots when content diverges")
-	}
-
-	// Same content → same root (order independent).
-	if ComputeMerkleRoot(fp(hashesA)) != ComputeMerkleRoot(fp(hashesA)) {
-		t.Fatal("expected identical roots for identical content")
-	}
-
-	// FingerprintID round-trips the doc ID.
-	if got := FingerprintID(Fingerprint("doc-9", "abc")); got != "doc-9" {
-		t.Fatalf("FingerprintID = %q, want doc-9", got)
 	}
 }

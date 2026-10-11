@@ -13,31 +13,10 @@ type BadgerStore struct {
 }
 
 // NewBadgerStore opens or creates a BadgerDB at the given path.
-// When lowResource is true, caches and compactors are significantly reduced.
-func NewBadgerStore(path string, lowResource bool) (*BadgerStore, error) {
+func NewBadgerStore(path string) (*BadgerStore, error) {
 	opts := badger.DefaultOptions(path).
 		WithLogger(nil). // suppress badger's verbose logging
-		WithCompactL0OnClose(true)
-
-	if lowResource {
-		opts = opts.
-			WithValueLogFileSize(16 << 20).  // 16MB (was 64MB)
-			WithNumMemtables(1).             // (was 2)
-			WithNumLevelZeroTables(1).       // (was 2)
-			WithNumLevelZeroTablesStall(2).  // (was 4)
-			WithBlockCacheSize(4 << 20).     // 4MB (was 32MB)
-			WithIndexCacheSize(2 << 20).     // 2MB (was 16MB)
-			WithNumCompactors(1)             // (was 2)
-	} else {
-		opts = opts.
-			WithValueLogFileSize(64 << 20).
-			WithNumMemtables(2).
-			WithNumLevelZeroTables(2).
-			WithNumLevelZeroTablesStall(4).
-			WithBlockCacheSize(32 << 20).
-			WithIndexCacheSize(16 << 20).
-			WithNumCompactors(2)
-	}
+		WithValueLogFileSize(64 << 20)
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -90,35 +69,6 @@ func (s *BadgerStore) Delete(key []byte) error {
 // DB returns the underlying BadgerDB instance.
 func (s *BadgerStore) DB() *badger.DB {
 	return s.db
-}
-
-// RunGC triggers a BadgerDB value log garbage collection pass.
-func (s *BadgerStore) RunGC() error {
-	return s.db.RunValueLogGC(0.5)
-}
-
-// Scan iterates over all keys with the given prefix, calling fn for each key-value pair.
-// Return true from fn to continue, false to stop.
-func (s *BadgerStore) Scan(prefix []byte, fn func(key, val []byte) bool) error {
-	return s.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.Prefix = prefix
-		it := txn.NewIterator(opts)
-		defer it.Close()
-
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			item := it.Item()
-			key := item.KeyCopy(nil)
-			val, err := item.ValueCopy(nil)
-			if err != nil {
-				return err
-			}
-			if !fn(key, val) {
-				return nil
-			}
-		}
-		return nil
-	})
 }
 
 // Close closes the database.

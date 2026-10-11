@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/doogle/doogle-v2/internal/models"
-	"github.com/doogle/doogle-v2/pkg/urlutil"
 )
 
 func TestCrawlerFeedHandler_ReturnsEvents(t *testing.T) {
@@ -157,82 +156,6 @@ func TestCrawlerFeedHandler_ContentType(t *testing.T) {
 	}
 }
 
-// ---- pprof endpoint tests ----
-//
-// pprof dumps process memory and must be reachable only from loopback. These
-// tests assert both halves of that contract: allowed from 127.0.0.1, forbidden
-// from any other source address.
-
-// loopbackReq builds a request that passes the loopback + Host-allowlist gates.
-func loopbackReq(method, target string) *http.Request {
-	req := httptest.NewRequest(method, target, nil)
-	req.RemoteAddr = "127.0.0.1:54321"
-	req.Host = "127.0.0.1"
-	return req
-}
-
-func TestPprofEndpoint_Index(t *testing.T) {
-	srv := NewServer("127.0.0.1", 0, &Deps{})
-
-	w := httptest.NewRecorder()
-	srv.router.ServeHTTP(w, loopbackReq("GET", "/debug/pprof/"))
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 for loopback /debug/pprof/, got %d", w.Code)
-	}
-}
-
-func TestPprofEndpoint_Cmdline(t *testing.T) {
-	srv := NewServer("127.0.0.1", 0, &Deps{})
-
-	w := httptest.NewRecorder()
-	srv.router.ServeHTTP(w, loopbackReq("GET", "/debug/pprof/cmdline"))
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 for loopback /debug/pprof/cmdline, got %d", w.Code)
-	}
-}
-
-func TestPprofEndpoint_Symbol(t *testing.T) {
-	srv := NewServer("127.0.0.1", 0, &Deps{})
-
-	w := httptest.NewRecorder()
-	srv.router.ServeHTTP(w, loopbackReq("GET", "/debug/pprof/symbol"))
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 for loopback /debug/pprof/symbol, got %d", w.Code)
-	}
-}
-
-// TestPprofEndpoint_ForbiddenFromNetwork is the security regression test: a
-// non-loopback caller must never reach pprof.
-func TestPprofEndpoint_ForbiddenFromNetwork(t *testing.T) {
-	srv := NewServer("127.0.0.1", 0, &Deps{})
-
-	for _, path := range []string{"/debug/pprof/", "/debug/pprof/cmdline", "/debug/pprof/heap"} {
-		req := httptest.NewRequest("GET", path, nil)
-		req.RemoteAddr = "203.0.113.7:40000" // public source address
-		req.Host = "127.0.0.1"
-		w := httptest.NewRecorder()
-		srv.router.ServeHTTP(w, req)
-		if w.Code != http.StatusForbidden {
-			t.Fatalf("expected 403 for remote %s, got %d", path, w.Code)
-		}
-	}
-}
-
-// TestHostAllowlist_RejectsRebinding verifies a rebinding Host header is denied
-// even from a loopback source address.
-func TestHostAllowlist_RejectsRebinding(t *testing.T) {
-	srv := NewServer("127.0.0.1", 0, &Deps{})
-
-	req := httptest.NewRequest("GET", "/api/status", nil)
-	req.RemoteAddr = "127.0.0.1:54321"
-	req.Host = "evil.attacker.com" // DNS-rebound to 127.0.0.1
-	w := httptest.NewRecorder()
-	srv.router.ServeHTTP(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for rebinding host, got %d", w.Code)
-	}
-}
-
 func TestIsSafeURL(t *testing.T) {
 	tests := []struct {
 		url  string
@@ -253,9 +176,9 @@ func TestIsSafeURL(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := urlutil.IsSafeURL(tt.url)
+		got := isSafeURL(tt.url)
 		if got != tt.safe {
-			t.Errorf("IsSafeURL(%q) = %v, want %v", tt.url, got, tt.safe)
+			t.Errorf("isSafeURL(%q) = %v, want %v", tt.url, got, tt.safe)
 		}
 	}
 }

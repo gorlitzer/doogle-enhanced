@@ -26,23 +26,6 @@ func newAndMatchQueryWithAnalyzer(terms string, field string, boost float64, ana
 	return q
 }
 
-// newOrMatchQuery creates a MatchQuery where ANY term can match (OR).
-// Used as a relaxation fallback when AND returns no results.
-func newOrMatchQuery(terms string, field string, boost float64) *query.MatchQuery {
-	q := bleve.NewMatchQuery(terms)
-	q.SetField(field)
-	q.SetBoost(boost)
-	q.SetOperator(query.MatchQueryOperatorOr)
-	return q
-}
-
-// newOrMatchQueryWithAnalyzer creates an OR MatchQuery with a specific analyzer.
-func newOrMatchQueryWithAnalyzer(terms string, field string, boost float64, analyzer string) *query.MatchQuery {
-	q := newOrMatchQuery(terms, field, boost)
-	q.Analyzer = analyzer
-	return q
-}
-
 // BuildQuery translates a ParsedQuery into a Bleve query tree.
 //
 // Architecture: BooleanQuery with two tiers:
@@ -57,61 +40,27 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 	// Resolve language-specific analyzer
 	langAnalyzer := LangAnalyzer(pq.Language)
 
-	// ── Primary tier: AND match across fields (OR if relaxed) ──
+	// ── Primary tier: AND match across fields ──
 	termStr := strings.Join(pq.Terms, " ")
 	if termStr != "" {
-		newMatchFn := newAndMatchQuery
-		newMatchWithAnalyzerFn := newAndMatchQueryWithAnalyzer
-		if pq.UseOR {
-			newMatchFn = newOrMatchQuery
-			newMatchWithAnalyzerFn = newOrMatchQueryWithAnalyzer
-		}
-
 		if langAnalyzer != "" {
 			primaryClauses = append(primaryClauses,
-				newMatchWithAnalyzerFn(termStr, "title", 5.0, langAnalyzer),
-				newMatchWithAnalyzerFn(termStr, "url_text", 3.0, langAnalyzer),
-				newMatchWithAnalyzerFn(termStr, "headings_text", 2.0, langAnalyzer),
-				newMatchWithAnalyzerFn(termStr, "description", 1.5, langAnalyzer),
-				newMatchWithAnalyzerFn(termStr, "content", 1.0, langAnalyzer),
-				newMatchWithAnalyzerFn(termStr, "anchor_text", 2.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "title", 5.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "url_text", 3.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "headings_text", 2.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "description", 1.5, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "content", 1.0, langAnalyzer),
+				newAndMatchQueryWithAnalyzer(termStr, "anchor_text", 2.0, langAnalyzer),
 			)
 		} else {
 			primaryClauses = append(primaryClauses,
-				newMatchFn(termStr, "title", 5.0),
-				newMatchFn(termStr, "url_text", 3.0),
-				newMatchFn(termStr, "headings_text", 2.0),
-				newMatchFn(termStr, "description", 1.5),
-				newMatchFn(termStr, "content", 1.0),
-				newMatchFn(termStr, "anchor_text", 2.0),
+				newAndMatchQuery(termStr, "title", 5.0),
+				newAndMatchQuery(termStr, "url_text", 3.0),
+				newAndMatchQuery(termStr, "headings_text", 2.0),
+				newAndMatchQuery(termStr, "description", 1.5),
+				newAndMatchQuery(termStr, "content", 1.0),
+				newAndMatchQuery(termStr, "anchor_text", 2.0),
 			)
-		}
-
-		// Cross-field recall: the per-field clauses above only match a document
-		// when a SINGLE field contains all terms, so a multi-term query whose
-		// terms are naturally split across fields (title + body) failed the
-		// primary tier and survived only via the low-precision full-OR relaxation.
-		// Add a clause requiring every term to appear in AT LEAST ONE field
-		// (cross-field AND), boosted below single-field matches so exact
-		// single-field hits still rank first.
-		if len(pq.Terms) >= 2 && !pq.UseOR {
-			fields := []string{"title", "url_text", "headings_text", "description", "content", "anchor_text"}
-			var termConjuncts []query.Query
-			for _, t := range pq.Terms {
-				perTerm := make([]query.Query, 0, len(fields))
-				for _, f := range fields {
-					mq := bleve.NewMatchQuery(t)
-					mq.SetField(f)
-					if langAnalyzer != "" {
-						mq.Analyzer = langAnalyzer
-					}
-					perTerm = append(perTerm, mq)
-				}
-				termConjuncts = append(termConjuncts, bleve.NewDisjunctionQuery(perTerm...))
-			}
-			crossField := bleve.NewConjunctionQuery(termConjuncts...)
-			crossField.SetBoost(0.8)
-			primaryClauses = append(primaryClauses, crossField)
 		}
 
 		// Auto phrase boost: when query has 2+ terms, add a phrase match
@@ -242,13 +191,6 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		boolQ.AddMust(langQ)
 	}
 
-	// Country filter: restrict to specific country code
-	if pq.Country != "" {
-		countryQ := bleve.NewTermQuery(pq.Country)
-		countryQ.SetField("country")
-		boolQ.AddMust(countryQ)
-	}
-
 	// ── Search dorks ──
 
 	// intitle: restrict to title field
@@ -283,24 +225,24 @@ func BuildQuery(pq *models.ParsedQuery) query.Query {
 		boolQ.AddMust(ftQ)
 	}
 
-	// before:/after: date range on crawled_at. crawled_at is indexed as a Bleve
-	// DateTime field, so it must be queried with a date-range query — the old
-	// numeric-range query on a datetime field matched nothing.
+	// before:/after: date range on crawled_at (stored as Unix nanoseconds)
 	if pq.Before != "" || pq.After != "" {
-		after := time.Time{}                                   // open lower bound
-		before := time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC) // open upper bound
-		parsed := false
-		if t, err := time.Parse("2006-01-02", pq.After); err == nil {
-			after = t
-			parsed = true
+		var minFloat, maxFloat *float64
+		if pq.After != "" {
+			if t, err := time.Parse("2006-01-02", pq.After); err == nil {
+				v := float64(t.UnixNano())
+				minFloat = &v
+			}
 		}
-		if t, err := time.Parse("2006-01-02", pq.Before); err == nil {
-			before = t
-			parsed = true
+		if pq.Before != "" {
+			if t, err := time.Parse("2006-01-02", pq.Before); err == nil {
+				v := float64(t.UnixNano())
+				maxFloat = &v
+			}
 		}
-		if parsed {
+		if minFloat != nil || maxFloat != nil {
 			inclusive := true
-			dateQ := bleve.NewDateRangeInclusiveQuery(after, before, &inclusive, &inclusive)
+			dateQ := bleve.NewNumericRangeInclusiveQuery(minFloat, maxFloat, &inclusive, &inclusive)
 			dateQ.SetField("crawled_at")
 			boolQ.AddMust(dateQ)
 		}

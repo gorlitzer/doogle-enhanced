@@ -38,55 +38,10 @@ export const icons = {
   flag: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>`,
   gitBranch: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`,
   barChart2: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
-  copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
 };
 
 export function icon(name, size = 24, color = 'currentColor') {
   return `<span class="icon" style="width:${size}px;height:${size}px;color:${color};display:inline-flex;align-items:center;justify-content:center">${icons[name] || ''}</span>`;
-}
-
-// ============================================================
-// COUNTRY FLAG
-// ============================================================
-
-// countryFlag converts an ISO 3166-1 alpha-2 code to a flag emoji.
-// Returns empty string if code is invalid or empty.
-export function countryFlag(code) {
-  if (!code || code.length !== 2) return '';
-  const upper = code.toUpperCase();
-  const cp1 = 0x1F1E6 - 65 + upper.charCodeAt(0);
-  const cp2 = 0x1F1E6 - 65 + upper.charCodeAt(1);
-  return String.fromCodePoint(cp1, cp2);
-}
-
-// countryName returns a human-readable country name for common ISO codes.
-const _countryNames = {
-  US:'United States',GB:'United Kingdom',DE:'Germany',FR:'France',ES:'Spain',IT:'Italy',
-  PT:'Portugal',BR:'Brazil',NL:'Netherlands',RU:'Russia',JP:'Japan',CN:'China',KR:'South Korea',
-  IN:'India',AU:'Australia',CA:'Canada',MX:'Mexico',AR:'Argentina',SE:'Sweden',DK:'Denmark',
-  FI:'Finland',NO:'Norway',PL:'Poland',TR:'Turkey',SA:'Saudi Arabia',HU:'Hungary',RO:'Romania',
-  CZ:'Czechia',CH:'Switzerland',AT:'Austria',BE:'Belgium',IE:'Ireland',NZ:'New Zealand',
-  SG:'Singapore',HK:'Hong Kong',TW:'Taiwan',TH:'Thailand',ID:'Indonesia',MY:'Malaysia',
-  PH:'Philippines',VN:'Vietnam',ZA:'South Africa',EG:'Egypt',NG:'Nigeria',KE:'Kenya',
-  IL:'Israel',UA:'Ukraine',GR:'Greece',CO:'Colombia',CL:'Chile',PE:'Peru',
-};
-export function countryName(code) {
-  if (!code) return '';
-  return _countryNames[code.toUpperCase()] || code.toUpperCase();
-}
-
-// countryBadge renders a small flag + code badge.
-// The country code is peer-supplied (advertised over the shard catalog), so it
-// must be treated as untrusted. Valid ISO 3166-1 alpha-2 codes are exactly two
-// ASCII letters; anything else is rejected outright, which prevents HTML/JS
-// injection through this field (e.g. a peer advertising `"><img onerror=...>`).
-export function countryBadge(code, opts = {}) {
-  if (typeof code !== 'string' || !/^[A-Za-z]{2}$/.test(code)) return '';
-  const upper = code.toUpperCase();
-  const flag = countryFlag(upper);
-  const name = countryName(upper); // safe: name is from our static map or the 2-letter code
-  const size = opts.size || '0.85em';
-  return `<span class="country-badge" title="${name}" style="font-size:${size};display:inline-flex;align-items:center;gap:3px">${flag} <span style="opacity:0.8">${upper}</span></span>`;
 }
 
 // ============================================================
@@ -236,7 +191,7 @@ export function renderBarChart(canvasId, data, opts = {}) {
 }
 
 // ============================================================
-// CANVAS LINE CHART (with hover tooltips)
+// CANVAS LINE CHART
 // ============================================================
 export function renderLineChart(canvasId, series, opts = {}) {
   const canvas = document.getElementById(canvasId);
@@ -255,9 +210,10 @@ export function renderLineChart(canvasId, series, opts = {}) {
   const chartW = W - padding.left - padding.right;
   const chartH = H - padding.top - padding.bottom;
 
+  ctx.fillStyle = getCSS('--bg-card');
+  ctx.fillRect(0, 0, W, H);
+
   if (!series || series.length === 0 || series[0].data.length === 0) {
-    ctx.fillStyle = getCSS('--bg-card');
-    ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = getCSS('--text-muted');
     ctx.font = '13px system-ui';
     ctx.textAlign = 'center';
@@ -268,156 +224,58 @@ export function renderLineChart(canvasId, series, opts = {}) {
   const allVals = series.flatMap(s => s.data.map(d => d.value));
   const maxVal = Math.max(...allVals, 1);
 
-  // Pre-compute all point positions
-  const pointMap = series.map(s => s.data.map((p, i) => ({
-    x: padding.left + (i / Math.max(1, s.data.length - 1)) * chartW,
-    y: padding.top + chartH - (p.value / maxVal) * chartH,
-    value: p.value,
-    label: p.label || '',
-    seriesLabel: s.label || '',
-    color: s.color || getCSS('--accent'),
-  })));
-
-  function draw(hoverIdx) {
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    ctx.fillStyle = getCSS('--bg-card');
-    ctx.fillRect(0, 0, W, H);
-
-    // Grid
-    ctx.strokeStyle = getCSS('--border');
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 4; i++) {
-      const y = padding.top + (chartH / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(padding.left, y);
-      ctx.lineTo(W - padding.right, y);
-      ctx.stroke();
-      ctx.fillStyle = getCSS('--text-muted');
-      ctx.font = '10px system-ui';
-      ctx.textAlign = 'right';
-      ctx.fillText(Math.round(maxVal * (1 - i / 4)).toString(), padding.left - 8, y + 4);
-    }
-
-    // Vertical hover line
-    if (hoverIdx >= 0 && pointMap[0] && pointMap[0][hoverIdx]) {
-      const hx = pointMap[0][hoverIdx].x;
-      ctx.strokeStyle = getCSS('--border-light');
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(hx, padding.top);
-      ctx.lineTo(hx, padding.top + chartH);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // Lines + dots
-    pointMap.forEach((pts, si) => {
-      const color = pts[0]?.color || getCSS('--accent');
-
-      // Line
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      pts.forEach((p, i) => { i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); });
-      ctx.stroke();
-
-      // Dots
-      pts.forEach((p, i) => {
-        const isHovered = i === hoverIdx;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, isHovered ? 5 : 3, 0, Math.PI * 2);
-        ctx.fill();
-        if (isHovered) {
-          ctx.strokeStyle = getCSS('--bg-card');
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
-      });
-    });
-
-    // Legend
-    if (series.length > 1) {
-      let lx = padding.left;
-      series.forEach((s, si) => {
-        const c = pointMap[si][0]?.color || getCSS('--accent');
-        ctx.fillStyle = c;
-        ctx.fillRect(lx, H - 12, 10, 10);
-        ctx.fillStyle = getCSS('--text-secondary');
-        ctx.font = '10px system-ui';
-        ctx.textAlign = 'left';
-        ctx.fillText(s.label || '', lx + 14, H - 3);
-        lx += ctx.measureText(s.label || '').width + 30;
-      });
-    }
-
-    // Tooltip
-    if (hoverIdx >= 0 && pointMap[0] && pointMap[0][hoverIdx]) {
-      const lines = pointMap.map(pts => {
-        const p = pts[hoverIdx];
-        return p ? `${p.seriesLabel ? p.seriesLabel + ': ' : ''}${p.value.toLocaleString()}` : '';
-      }).filter(Boolean);
-      const header = pointMap[0][hoverIdx].label;
-      if (header) lines.unshift(header);
-
-      ctx.font = '11px system-ui';
-      const textW = Math.max(...lines.map(l => ctx.measureText(l).width));
-      const tipW = textW + 16;
-      const tipH = lines.length * 16 + 12;
-      const anchor = pointMap[0][hoverIdx];
-      let tx = anchor.x + 10;
-      let ty = anchor.y - tipH - 6;
-      if (tx + tipW > W - padding.right) tx = anchor.x - tipW - 10;
-      if (ty < padding.top) ty = anchor.y + 10;
-
-      ctx.fillStyle = getCSS('--canvas-tooltip-bg') || 'rgba(0,0,0,0.85)';
-      ctx.beginPath();
-      roundRect(ctx, tx, ty, tipW, tipH, 4);
-      ctx.fill();
-
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'left';
-      lines.forEach((line, li) => {
-        ctx.font = li === 0 && header ? 'bold 11px system-ui' : '11px system-ui';
-        ctx.fillText(line, tx + 8, ty + 14 + li * 16);
-      });
-    }
-
-    ctx.restore();
+  // Grid
+  ctx.strokeStyle = getCSS('--border');
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(W - padding.right, y);
+    ctx.stroke();
+    ctx.fillStyle = getCSS('--text-muted');
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxVal * (1 - i / 4)).toString(), padding.left - 8, y + 4);
   }
 
-  // Initial draw
-  draw(-1);
-
-  // Hover interaction
-  const onMove = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    if (!pointMap[0] || pointMap[0].length === 0) return;
-
-    // Find nearest point index by x-distance
-    let best = -1, bestDist = Infinity;
-    pointMap[0].forEach((p, i) => {
-      const d = Math.abs(mx - p.x);
-      if (d < bestDist) { bestDist = d; best = i; }
+  // Lines
+  series.forEach(s => {
+    const points = s.data;
+    ctx.strokeStyle = s.color || getCSS('--accent');
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      const x = padding.left + (i / Math.max(1, points.length - 1)) * chartW;
+      const y = padding.top + chartH - (p.value / maxVal) * chartH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
-    // Only show tooltip within 20px of a point
-    if (bestDist > 20) best = -1;
-    draw(best);
-    canvas.style.cursor = best >= 0 ? 'crosshair' : 'default';
-  };
-  const onLeave = () => { draw(-1); canvas.style.cursor = 'default'; };
+    ctx.stroke();
 
-  // Remove previous listeners if re-rendered
-  if (canvas._lcMove) canvas.removeEventListener('mousemove', canvas._lcMove);
-  if (canvas._lcLeave) canvas.removeEventListener('mouseleave', canvas._lcLeave);
-  canvas._lcMove = onMove;
-  canvas._lcLeave = onLeave;
-  canvas.addEventListener('mousemove', onMove);
-  canvas.addEventListener('mouseleave', onLeave);
+    // Dots
+    ctx.fillStyle = s.color || getCSS('--accent');
+    points.forEach((p, i) => {
+      const x = padding.left + (i / Math.max(1, points.length - 1)) * chartW;
+      const y = padding.top + chartH - (p.value / maxVal) * chartH;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  });
+
+  // Legend
+  if (series.length > 1) {
+    let lx = padding.left;
+    series.forEach(s => {
+      ctx.fillStyle = s.color || getCSS('--accent');
+      ctx.fillRect(lx, H - 12, 10, 10);
+      ctx.fillStyle = getCSS('--text-secondary');
+      ctx.font = '10px system-ui';
+      ctx.textAlign = 'left';
+      ctx.fillText(s.label || '', lx + 14, H - 3);
+      lx += ctx.measureText(s.label || '').width + 30;
+    });
+  }
 }
 
 // ============================================================
@@ -518,7 +376,6 @@ export class NetworkGraph {
   _startSimulation() {
     if (this.running) return;
     this.running = true;
-    this._startTime = performance.now();
     const tick = () => {
       this._simulate();
       this._draw();
@@ -614,24 +471,9 @@ export class NetworkGraph {
     ctx.setLineDash([]);
 
     // Nodes
-    const t = (performance.now() - (this._startTime || 0)) / 1000;
     for (const n of this.nodes) {
-      const isQuarantined = n.type === 'quarantined';
-      const isBanned = n.type === 'excommunicado';
-
-      // Quarantined: pulsing red glow
-      if (isQuarantined) {
-        const pulse = 0.4 + 0.6 * Math.abs(Math.sin(t * 2));
-        ctx.globalAlpha = pulse;
-        ctx.shadowColor = n.color;
-        ctx.shadowBlur = 12 + 6 * Math.sin(t * 2);
-      }
-      // Banned: faded, shrinking feel
-      else if (isBanned) {
-        ctx.globalAlpha = 0.35 + 0.1 * Math.sin(t * 0.8);
-      }
       // Glow for hovered
-      else if (n === this.hovered) {
+      if (n === this.hovered) {
         ctx.shadowColor = n.color || getCSS('--accent');
         ctx.shadowBlur = 15;
       }
@@ -644,54 +486,15 @@ export class NetworkGraph {
       ctx.shadowBlur = 0;
 
       // Border
-      if (isBanned) {
-        // Banned: dashed border
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = n.color;
-        ctx.lineWidth = 1.5;
-      } else {
-        ctx.setLineDash([]);
-        ctx.strokeStyle = n === this.hovered ? getCSS('--canvas-node-border-hover') : getCSS('--canvas-node-border');
-        ctx.lineWidth = n === this.hovered ? 2 : 1;
-      }
+      ctx.strokeStyle = n === this.hovered ? getCSS('--canvas-node-border-hover') : getCSS('--canvas-node-border');
+      ctx.lineWidth = n === this.hovered ? 2 : 1;
       ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Banned: draw X through the node
-      if (isBanned) {
-        const r = n.radius * 0.55;
-        ctx.strokeStyle = getCSS('--bg-primary') || '#0a0a0f';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(n.x - r, n.y - r); ctx.lineTo(n.x + r, n.y + r);
-        ctx.moveTo(n.x + r, n.y - r); ctx.lineTo(n.x - r, n.y + r);
-        ctx.stroke();
-      }
-
-      // Quarantined: draw warning icon (!)
-      if (isQuarantined) {
-        ctx.fillStyle = getCSS('--bg-primary') || '#0a0a0f';
-        ctx.font = `bold ${n.radius}px system-ui`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('!', n.x, n.y);
-        ctx.textBaseline = 'alphabetic';
-      }
-
-      ctx.globalAlpha = 1;
 
       // Label
       ctx.fillStyle = getCSS('--canvas-text');
       ctx.font = `${n.type === 'self' ? 'bold ' : ''}${n.radius > 14 ? 11 : 9}px system-ui`;
       ctx.textAlign = 'center';
       ctx.fillText(n.label || '', n.x, n.y + n.radius + 14);
-
-      // Version sub-label
-      if (n.version) {
-        ctx.fillStyle = getCSS('--text-muted') || 'rgba(255,255,255,0.4)';
-        ctx.font = '8px system-ui';
-        ctx.fillText(n.version, n.x, n.y + n.radius + 25);
-      }
     }
 
     // Tooltip for hovered

@@ -22,23 +22,10 @@ import (
 	"github.com/lmittmann/tint"
 )
 
-// Set via ldflags at build time.
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 func main() {
 	// Check for subcommands before flag.Parse()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "version", "--version", "-v":
-			runVersion()
-			return
-		case "update":
-			runUpdate(os.Args[2:])
-			return
 		case "search":
 			runSearch(os.Args[2:])
 			return
@@ -48,17 +35,11 @@ func main() {
 		case "restore":
 			runRestore(os.Args[2:])
 			return
-		case "setup":
-			runSetup(os.Args[2:])
-			return
 		}
 	}
 
 	// Load config with defaults, then apply CLI flags
 	cfg := node.DefaultConfig()
-	cfg.Version = version
-	cfg.Commit = commit
-	cfg.BuildDate = date
 	node.ParseFlags(cfg)
 
 	// Set up structured logging
@@ -79,12 +60,8 @@ func main() {
 	})
 	slog.SetDefault(slog.New(handler))
 
-	nodeTypeLabel := "[full node]"
-	if cfg.LightNode {
-		nodeTypeLabel = "[light node]"
-	}
-	slog.Info(fmt.Sprintf("Doogle %s — P2P Decentralized Search Engine %s", version, nodeTypeLabel))
-	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "workers", cfg.Crawler.Workers, "replication", cfg.Index.ReplicationFactor, "log_level", cfg.LogLevel)
+	slog.Info("Doogle v2 — P2P Decentralized Search Engine")
+	slog.Info("config summary", "p2p_port", cfg.P2P.Port, "api_port", cfg.API.Port, "data_dir", cfg.Storage.DataDir, "log_level", cfg.LogLevel)
 
 	// Create and initialize the node
 	n, err := node.New(cfg)
@@ -93,21 +70,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Graceful shutdown on SIGINT/SIGTERM — second signal or 20s timeout forces exit
-	sigCh := make(chan os.Signal, 2)
+	// Graceful shutdown on SIGINT/SIGTERM
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigCh
 		slog.Info("received signal, shutting down", "signal", sig)
-		go func() {
-			select {
-			case <-time.After(20 * time.Second):
-				slog.Error("shutdown timed out — forcing exit")
-			case sig2 := <-sigCh:
-				slog.Warn("second signal — forcing exit", "signal", sig2)
-			}
-			os.Exit(1)
-		}()
 		n.Shutdown()
 		os.Exit(0)
 	}()

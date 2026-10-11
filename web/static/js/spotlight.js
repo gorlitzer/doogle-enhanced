@@ -94,14 +94,8 @@ function drawBarGauge(ctx, x, y, w, h, value, max, color, label) {
     ctx.fillStyle = getCSS('--text-muted');
     ctx.font = '9px system-ui';
     ctx.textAlign = 'left';
-    ctx.fillText(label, x, y - 8);
+    ctx.fillText(label, x, y - 3);
   }
-
-  // Value text on right (above bar, aligned with label)
-  ctx.fillStyle = getCSS('--canvas-text-bold');
-  ctx.font = 'bold 9px system-ui';
-  ctx.textAlign = 'right';
-  ctx.fillText(formatNum(value), x + w, y - 8);
 
   // Background
   roundRect(ctx, x, y, w, h, 3);
@@ -123,6 +117,12 @@ function drawBarGauge(ctx, x, y, w, h, value, max, color, label) {
     ctx.fill();
     ctx.restore();
   }
+
+  // Value text on right
+  ctx.fillStyle = getCSS('--canvas-text-bold');
+  ctx.font = 'bold 9px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText(formatNum(value), x + w, y - 3);
 }
 
 /** 3D cylinder gauge for storage */
@@ -307,8 +307,8 @@ export class SpotlightDiagram {
       // Spotlight-style: panels fill available space in a column grid
       // Components specify { col, row } where col is the grid column
       // and row is vertical position within that column (0-indexed)
-      const pad = 20;
-      const gap = 18;
+      const pad = 12;
+      const gap = 10;
 
       // Group components by column
       const colGroups = new Map();
@@ -609,7 +609,7 @@ export class SpotlightDiagram {
 
   _drawGrid(ctx, W, H) {
     ctx.save();
-    ctx.strokeStyle = hexToRgba(getCSS('--border'), 0.08);
+    ctx.strokeStyle = hexToRgba(getCSS('--border'), 0.15);
     ctx.lineWidth = 0.5;
     const step = 40;
     for (let x = step; x < W; x += step) {
@@ -638,6 +638,9 @@ export class SpotlightDiagram {
       const tp = this._edgePoint(to, from);
 
       ctx.save();
+      ctx.strokeStyle = hexToRgba(getCSS('--border-light'), 0.4);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
 
       const dx = tp.x - fp.x;
       const dy = tp.y - fp.y;
@@ -646,18 +649,6 @@ export class SpotlightDiagram {
       const cp2x = fp.x + dx * 0.6;
       const cp2y = tp.y;
 
-      // Subtle glow layer
-      ctx.strokeStyle = hexToRgba(getCSS('--accent'), 0.08);
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(fp.x, fp.y);
-      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tp.x, tp.y);
-      ctx.stroke();
-
-      // Main connection line
-      ctx.strokeStyle = hexToRgba(getCSS('--border-light'), 0.45);
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 4]);
       ctx.beginPath();
       ctx.moveTo(fp.x, fp.y);
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, tp.x, tp.y);
@@ -666,12 +657,11 @@ export class SpotlightDiagram {
 
       // Arrow head
       const angle = Math.atan2(tp.y - cp2y, tp.x - cp2x);
-      const arrowLen = 9;
-      ctx.fillStyle = hexToRgba(getCSS('--border-light'), 0.55);
+      ctx.fillStyle = hexToRgba(getCSS('--border-light'), 0.5);
       ctx.beginPath();
       ctx.moveTo(tp.x, tp.y);
-      ctx.lineTo(tp.x - arrowLen * Math.cos(angle - 0.35), tp.y - arrowLen * Math.sin(angle - 0.35));
-      ctx.lineTo(tp.x - arrowLen * Math.cos(angle + 0.35), tp.y - arrowLen * Math.sin(angle + 0.35));
+      ctx.lineTo(tp.x - 8 * Math.cos(angle - 0.4), tp.y - 8 * Math.sin(angle - 0.4));
+      ctx.lineTo(tp.x - 8 * Math.cos(angle + 0.4), tp.y - 8 * Math.sin(angle + 0.4));
       ctx.closePath();
       ctx.fill();
 
@@ -741,27 +731,12 @@ export class SpotlightDiagram {
 
       const alpha = t < 0.1 ? t / 0.1 : t > 0.9 ? (1 - t) / 0.1 : 1;
 
-      // Trail (3 fading dots behind the particle)
-      for (let ti = 3; ti >= 1; ti--) {
-        const tt = Math.max(0, t - ti * 0.018);
-        const tit = 1 - tt;
-        const tx = tit*tit*tit*fp.x + 3*tit*tit*tt*cp1x + 3*tit*tt*tt*cp2x + tt*tt*tt*tp.x;
-        const ty = tit*tit*tit*fp.y + 3*tit*tit*tt*cp1y + 3*tit*tt*tt*cp2y + tt*tt*tt*tp.y;
-        ctx.save();
-        ctx.globalAlpha = alpha * (0.15 - ti * 0.035);
-        ctx.fillStyle = accent;
-        ctx.beginPath();
-        ctx.arc(tx, ty, 3 - ti * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
       // Glow
       ctx.save();
-      ctx.globalAlpha = alpha * 0.35;
+      ctx.globalAlpha = alpha * 0.3;
       ctx.fillStyle = accent;
       ctx.shadowColor = accent;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(x, y, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -770,9 +745,9 @@ export class SpotlightDiagram {
       // Core
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = getCSS('--canvas-text-bold');
+      ctx.fillStyle = accent;
       ctx.beginPath();
-      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -851,15 +826,14 @@ export class SpotlightDiagram {
       ctx.restore();
     }
 
-    // Render gauges — reserve vertical space for metrics so labels don't overlap
+    // Render gauges
     const gauges = box.gauges || [];
-    const metrics = box.metrics || [];
-    const metricsReserve = gauges.length > 0 && metrics.length > 0 ? metrics.length * 13 + 8 : 0;
     const gaugeAreaY = y + 28;
-    const gaugeAreaH = h - 32 - metricsReserve;
+    const gaugeAreaH = h - 32;
     this._drawGauges(ctx, x, gaugeAreaY, w, gaugeAreaH, gauges);
 
     // Render text metrics below gauges
+    const metrics = box.metrics || [];
     if (metrics.length > 0) {
       const metricsY = gauges.length > 0 ? y + h - 4 - metrics.length * 13 : gaugeAreaY + 6;
       ctx.fillStyle = getCSS('--text-secondary');
@@ -876,8 +850,7 @@ export class SpotlightDiagram {
     if (!gauges || gauges.length === 0) return;
 
     const count = gauges.length;
-    const allCylinders = gauges.every(g => g.type === 'cylinder');
-    const tall = !allCylinders && areaH > 150 && count <= 3;
+    const tall = areaH > 150 && count <= 3; // Stack vertically in tall panels
 
     if (tall) {
       // Vertical stacking
@@ -946,7 +919,7 @@ export class SpotlightDiagram {
     if (tipY < 8) tipY = box.y + box.h + 10;
 
     ctx.fillStyle = getCSS('--canvas-tooltip-bg');
-    ctx.shadowColor = hexToRgba(getCSS('--bg-primary'), 0.7);
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = 16;
     roundRect(ctx, tipX, tipY, maxW, tipH, 6);
     ctx.fill();
@@ -960,60 +933,5 @@ export class SpotlightDiagram {
       ctx.fillText(allLines[i], tipX + 12, tipY + 18 + i * 18);
     }
     ctx.restore();
-  }
-}
-
-// ============================================================
-// MOBILE CARD FALLBACK — replaces canvas below MOBILE_BP
-// ============================================================
-const HEALTH_COLORS = { green: 'var(--green)', amber: 'var(--amber)', red: 'var(--red)' };
-
-export function renderMobileCards(container, boxes, navRoutes) {
-  container.innerHTML = '';
-  for (const box of boxes) {
-    const route = navRoutes && navRoutes[box.id];
-    const card = document.createElement(route ? 'a' : 'div');
-    card.className = 'mobile-card';
-    if (route) { card.href = route; card.style.textDecoration = 'none'; card.style.color = 'inherit'; }
-
-    const dot = HEALTH_COLORS[box.health] || HEALTH_COLORS.green;
-    const gauges = box.gauges || [];
-    const metrics = box.metrics || [];
-
-    // Pick primary gauge — first counter or first ring
-    const primary = gauges.find(g => g.type === 'counter') || gauges[0];
-    let primaryHTML = '';
-    if (primary) {
-      const val = primary.max != null && primary.max <= 1
-        ? (primary.max > 0 ? ((Math.min(1, primary.value / primary.max) * 100).toFixed(0) + '%') : '0%')
-        : formatNum(primary.value);
-      primaryHTML = `
-        <div class="mc-primary" style="color:${primary.color || 'var(--accent)'}">${val}</div>
-        <div class="mc-primary-label">${primary.label || ''}</div>
-      `;
-    }
-
-    // Secondary gauges (skip the primary)
-    const secondary = gauges.filter(g => g !== primary);
-    let secHTML = '';
-    for (const g of secondary) {
-      const val = g.max != null && g.max <= 1
-        ? (g.max > 0 ? ((Math.min(1, g.value / g.max) * 100).toFixed(0) + '%') : '0%')
-        : formatNum(g.value);
-      secHTML += `<div>${g.label || ''}: ${val}</div>`;
-    }
-    for (const m of metrics) {
-      secHTML += `<div>${m}</div>`;
-    }
-
-    card.innerHTML = `
-      <div class="mc-header">
-        <span class="mc-dot" style="background:${dot}"></span>
-        <span class="mc-label">${box.label || box.id}</span>
-      </div>
-      ${primaryHTML}
-      ${secHTML ? `<div class="mc-secondary">${secHTML}</div>` : ''}
-    `;
-    container.appendChild(card);
   }
 }

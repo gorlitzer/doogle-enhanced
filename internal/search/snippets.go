@@ -3,7 +3,6 @@ package search
 import (
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // Snippet holds an extracted passage with highlight positions.
@@ -186,15 +185,11 @@ func findHighlights(text string, lowerTerms []string) []Highlight {
 				break
 			}
 			absStart := start + idx
-			absEnd := absStart + len(term)
-			// Emit rune (code-point) offsets, not byte offsets, so consumers that
-			// index by code point (e.g. JavaScript strings) align correctly on
-			// text containing multibyte UTF-8 characters.
 			highlights = append(highlights, Highlight{
-				Start: utf8.RuneCountInString(text[:absStart]),
-				End:   utf8.RuneCountInString(text[:absEnd]),
+				Start: absStart,
+				End:   absStart + len(term),
 			})
-			start = absEnd
+			start = absStart + len(term)
 		}
 	}
 

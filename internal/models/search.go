@@ -11,7 +11,6 @@ type ParsedQuery struct {
 	Phrases      []string // from "quoted strings"
 	SiteDomain   string   // from site:example.com
 	Language     string   // from lang:xx filter (empty = any)
-	Country      string   // from country:XX filter (empty = any)
 	ExcludeTerms []string // from -term (NOT operator)
 	OrGroups     [][]string          // groups of OR'd terms
 	InTitle      string              // from intitle:term
@@ -22,7 +21,6 @@ type ParsedQuery struct {
 	After        string              // from after:YYYY-MM-DD
 	HasHTTPS     bool                // from has:https
 	UseFuzzy     bool                // true for short queries (≤3 terms)
-	UseOR        bool                // true to relax AND to OR (query relaxation fallback)
 	CleanedQuery string              // fallback plain string
 	Synonyms     []string            // synonym expansions for query terms
 	PeerFilter   string              // from peer:PEERID — restrict to origin peer
@@ -36,15 +34,6 @@ type SearchRequest struct {
 	PageSize int    `json:"page_size"`
 }
 
-// InstantAnswer represents a computed answer shown above search results.
-type InstantAnswer struct {
-	Type   string `json:"type"`             // "calculator", "conversion", "time", "date", "days_until", "featured_snippet"
-	Query  string `json:"query"`
-	Answer string `json:"answer"`
-	Detail string `json:"detail,omitempty"`
-	Source string `json:"source,omitempty"` // URL for featured snippets
-}
-
 // SearchResponse contains search results.
 type SearchResponse struct {
 	Query      string         `json:"query"`
@@ -53,19 +42,11 @@ type SearchResponse struct {
 	Page       int            `json:"page"`
 	PageSize   int            `json:"page_size"`
 	TookMs     int64          `json:"took_ms"`
-	PeersAsked     int            `json:"peers_asked,omitempty"`
-	SearXNGResults int            `json:"searxng_results,omitempty"`
+	PeersAsked int            `json:"peers_asked,omitempty"`
 
 	// Search intelligence
-	Suggestion    string        `json:"suggestion,omitempty"`     // "Did you mean: X?"
-	Intent        string        `json:"intent,omitempty"`         // informational, navigational, transactional, local
-	SearchMode    string        `json:"search_mode,omitempty"`    // "bm25", "hybrid"
-	EntityCard    *EntityCard   `json:"entity_card,omitempty"`    // knowledge graph card
-	RelatedTopics []string      `json:"related_topics,omitempty"` // topic cluster labels
-
-	// Round 2 features
-	FeaturedSnippet *InstantAnswer `json:"featured_snippet,omitempty"`
-	RelatedSearches []string       `json:"related_searches,omitempty"`
+	Suggestion string `json:"suggestion,omitempty"` // "Did you mean: X?"
+	Intent     string `json:"intent,omitempty"`     // informational, navigational, transactional, local
 }
 
 // SearchResult represents a single search hit.
@@ -75,18 +56,11 @@ type SearchResult struct {
 	Description  string  `json:"description"`
 	Domain       string  `json:"domain"`
 	Language     string  `json:"language,omitempty"`
-	Country      string  `json:"country,omitempty"`
 	Score        float64 `json:"score"`
-	// BM25 is the immutable raw lexical relevance score from the index. Score is
-	// mutated by re-ranking, so scorers read BM25 (not Score) as their relevance
-	// input — otherwise repeated re-ranking compounds the quality multiplier.
-	BM25         float64 `json:"-"`
 	PeerID         string  `json:"peer_id,omitempty"`
 	PeerName       string  `json:"peer_name,omitempty"`
 	OriginPeerID   string  `json:"origin_peer_id,omitempty"`
 	OriginPeerName string  `json:"origin_peer_name,omitempty"`
-	Source         string  `json:"source,omitempty"` // "doogle" (default), "searxng"
-	ContentHash    string  `json:"-"`                // for near-duplicate/mirror dedup
 
 	// Scoring signals (used by ranker, exposed for transparency)
 	PageRankScore     float64   `json:"pagerank_score,omitempty"`
@@ -106,60 +80,12 @@ type SearchResult struct {
 	IsEvergreen          bool    `json:"is_evergreen,omitempty"`
 	DomainAuthorityScore float64 `json:"domain_authority_score,omitempty"`
 	URLQualityScore      float64 `json:"url_quality_score,omitempty"`
-	VectorSimilarity     float64 `json:"vector_similarity,omitempty"`
-	PerfScore            float64 `json:"perf_score,omitempty"`
-	MobileScore          float64 `json:"mobile_score,omitempty"`
-
-	// Rich snippets
-	SchemaType     string           `json:"schema_type,omitempty"`
-	StructuredData []StructuredItem `json:"structured_data,omitempty"`
-
-	// Trust: true if this document is under quarantine review (24h voting window)
-	Quarantined       bool   `json:"quarantined,omitempty"`
-	QuarantineReason  string `json:"quarantine_reason,omitempty"`
-}
-
-// EntityCard represents a knowledge graph card for an entity.
-type EntityCard struct {
-	Name            string            `json:"name"`
-	Type            string            `json:"type"`
-	Description     string            `json:"description"`
-	Properties      map[string]string `json:"properties,omitempty"`
-	RelatedEntities []EntityCardRef   `json:"related_entities,omitempty"`
-	DocCount        int               `json:"doc_count"`
-}
-
-// EntityCardRef is a reference to a related entity.
-type EntityCardRef struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-// TrendItem represents a trending item with velocity metrics.
-type TrendItem struct {
-	Name          string  `json:"name"`
-	CurrentRate   float64 `json:"current_rate"`
-	AverageRate   float64 `json:"average_rate"`
-	VelocityRatio float64 `json:"velocity_ratio"`
-	Volume        int64   `json:"volume"`
-}
-
-// TrendsResponse holds trending queries and domains.
-type TrendsResponse struct {
-	TrendingQueries []TrendItem `json:"trending_queries"`
-	TrendingDomains []TrendItem `json:"trending_domains"`
-	ComputedAt      time.Time   `json:"computed_at"`
 }
 
 // NodeStatus represents the current state of a node.
 type NodeStatus struct {
 	PeerID         string    `json:"peer_id"`
 	NodeName       string    `json:"node_name,omitempty"`
-	Country        string    `json:"country,omitempty"`
-	NodeType       string    `json:"node_type,omitempty"`
-	Version        string    `json:"version,omitempty"`
-	Commit         string    `json:"commit,omitempty"`
-	BuildDate      string    `json:"build_date,omitempty"`
 	Addrs          []string  `json:"addrs"`
 	ConnectedPeers int       `json:"connected_peers"`
 	PeerList       []string  `json:"peer_list,omitempty"`
@@ -170,10 +96,6 @@ type NodeStatus struct {
 	StartedAt      time.Time `json:"started_at"`
 	LocalDocs      int       `json:"local_docs"`
 	PeerDocs       int       `json:"peer_docs"`
-	OwnedDomains   int       `json:"owned_domains"`
-	ForwardedTasks int64     `json:"forwarded_tasks"`
-	ReceivedTasks  int64     `json:"received_tasks"`
-	UpdateNeeded   bool      `json:"update_needed,omitempty"`
 
 	// Fleet (omitted when standalone)
 	FleetRole          string `json:"fleet_role,omitempty"`           // "coordinator" or "worker"
@@ -193,9 +115,7 @@ type CrawlerInfo struct {
 	TotalFailed   int64  `json:"total_failed"`
 	ActiveWorkers int64  `json:"active_workers"`
 	SeenURLs      int    `json:"seen_urls"`
-	JSRendered        int64 `json:"js_rendered"`
-	ForwardedTasks    int64 `json:"forwarded_tasks"`
-	ReceivedFromPeers int64 `json:"received_from_peers"`
+	JSRendered    int64  `json:"js_rendered"`
 }
 
 // IndexerInfo holds indexer-specific stats for the admin dashboard.
@@ -236,13 +156,11 @@ type StorageInfo struct {
 type ExplorerStats struct {
 	PeerID     string    `json:"peer_id"`
 	NodeName   string    `json:"node_name,omitempty"`
-	Country    string    `json:"country,omitempty"`
 	DocCount   int       `json:"doc_count"`
 	TrustScore float64   `json:"trust_score"`
 	IsLocal    bool      `json:"is_local"`
 	FirstSeen  time.Time `json:"first_seen,omitempty"`
-	LastSeen    time.Time `json:"last_seen,omitempty"`
-	DomainCount int       `json:"domain_count,omitempty"`
+	LastSeen   time.Time `json:"last_seen,omitempty"`
 }
 
 // LeaderboardResponse is the API response for the WebExplorers leaderboard.
@@ -252,48 +170,9 @@ type LeaderboardResponse struct {
 	LocalPeerID string          `json:"local_peer_id"`
 }
 
-// RelayStats holds stats for a single relay (light) node on the leaderboard.
-type RelayStats struct {
-	PeerID        string    `json:"peer_id"`
-	NodeName      string    `json:"node_name,omitempty"`
-	Country       string    `json:"country,omitempty"`
-	DocsHosted    int       `json:"docs_hosted"`
-	QueriesServed int64     `json:"queries_served"`
-	Uptime        string    `json:"uptime,omitempty"`
-	UptimeSeconds int64     `json:"uptime_seconds,omitempty"`
-	TrustScore    float64   `json:"trust_score"`
-	ConnectedPeers int      `json:"connected_peers"`
-	IsLocal       bool      `json:"is_local"`
-	FirstSeen     time.Time `json:"first_seen,omitempty"`
-	LastSeen      time.Time `json:"last_seen,omitempty"`
-}
-
-// RelayLeaderboardResponse is the API response for the relay node leaderboard.
-type RelayLeaderboardResponse struct {
-	Relays      []RelayStats `json:"relays"`
-	TotalDocs   int          `json:"total_docs"`
-	LocalPeerID string       `json:"local_peer_id"`
-}
-
-// DomainOwnership shows which domains this node owns in the shard ring.
-type DomainOwnership struct {
-	TotalDomains int                `json:"total_domains"`
-	OwnedDomains int                `json:"owned_domains"`
-	Domains      []DomainAssignment `json:"domains"`
-}
-
-// DomainAssignment maps a domain to its shard owner.
-type DomainAssignment struct {
-	Domain  string `json:"domain"`
-	OwnerID string `json:"owner_id"`
-	IsLocal bool   `json:"is_local"`
-}
-
 // PeerInfo holds detailed info about a connected peer.
 type PeerInfo struct {
 	PeerID   string   `json:"peer_id"`
 	NodeName string   `json:"node_name,omitempty"`
-	Country  string   `json:"country,omitempty"`
-	Version  string   `json:"version,omitempty"`
 	Addrs    []string `json:"addrs"`
 }

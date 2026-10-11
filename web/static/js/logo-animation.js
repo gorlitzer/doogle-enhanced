@@ -7,8 +7,6 @@
 //   storm    — electric crackle: letters jolt with lightning flashes
 //   pride    — rainbow shimmer: cycling per-letter rainbow colors
 
-import { isLiteMode } from './lite-mode.js';
-
 const LETTERS = 'DOOGLE';
 let currentTheme = null;
 const navState = { interval: null, animFrame: null };
@@ -19,11 +17,6 @@ export function initLogoAnimation() {
 
   window.addEventListener('themechange', (e) => {
     applyLogoAnim(e.detail.theme);
-  });
-
-  window.addEventListener('litemodechange', () => {
-    const theme = document.documentElement.getAttribute('data-theme') || 'dracula';
-    applyLogoAnim(theme);
   });
 
   const theme = document.documentElement.getAttribute('data-theme') || 'dracula';
@@ -40,9 +33,6 @@ function applyLogoAnim(theme) {
   el.className = 'logo-text';
   el.innerHTML = LETTERS;
   el.style.cssText = '';
-
-  // Lite mode: static text only
-  if (isLiteMode()) return;
 
   applyThemeAnim(el, LETTERS, navState, theme);
 }

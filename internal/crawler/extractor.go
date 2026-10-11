@@ -143,7 +143,7 @@ func ExtractHeadings(doc *goquery.Document) []models.Heading {
 	return headings
 }
 
-// ExtractImages extracts image URLs with alt text, dimensions, and captions.
+// ExtractImages extracts image URLs with alt text.
 func ExtractImages(doc *goquery.Document, baseURL string) []models.Image {
 	var images []models.Image
 	doc.Find("img[src]").Each(func(_ int, s *goquery.Selection) {
@@ -157,34 +157,11 @@ func ExtractImages(doc *goquery.Document, baseURL string) []models.Image {
 		}
 		alt, _ := s.Attr("alt")
 		title, _ := s.Attr("title")
-
-		var width, height int
-		if w, exists := s.Attr("width"); exists {
-			width, _ = strconv.Atoi(w)
-		}
-		if h, exists := s.Attr("height"); exists {
-			height, _ = strconv.Atoi(h)
-		}
-
-		// Try to get caption from figcaption or nearest sibling text
-		caption := ""
-		parent := s.Parent()
-		if goquery.NodeName(parent) == "figure" {
-			caption = strings.TrimSpace(parent.Find("figcaption").Text())
-		}
-
-		img := models.Image{
-			URL:    absURL,
-			Alt:    alt,
-			Title:  title,
-			Width:  width,
-			Height: height,
-		}
-		if caption != "" {
-			img.Context = caption
-		}
-
-		images = append(images, img)
+		images = append(images, models.Image{
+			URL:   absURL,
+			Alt:   alt,
+			Title: title,
+		})
 	})
 	if len(images) > 100 {
 		images = images[:100]
@@ -192,122 +169,8 @@ func ExtractImages(doc *goquery.Document, baseURL string) []models.Image {
 	return images
 }
 
-// enrichImageContext adds surrounding text context to images for better search.
-func enrichImageContext(images []models.Image, content string) {
-	if len(content) == 0 || len(images) == 0 {
-		return
-	}
-	words := strings.Fields(content)
-	if len(words) < 10 {
-		return
-	}
-
-	for i := range images {
-		if images[i].Context != "" {
-			continue // already has caption
-		}
-		// Use alt text to find relevant context in content
-		if images[i].Alt == "" {
-			continue
-		}
-		altLower := strings.ToLower(images[i].Alt)
-		contentLower := strings.ToLower(content)
-		idx := strings.Index(contentLower, altLower)
-		if idx < 0 {
-			// Use first few words of alt as search
-			altWords := strings.Fields(altLower)
-			if len(altWords) >= 2 {
-				idx = strings.Index(contentLower, strings.Join(altWords[:2], " "))
-			}
-		}
-		if idx >= 0 {
-			// Extract ~50 chars of context around the match
-			start := idx - 50
-			if start < 0 {
-				start = 0
-			}
-			end := idx + len(images[i].Alt) + 50
-			if end > len(content) {
-				end = len(content)
-			}
-			images[i].Context = strings.TrimSpace(content[start:end])
-		}
-	}
-}
-
-// RobotsDirectives holds parsed meta robots / X-Robots-Tag directives.
-type RobotsDirectives struct {
-	NoIndex  bool
-	NoFollow bool
-	Raw      string // original content value
-}
-
-// ExtractRobotsMeta parses <meta name="robots"> and <meta name="doogle"> tags.
-func ExtractRobotsMeta(doc *goquery.Document) RobotsDirectives {
-	var d RobotsDirectives
-	doc.Find(`meta[name]`).Each(func(_ int, s *goquery.Selection) {
-		name := strings.ToLower(s.AttrOr("name", ""))
-		if name != "robots" && name != "doogle" {
-			return
-		}
-		content := strings.ToLower(strings.TrimSpace(s.AttrOr("content", "")))
-		if content == "" {
-			return
-		}
-		if d.Raw == "" {
-			d.Raw = content
-		} else {
-			d.Raw += ", " + content
-		}
-		if content == "none" {
-			d.NoIndex = true
-			d.NoFollow = true
-			return
-		}
-		for _, tok := range strings.Split(content, ",") {
-			tok = strings.TrimSpace(tok)
-			switch tok {
-			case "noindex":
-				d.NoIndex = true
-			case "nofollow":
-				d.NoFollow = true
-			}
-		}
-	})
-	return d
-}
-
-// MergeXRobotsTag merges X-Robots-Tag header value into existing directives.
-func MergeXRobotsTag(d *RobotsDirectives, header string) {
-	if header == "" {
-		return
-	}
-	lower := strings.ToLower(header)
-	if d.Raw == "" {
-		d.Raw = lower
-	} else {
-		d.Raw += ", " + lower
-	}
-	if lower == "none" {
-		d.NoIndex = true
-		d.NoFollow = true
-		return
-	}
-	for _, tok := range strings.Split(lower, ",") {
-		tok = strings.TrimSpace(tok)
-		switch tok {
-		case "noindex":
-			d.NoIndex = true
-		case "nofollow":
-			d.NoFollow = true
-		}
-	}
-}
-
 // ExtractLinks discovers all links from the document and categorizes them.
-// If pageNoFollow is true, all links are marked NoFollow (page-level meta robots).
-// URLs are still discovered for crawling — nofollow only affects PageRank.
-func ExtractLinks(doc *goquery.Document, baseURLStr string, pageNoFollow bool) (links []models.Link, discoveredURLs []string) {
+func ExtractLinks(doc *goquery.Document, baseURLStr string) (links []models.Link, discoveredURLs []string) {
 	baseURL, err := url.Parse(baseURLStr)
 	if err != nil {
 		return
@@ -344,7 +207,7 @@ func ExtractLinks(doc *goquery.Document, baseURLStr string, pageNoFollow bool) (
 		text := strings.TrimSpace(s.Text())
 
 		rel, _ := s.Attr("rel")
-		noFollow := pageNoFollow || strings.Contains(strings.ToLower(rel), "nofollow")
+		noFollow := strings.Contains(strings.ToLower(rel), "nofollow")
 
 		links = append(links, models.Link{
 			URL:        absURL,

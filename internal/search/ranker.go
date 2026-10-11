@@ -8,18 +8,6 @@ import (
 	"github.com/doogle/doogle-v2/internal/models"
 )
 
-// PeerTrustFn resolves a peer ID to its trust score (0.0–1.0).
-// When nil, all peers are treated equally (trust=0.5).
-var PeerTrustFn func(peerID string) float64
-
-// PeerTierFn resolves a peer ID to its trust tier (trusted/warning/throttled/quarantined/banned).
-// When nil, tier-based scoring is not applied.
-var PeerTierFn func(peerID string) string
-
-// ActiveLTRModel is the currently active learn-to-rank model.
-// When non-nil and Ready(), it replaces the hand-tuned scoring formula.
-var ActiveLTRModel *LTRModel
-
 // RerankResults re-ranks search results using a multi-factor scoring model.
 // Combines BM25 text relevance with quality signals, freshness decay, and spam penalty.
 func RerankResults(results []models.SearchResult) {
@@ -27,59 +15,14 @@ func RerankResults(results []models.SearchResult) {
 }
 
 // RerankWithIntent re-ranks results with optional intent-based weight adjustments.
-// Uses the LTR model when available, otherwise falls back to hand-tuned weights.
 func RerankWithIntent(results []models.SearchResult, intent *QueryIntent) {
-	useLTR := ActiveLTRModel != nil && ActiveLTRModel.Ready()
-
 	for i := range results {
-		if useLTR {
-			results[i].Score = computeLTRScore(&results[i], intent)
-		} else {
-			results[i].Score = computeFinalScore(&results[i], intent)
-		}
+		results[i].Score = computeFinalScore(&results[i], intent)
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		if results[i].Score != results[j].Score {
-			return results[i].Score > results[j].Score
-		}
-		// Deterministic tie-break so equal scores don't shuffle between runs.
-		return results[i].URL < results[j].URL
+		return results[i].Score > results[j].Score
 	})
-}
-
-// relevanceInput returns the immutable BM25 relevance for a result. Re-ranking
-// overwrites Score, so reading Score as the relevance input would compound the
-// quality multiplier on every pass. Fall back to Score for results that never
-// had BM25 populated (e.g. peer results ranked remotely).
-func relevanceInput(r *models.SearchResult) float64 {
-	if r.BM25 != 0 {
-		return r.BM25
-	}
-	return r.Score
-}
-
-// computeLTRScore uses the trained gradient-boosted model for scoring,
-// with intent and trust adjustments applied on top.
-func computeLTRScore(r *models.SearchResult, intent *QueryIntent) float64 {
-	features := ExtractFeatures(r)
-	score := ActiveLTRModel.Predict(features)
-
-	// Intent adjustment (same multipliers as hand-tuned path)
-	if intent != nil && intent.Confidence > 0.5 {
-		score *= intentMultiplier(r, intent)
-	}
-
-	// Graduated tier-based scoring (replaces linear trust scaling)
-	if PeerTierFn != nil && r.OriginPeerID != "" {
-		tier := PeerTierFn(r.OriginPeerID)
-		score *= tierMultiplier(tier)
-	} else if PeerTrustFn != nil && r.OriginPeerID != "" {
-		trust := PeerTrustFn(r.OriginPeerID)
-		score *= 0.85 + trust*0.30
-	}
-
-	return math.Max(0, score)
 }
 
 // computeFinalScore blends BM25 with quality signals.
@@ -90,7 +33,7 @@ func computeLTRScore(r *models.SearchResult, intent *QueryIntent) float64 {
 //	URLQuality: 0.05, Readability: 0.08, Citation: 0.08, Link: 0.05,
 //	SEO: 0.05, AuthorCredibility: 0.05, Relevance: 0.06, Freshness: 0.08
 func computeFinalScore(r *models.SearchResult, intent *QueryIntent) float64 {
-	bm25 := relevanceInput(r)
+	bm25 := r.Score
 
 	// --- Quality multiplier ---
 	var qualityMultiplier float64
@@ -118,27 +61,9 @@ func computeFinalScore(r *models.SearchResult, intent *QueryIntent) float64 {
 	// Blend: 92% quality multiplier + 8% freshness signal
 	qualityMultiplier = qualityMultiplier*0.92 + freshScore*0.08*2.0
 
-	// --- Mobile/Performance/CTR adjustments ---
-	if r.MobileScore > 0.7 {
-		qualityMultiplier *= 1.05
-	}
-	if r.PerfScore > 0.7 {
-		qualityMultiplier *= 1.03
-	}
-
 	// --- Intent-based adjustments ---
 	if intent != nil && intent.Confidence > 0.5 {
 		qualityMultiplier *= intentMultiplier(r, intent)
-	}
-
-	// --- Reputation-weighted scoring (graduated tiers) ---
-	if PeerTierFn != nil && r.OriginPeerID != "" {
-		tier := PeerTierFn(r.OriginPeerID)
-		qualityMultiplier *= tierMultiplier(tier)
-	} else if PeerTrustFn != nil && r.OriginPeerID != "" {
-		trust := PeerTrustFn(r.OriginPeerID)
-		trustMultiplier := 0.85 + trust*0.30
-		qualityMultiplier *= trustMultiplier
 	}
 
 	final := bm25 * qualityMultiplier
@@ -216,20 +141,4 @@ func graduatedFreshnessScore(crawledAt time.Time, isTimeSensitive, isEvergreen b
 	score := 0.5 + 0.5*math.Exp(-lambda*days)
 
 	return math.Max(0.1, math.Min(1.0, score))
-}
-
-// tierMultiplier maps a trust tier to a search score multiplier.
-func tierMultiplier(tier string) float64 {
-	switch tier {
-	case "trusted":
-		return 1.0
-	case "warning":
-		return 0.80
-	case "throttled":
-		return 0.50
-	case "quarantined", "banned":
-		return 0.0
-	default:
-		return 1.0
-	}
 }

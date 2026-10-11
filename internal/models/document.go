@@ -27,16 +27,11 @@ type Document struct {
 
 	// Metadata
 	Language    string   `json:"language,omitempty"`
-	Country     string   `json:"country,omitempty"` // ISO 3166-1 alpha-2 (e.g. "US", "DE")
 	Categories  []string `json:"categories,omitempty"`
 	Keywords    []string `json:"keywords,omitempty"`
 	OGTitle     string   `json:"og_title,omitempty"`
 	OGDesc      string   `json:"og_description,omitempty"`
 	Canonical   string   `json:"canonical,omitempty"`
-	NoIndex     bool     `json:"noindex,omitempty"`
-	NoFollow    bool     `json:"nofollow,omitempty"`
-	RobotsMeta  string   `json:"robots_meta,omitempty"`
-	XRobotsTag  string   `json:"x_robots_tag,omitempty"`
 	IsHTTPS     bool     `json:"is_https"`
 
 	// Quality scores (set by indexer)
@@ -58,9 +53,6 @@ type Document struct {
 	IsTimeSensitive bool    `json:"is_time_sensitive"`
 	IsEvergreen     bool    `json:"is_evergreen"`
 
-	// Summarization (set by indexer)
-	Summary string `json:"summary,omitempty"`
-
 	// PageRank (set by PageRank computer)
 	PageRankScore float64 `json:"pagerank_score"`
 
@@ -72,34 +64,6 @@ type Document struct {
 
 	// Composite
 	RelevanceScore float64 `json:"relevance_score"`
-
-	// Structured data (Schema.org, JSON-LD, microdata)
-	StructuredData []StructuredItem `json:"structured_data,omitempty"`
-	SchemaType     string           `json:"schema_type,omitempty"`
-
-	// Performance (set by crawler + indexer)
-	TTFB            int     `json:"ttfb_ms,omitempty"`
-	PageSizeBytes   int     `json:"page_size_bytes,omitempty"`
-	ResourceCount   int     `json:"resource_count,omitempty"`
-	ScriptCount     int     `json:"script_count,omitempty"`
-	StylesheetCount int     `json:"stylesheet_count,omitempty"`
-	HasLazyImages   bool    `json:"has_lazy_images,omitempty"`
-	HasAsyncScripts bool    `json:"has_async_scripts,omitempty"`
-	PerfScore       float64 `json:"perf_score,omitempty"`
-
-	// Mobile (set by crawler + indexer)
-	HasViewportMeta bool    `json:"has_viewport_meta,omitempty"`
-	ViewportContent string  `json:"viewport_content,omitempty"`
-	HasMediaQueries bool    `json:"has_media_queries,omitempty"`
-	HasFlexboxGrid  bool    `json:"has_flexbox_grid,omitempty"`
-	HasTouchIcons   bool    `json:"has_touch_icons,omitempty"`
-	SmallFontCount  int     `json:"small_font_count,omitempty"`
-	SmallTapTargets int     `json:"small_tap_targets,omitempty"`
-	MobileScore     float64 `json:"mobile_score,omitempty"`
-
-	// Content verification (Ed25519 signature of content hash)
-	ContentSig    string `json:"content_sig,omitempty"`    // hex-encoded Ed25519 signature
-	ContentSigner string `json:"content_signer,omitempty"` // hex-encoded public key
 }
 
 // Link represents a discovered hyperlink.
@@ -112,18 +76,9 @@ type Link struct {
 
 // Image represents an extracted image.
 type Image struct {
-	URL     string `json:"url"`
-	Alt     string `json:"alt"`
-	Title   string `json:"title,omitempty"`
-	Width   int    `json:"width,omitempty"`
-	Height  int    `json:"height,omitempty"`
-	Context string `json:"context,omitempty"` // surrounding text for image search
-}
-
-// StructuredItem represents extracted Schema.org/JSON-LD/microdata.
-type StructuredItem struct {
-	Type       string            `json:"type"`                 // e.g. "Article", "Product", "Recipe"
-	Properties map[string]string `json:"properties,omitempty"` // key-value pairs
+	URL   string `json:"url"`
+	Alt   string `json:"alt"`
+	Title string `json:"title,omitempty"`
 }
 
 // Heading represents an HTML heading element.

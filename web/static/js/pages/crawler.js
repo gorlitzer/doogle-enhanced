@@ -1,9 +1,7 @@
 // Doogle v2 — Crawler: Dual-View Spotlight Diagram + Management Tabs
 import { api } from '../api.js';
-import { navGen } from '../nav-gen.js';
 import { icon, renderBarChart, renderLineChart, cardSkeleton, escapeHtml, getCSS } from '../components.js';
-import { SpotlightDiagram, formatNum, renderMobileCards } from '../spotlight.js';
-import { isLiteMode } from '../lite-mode.js';
+import { SpotlightDiagram, formatNum } from '../spotlight.js';
 
 // ============================================================
 // GAUGE VIEW — Spotlight grid columns with rich gauges
@@ -11,16 +9,16 @@ import { isLiteMode } from '../lite-mode.js';
 // ============================================================
 const GAUGE_COMPONENTS = [
   // Column 0 — Queue Input
-  { id: 'queue',     label: 'URL Queue',        col: 0, row: 0, boxH: 150 },
-  { id: 'ratelimit', label: 'Rate Limiter',      col: 0, row: 1, boxH: 110 },
+  { id: 'queue',     label: 'URL Queue',        col: 0, row: 0, boxH: 200 },
+  { id: 'ratelimit', label: 'Rate Limiter',      col: 0, row: 1, boxH: 140 },
   // Column 1 — Processing
-  { id: 'workers',   label: 'Worker Pool',       col: 1, row: 0, boxH: 150 },
-  { id: 'fetch',     label: 'HTTP Fetch',        col: 1, row: 1, boxH: 120 },
-  { id: 'extract',   label: 'Content Extractor', col: 1, row: 2, boxH: 100 },
+  { id: 'workers',   label: 'Worker Pool',       col: 1, row: 0, boxH: 200 },
+  { id: 'fetch',     label: 'HTTP Fetch',        col: 1, row: 1, boxH: 160 },
+  { id: 'extract',   label: 'Content Extractor', col: 1, row: 2, boxH: 120 },
   // Column 2 — Auxiliary + Output
-  { id: 'robots',    label: 'robots.txt Cache',  col: 2, row: 0, boxH: 110 },
-  { id: 'redirect',  label: 'Redirect Handler',  col: 2, row: 1, boxH: 100 },
-  { id: 'output',    label: 'To Indexer',        col: 2, row: 2, boxH: 150 },
+  { id: 'robots',    label: 'robots.txt Cache',  col: 2, row: 0, boxH: 140 },
+  { id: 'redirect',  label: 'Redirect Handler',  col: 2, row: 1, boxH: 120 },
+  { id: 'output',    label: 'To Indexer',        col: 2, row: 2, boxH: 200 },
 ];
 
 const GAUGE_CONNECTIONS = [
@@ -65,28 +63,40 @@ const NAV_ROUTES = {
 // STATE
 // ============================================================
 let diagram = null;
-let activeTab = 'architecture';
+let activeTab = 'status';
 let crawlHistory = [];
 let feedLastSeq = 0;
 let feedInterval = null;
 let currentView = localStorage.getItem('doogle-crawler-view') || 'flow';
 let lastData = { status: null, crawler: null };
-let mobileBoxData = new Map();
-const MOBILE_BP = 700;
-let _mobileResizeHandler = null;
 
 // ============================================================
 // PAGE RENDER
 // ============================================================
 export function renderCrawler(container) {
   container.innerHTML = `
-    <div class="page-header">
-      <h2>Crawler</h2>
-      <p>Monitor, configure, and inspect the distributed crawl pipeline</p>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2>Crawler</h2>
+        <p>Internal architecture — how URLs flow through the crawl pipeline</p>
+      </div>
+      <div class="view-toggle" id="view-toggle">
+        <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">
+          ${icon('gitBranch', 16)} Flow
+        </button>
+        <button class="view-toggle-btn ${currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Spotlight gauges">
+          ${icon('barChart2', 16)} Gauges
+        </button>
+      </div>
     </div>
-    <div class="tabs" id="crawler-tabs">
-      <button class="tab active" data-tab="architecture">Architecture</button>
-      <button class="tab" data-tab="status">Status</button>
+    <div class="spotlight-canvas-wrap">
+      <canvas id="crawler-spotlight"></canvas>
+    </div>
+    <div id="crawler-summary" class="spotlight-summary">
+      <div class="loading">Loading crawler data...</div>
+    </div>
+    <div class="tabs" id="crawler-tabs" style="margin-top:20px">
+      <button class="tab active" data-tab="status">Status</button>
       <button class="tab" data-tab="feed">Live Feed</button>
       <button class="tab" data-tab="analytics">Analytics</button>
       <button class="tab" data-tab="seeds">Seeds</button>
@@ -94,6 +104,18 @@ export function renderCrawler(container) {
     </div>
     <div id="crawler-content"></div>
   `;
+
+  // View toggle
+  document.getElementById('view-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('.view-toggle-btn');
+    if (!btn) return;
+    const view = btn.dataset.view;
+    if (view === currentView) return;
+    currentView = view;
+    localStorage.setItem('doogle-crawler-view', view);
+    document.querySelectorAll('#view-toggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    rebuildDiagram();
+  });
 
   // Tabs
   document.querySelectorAll('#crawler-tabs .tab').forEach(tab => {
@@ -105,45 +127,19 @@ export function renderCrawler(container) {
     });
   });
 
+  buildDiagram();
   renderTab();
   loadDiagramData();
 
   window._pageInterval = setInterval(() => {
     loadDiagramData();
-    if (activeTab === 'status' || activeTab === 'analytics' || activeTab === 'architecture') renderTab();
+    if (activeTab === 'status' || activeTab === 'analytics') renderTab();
   }, 5000);
 
   window._pageCleanup = () => {
     if (diagram) { diagram.destroy(); diagram = null; }
     if (feedInterval) { clearInterval(feedInterval); feedInterval = null; }
-    if (_mobileResizeHandler) { window.removeEventListener('resize', _mobileResizeHandler); _mobileResizeHandler = null; }
-    mobileBoxData.clear();
   };
-}
-
-function syncMobileView() {
-  if (activeTab !== 'architecture') return;
-  const isMobile = window.innerWidth < MOBILE_BP || isLiteMode();
-  const canvasWrap = document.getElementById('canvas-wrap');
-  const cardsWrap = document.getElementById('mobile-cards-wrap');
-  const toggleEl = document.getElementById('view-toggle');
-  if (!canvasWrap || !cardsWrap) return;
-
-  if (isMobile) {
-    canvasWrap.style.display = 'none';
-    if (toggleEl) toggleEl.style.display = 'none';
-    cardsWrap.style.display = '';
-    if (mobileBoxData.size > 0)
-      renderMobileCards(cardsWrap, [...mobileBoxData.values()], NAV_ROUTES);
-  } else {
-    canvasWrap.style.display = '';
-    if (toggleEl) toggleEl.style.display = '';
-    cardsWrap.style.display = 'none';
-    if (!diagram) {
-      buildDiagram();
-      if (lastData.status || lastData.crawler) applyDiagramData(lastData.status, lastData.crawler);
-    }
-  }
 }
 
 function buildDiagram() {
@@ -158,8 +154,8 @@ function buildDiagram() {
     layout: isGauge ? 'grid' : 'flow',
     cols: 3,
     rows: isGauge ? 3 : 5,
-    boxW: isGauge ? 160 : 180,
-    boxH: isGauge ? 105 : 90,
+    boxW: isGauge ? 190 : 180,
+    boxH: isGauge ? 130 : 90,
     minHeight: isGauge ? 500 : 560,
     maxHeight: isGauge ? 600 : 680,
     onTooltipExtra: (box, data) => {
@@ -192,42 +188,32 @@ function rebuildDiagram() {
 // DIAGRAM DATA
 // ============================================================
 async function loadDiagramData() {
-  const gen = navGen();
   try {
     const [status, crawler] = await Promise.all([
       api.status().catch(() => null),
       api.crawlerStatus().catch(() => null),
     ]);
-    if (gen !== navGen()) return;
     lastData = { status, crawler };
     applyDiagramData(status, crawler);
   } catch { /* ignore */ }
 }
 
 function applyDiagramData(status, crawler) {
+  if (!diagram) return;
   const s = status || {};
   const cr = crawler || {};
-  if (diagram) diagram.setData({ status, crawler });
+  diagram.setData({ status, crawler });
 
   const isGauge = currentView === 'grid';
   const queueCount = s.urls_in_queue || 0;
   const activeW = cr.active_workers || 0;
-  const totalW = cr.workers || 0;
+  const totalW = cr.workers || cr.total_workers || 4;
   const totalFailed = cr.total_failed || 0;
   const totalCrawled = cr.total_crawled || 0;
   const successPct = (totalCrawled + totalFailed) > 0 ? totalCrawled / (totalCrawled + totalFailed) : 1;
 
-  const comps = isGauge ? GAUGE_COMPONENTS : FLOW_COMPONENTS;
-  const labelMap = {};
-  for (const c of comps) labelMap[c.id] = c.label;
-
-  function setBox(id, data) {
-    if (diagram) diagram.setBoxData(id, data);
-    mobileBoxData.set(id, { id, label: labelMap[id] || id, ...data });
-  }
-
   if (isGauge) {
-    setBox('queue', {
+    diagram.setBoxData('queue', {
       health: queueCount > 0 ? 'green' : 'amber',
       gauges: [
         { type: 'counter', value: queueCount, label: 'queued URLs', color: getCSS('--accent') },
@@ -235,14 +221,14 @@ function applyDiagramData(status, crawler) {
       ],
       metrics: [`Seen: ${formatNum(cr.seen_urls || 0)}`],
     });
-    setBox('ratelimit', {
+    diagram.setBoxData('ratelimit', {
       health: 'green',
       gauges: [
         { type: 'counter', value: cr.rate_limit || 0, label: 'req/min/domain', color: getCSS('--amber') },
       ],
       metrics: ['Per-domain throttle'],
     });
-    setBox('workers', {
+    diagram.setBoxData('workers', {
       health: activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red'),
       gauges: [
         { type: 'ring', value: activeW, max: totalW, label: `${activeW}/${totalW} active`, color: getCSS('--green') },
@@ -250,32 +236,32 @@ function applyDiagramData(status, crawler) {
       ],
       metrics: [],
     });
-    setBox('robots', {
+    diagram.setBoxData('robots', {
       health: 'green',
       gauges: [
         { type: 'ring', value: 1, max: 1, label: 'compliant', color: getCSS('--green') },
       ],
       metrics: ['24h TTL cache'],
     });
-    setBox('fetch', {
+    diagram.setBoxData('fetch', {
       health: totalFailed > totalCrawled * 0.5 ? 'red' : 'green',
       gauges: [
         { type: 'ring', value: successPct, max: 1, label: 'success rate', color: successPct > 0.8 ? getCSS('--green') : getCSS('--amber') },
         { type: 'counter', value: totalFailed, label: 'failed', color: getCSS('--red') },
       ],
-      metrics: [`JS rendered: ${formatNum(cr.js_rendered || 0)}`],
+      metrics: [],
     });
-    setBox('redirect', {
+    diagram.setBoxData('redirect', {
       health: 'green',
       gauges: [],
       metrics: ['Max 10 hops', 'Loop detection'],
     });
-    setBox('extract', {
+    diagram.setBoxData('extract', {
       health: 'green',
       gauges: [],
       metrics: ['Title, desc, links', 'OG tags, images'],
     });
-    setBox('output', {
+    diagram.setBoxData('output', {
       health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
       gauges: [
         { type: 'counter', value: totalCrawled, label: 'to indexer', color: getCSS('--green') },
@@ -283,198 +269,92 @@ function applyDiagramData(status, crawler) {
       metrics: [],
     });
   } else {
-    setBox('queue', {
+    diagram.setBoxData('queue', {
       health: queueCount > 0 ? 'green' : 'amber',
       gauges: [],
       metrics: [`Queued: ${formatNum(queueCount)}`, `Seen: ${formatNum(cr.seen_urls || 0)}`],
     });
-    setBox('ratelimit', {
+    diagram.setBoxData('ratelimit', {
       health: 'green',
       gauges: [],
       metrics: [`${cr.rate_limit || '—'} req/min/domain`],
     });
-    setBox('workers', {
+    diagram.setBoxData('workers', {
       health: activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red'),
       gauges: [],
       metrics: [`Workers: ${activeW}/${totalW}`, `Crawled: ${formatNum(totalCrawled)}`],
     });
-    setBox('robots', {
+    diagram.setBoxData('robots', {
       health: 'green',
       gauges: [],
       metrics: ['robots.txt compliant', '24h TTL cache'],
     });
-    setBox('fetch', {
+    diagram.setBoxData('fetch', {
       health: totalFailed > totalCrawled * 0.5 ? 'red' : 'green',
       gauges: [],
-      metrics: [`Success: ${(successPct * 100).toFixed(0)}%`, `Failed: ${formatNum(totalFailed)}`, `JS: ${formatNum(cr.js_rendered || 0)}`],
+      metrics: [`Success: ${(successPct * 100).toFixed(0)}%`, `Failed: ${formatNum(totalFailed)}`],
     });
-    setBox('redirect', {
+    diagram.setBoxData('redirect', {
       health: 'green',
       gauges: [],
       metrics: ['Max 10 hops', 'Loop detection'],
     });
-    setBox('extract', {
+    diagram.setBoxData('extract', {
       health: 'green',
       gauges: [],
       metrics: ['Title, desc, links', 'OG tags, images'],
     });
-    setBox('output', {
+    diagram.setBoxData('output', {
       health: (s.indexed_docs || 0) > 0 ? 'green' : 'amber',
       gauges: [],
       metrics: [`Output: ${formatNum(totalCrawled)}`],
     });
   }
 
-  if (diagram) diagram.setSpawnRate(Math.max(1, activeW));
-  renderCrawlerDashboard(s, cr);
-  syncMobileView();
+  diagram.setSpawnRate(Math.max(1, activeW));
+  renderCrawlerSummary(s, cr);
 }
 
-// ── Dashboard Helpers ──
-
-function healthDot(color) {
-  return `<span class="sl-health sl-health--${color}"></span>`;
-}
-
-function cssRing(value, max, color, label, size = 64) {
-  const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
-  return `
-    <div class="sl-ring-group">
-      <div class="sl-ring" style="--value:${pct};--color:${color};--size:${size}px">
-        <span class="sl-ring-value">${pct}%</span>
-      </div>
-      <div class="sl-ring-meta">
-        <span class="sl-ring-pct">${pct}%</span>
-        <span class="sl-ring-label">${escapeHtml(label)}</span>
-      </div>
-    </div>`;
-}
-
-function cardWrap(title, health, content, extra = '') {
-  const hc = health === 'amber' ? 'sl-card--warning' : health === 'red' ? 'sl-card--critical' : '';
-  return `
-    <div class="sl-card ${extra} ${hc}">
-      <div class="sl-card-header">
-        ${healthDot(health)}
-        <span class="sl-card-title">${escapeHtml(title)}</span>
-      </div>
-      ${content}
-    </div>`;
-}
-
-function renderCrawlerDashboard(s, cr) {
+function renderCrawlerSummary(s, cr) {
   const el = document.getElementById('crawler-summary');
   if (!el) return;
-
-  const totalCrawled = cr.total_crawled || s.crawled_urls || 0;
-  const totalFailed = cr.total_failed || 0;
-  const totalFetches = totalCrawled + totalFailed;
-  const successRate = totalFetches > 0 ? totalCrawled / totalFetches : 1;
-  const successPct = Math.round(successRate * 100);
   const activeW = cr.active_workers || 0;
-  const totalW = cr.workers || 0;
-  const jsRendered = cr.js_rendered || 0;
-  const queueDepth = s.urls_in_queue || 0;
-  const seenUrls = cr.seen_urls || 0;
-  const forwarded = cr.forwarded_tasks || 0;
-  const received = cr.received_from_peers || 0;
+  const totalW = cr.workers || cr.total_workers || 0;
   const upMins = parseUptimeMinutes(s.uptime);
   const crawlRate = upMins > 0 ? ((s.crawled_urls || 0) / upMins).toFixed(1) : '0';
 
-  // ── Card 1: Crawl Overview (wide, span 2) ──
-  const overviewHealth = totalCrawled > 0 ? 'green' : 'amber';
-  const card1 = cardWrap('Crawl Overview', overviewHealth, `
-    <div class="sl-body-row">
-      <div>
-        <div class="sl-big-num">${formatNum(totalCrawled)}</div>
-        <div class="sl-big-label">pages crawled</div>
-      </div>
-      ${cssRing(successRate, 1, successPct > 80 ? 'var(--green)' : successPct > 50 ? 'var(--amber)' : 'var(--red)', 'success rate')}
+  el.innerHTML = `
+    <div class="spotlight-metric">
+      ${icon('link', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${formatNum(s.urls_in_queue || 0)}</span>
+      <span class="spotlight-metric-label">Queue</span>
     </div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${crawlRate}</span><span class="sl-stat-label">URLs/min</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(jsRendered)}</span><span class="sl-stat-label">JS Rendered</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalFailed)}</span><span class="sl-stat-label">Failed</span></div>
+    <div class="spotlight-metric">
+      ${icon('globe', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${formatNum(cr.total_crawled || s.crawled_urls || 0)}</span>
+      <span class="spotlight-metric-label">Crawled</span>
     </div>
-  `, 'sl-card--wide');
-
-  // ── Card 2: Worker Pool ──
-  const workerHealth = activeW > 0 ? 'green' : (totalW > 0 ? 'amber' : 'red');
-  const card2 = cardWrap('Worker Pool', workerHealth, `
-    <div class="sl-body-row">
-      ${cssRing(activeW, totalW || 1, 'var(--accent)', `${activeW}/${totalW} workers`)}
-      <div>
-        <div class="sl-big-num">${activeW}</div>
-        <div class="sl-big-label">active workers</div>
-      </div>
+    <div class="spotlight-metric">
+      ${icon('cpu', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${activeW}/${totalW}</span>
+      <span class="spotlight-metric-label">Workers</span>
     </div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${totalW}</span><span class="sl-stat-label">Configured</span></div>
+    <div class="spotlight-metric">
+      ${icon('zap', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${crawlRate}</span>
+      <span class="spotlight-metric-label">URLs/min</span>
     </div>
-  `);
-
-  // ── Card 3: Queue & Discovery ──
-  const queueHealth = queueDepth > 0 ? 'green' : 'amber';
-  const card3 = cardWrap('Queue & Discovery', queueHealth, `
-    <div class="sl-big-num">${formatNum(queueDepth)}</div>
-    <div class="sl-big-label">URLs in queue</div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(seenUrls)}</span><span class="sl-stat-label">Seen URLs</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${crawlRate}</span><span class="sl-stat-label">URLs/min</span></div>
+    <div class="spotlight-metric">
+      ${icon('eye', 16, 'var(--accent)')}
+      <span class="spotlight-metric-value">${formatNum(cr.seen_urls || 0)}</span>
+      <span class="spotlight-metric-label">Seen</span>
     </div>
-  `);
-
-  // ── Card 4: Fetch Performance ──
-  const fetchHealth = successPct > 80 ? 'green' : successPct >= 50 ? 'amber' : 'red';
-  const card4 = cardWrap('Fetch Performance', fetchHealth, `
-    <div class="sl-body-row">
-      ${cssRing(successRate, 1, successPct > 80 ? 'var(--green)' : successPct >= 50 ? 'var(--amber)' : 'var(--red)', 'success rate')}
-      <div>
-        <div class="sl-big-num">${formatNum(totalFailed)}</div>
-        <div class="sl-big-label">failed fetches</div>
-      </div>
+    <div class="spotlight-metric">
+      ${icon('alertTriangle', 16, 'var(--red)')}
+      <span class="spotlight-metric-value">${formatNum(cr.total_failed || 0)}</span>
+      <span class="spotlight-metric-label">Failed</span>
     </div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(jsRendered)}</span><span class="sl-stat-label">JS Rendered</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(totalFetches)}</span><span class="sl-stat-label">Total Fetches</span></div>
-    </div>
-  `);
-
-  // ── Card 5: Peer Coordination ──
-  const peerActivity = forwarded + received;
-  const peerHealth = peerActivity > 0 ? 'green' : 'amber';
-  const card5 = cardWrap('Peer Coordination', peerHealth, `
-    <div class="sl-body-row" style="gap:24px">
-      <div style="text-align:center">
-        <div class="sl-big-num">${formatNum(forwarded)}</div>
-        <div class="sl-big-label">forwarded</div>
-      </div>
-      <div style="text-align:center">
-        <div class="sl-big-num">${formatNum(received)}</div>
-        <div class="sl-big-label">from peers</div>
-      </div>
-    </div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${formatNum(peerActivity)}</span><span class="sl-stat-label">Total Coordination</span></div>
-    </div>
-  `);
-
-  // ── Card 6: Pipeline Config ──
-  const card6 = cardWrap('Pipeline Config', 'green', `
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value">${cr.rate_limit || '—'}</span><span class="sl-stat-label">Rate Limit (req/min)</span></div>
-      <div class="sl-stat"><span class="sl-stat-value">${cr.max_depth || '—'}</span><span class="sl-stat-label">Max Depth</span></div>
-    </div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="sl-stat-value sl-stat-value--sm">${escapeHtml(String(cr.user_agent || '—').slice(0, 30))}</span><span class="sl-stat-label">User Agent</span></div>
-    </div>
-    <div class="sl-stat-row">
-      <div class="sl-stat"><span class="badge badge-green" style="font-size:0.75em">robots.txt respected</span></div>
-    </div>
-  `);
-
-  el.className = 'sl-dashboard';
-  el.innerHTML = card1 + card2 + card3 + card4 + card5 + card6;
+  `;
 }
 
 // ============================================================
@@ -489,72 +369,16 @@ async function renderTab() {
     feedInterval = null;
   }
 
-  // Destroy diagram and clean up resize listener when leaving the architecture tab
-  if (activeTab !== 'architecture') {
-    if (diagram) { diagram.destroy(); diagram = null; }
-    if (_mobileResizeHandler) { window.removeEventListener('resize', _mobileResizeHandler); _mobileResizeHandler = null; }
-  }
-
-  if (activeTab === 'architecture') renderArchitecture(content);
-  else if (activeTab === 'status') await renderStatus(content);
+  if (activeTab === 'status') await renderStatus(content);
   else if (activeTab === 'feed') renderFeed(content);
   else if (activeTab === 'analytics') await renderAnalytics(content);
   else if (activeTab === 'seeds') renderSeeds(content);
   else if (activeTab === 'features') renderFeatures(content);
 }
 
-function renderArchitecture(el) {
-  // Skip full rebuild if the diagram is already live on this tab
-  if (diagram && document.getElementById('crawler-spotlight')) return;
-
-  el.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px">
-      <div>
-        <h3 style="font-size:1.1em;font-weight:600;color:var(--text-primary);margin:0">Spotlight</h3>
-        <p style="color:var(--text-muted);font-size:0.85em;margin:4px 0 0">Live view of the crawl pipeline and its components</p>
-      </div>
-      <div class="view-toggle" id="view-toggle">
-        <button class="view-toggle-btn ${currentView === 'flow' ? 'active' : ''}" data-view="flow" title="Architecture flow">
-          ${icon('gitBranch', 16)} Flow
-        </button>
-        <button class="view-toggle-btn ${currentView === 'grid' ? 'active' : ''}" data-view="grid" title="Spotlight gauges">
-          ${icon('barChart2', 16)} Gauges
-        </button>
-      </div>
-    </div>
-    <div class="spotlight-canvas-wrap" id="canvas-wrap">
-      <canvas id="crawler-spotlight"></canvas>
-    </div>
-    <div id="mobile-cards-wrap" class="mobile-cards-grid" style="display:none"></div>
-    <div id="crawler-summary" class="spotlight-summary">
-      <div class="loading">Loading crawler data...</div>
-    </div>
-  `;
-
-  document.getElementById('view-toggle').addEventListener('click', e => {
-    const btn = e.target.closest('.view-toggle-btn');
-    if (!btn) return;
-    const view = btn.dataset.view;
-    if (view === currentView) return;
-    currentView = view;
-    localStorage.setItem('doogle-crawler-view', view);
-    document.querySelectorAll('#view-toggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-    rebuildDiagram();
-  });
-
-  buildDiagram();
-  if (_mobileResizeHandler) window.removeEventListener('resize', _mobileResizeHandler);
-  _mobileResizeHandler = () => syncMobileView();
-  window.addEventListener('resize', _mobileResizeHandler);
-  syncMobileView();
-  loadDiagramData();
-}
-
 async function renderStatus(el) {
-  const gen = navGen();
   try {
     const [status, crawler] = await Promise.all([api.status(), api.crawlerStatus().catch(() => null)]);
-    if (gen !== navGen()) return;
     const workers = crawler?.workers || 'N/A';
     const rateLimit = crawler?.rate_limit || 'N/A';
     const maxDepth = crawler?.max_depth || 'N/A';
@@ -579,8 +403,6 @@ async function renderStatus(el) {
         <div class="card"><div class="card-label">Active Workers</div><div class="card-value">${activeWorkers} <span style="font-size:0.5em;color:var(--text-muted)">/ ${workers}</span></div></div>
         <div class="card"><div class="card-label">Success Rate</div><div class="card-value">${successRate}${successRate !== '—' ? '%' : ''}</div><div class="card-sub">${totalCrawled.toLocaleString()} ok / ${totalFailed.toLocaleString()} failed</div></div>
         <div class="card"><div class="card-label">Seen URLs</div><div class="card-value">${seenURLs.toLocaleString()}</div><div class="card-sub">unique URLs discovered</div></div>
-        <div class="card"><div class="card-label">Forwarded</div><div class="card-value">${(crawler?.forwarded_tasks || 0).toLocaleString()}</div><div class="card-sub">tasks sent to domain owners</div></div>
-        <div class="card"><div class="card-label">From Peers</div><div class="card-value">${(crawler?.received_from_peers || 0).toLocaleString()}</div><div class="card-sub">tasks received from peers</div></div>
       </div>
       <div class="section">
         <h3>Configuration</h3>
@@ -658,10 +480,8 @@ function scheduleFade(row) {
 }
 
 async function renderAnalytics(el) {
-  const gen = navGen();
   try {
     const status = await api.status();
-    if (gen !== navGen()) return;
     const upMins = parseUptimeMinutes(status.uptime);
     const crawlRate = upMins > 0 ? (status.crawled_urls / upMins).toFixed(1) : '0';
 
@@ -675,7 +495,6 @@ async function renderAnalytics(el) {
       <div class="section"><h3>Crawl Activity (live)</h3><div class="chart-container"><canvas id="crawl-activity-chart"></canvas></div></div>
       <div class="section"><h3>Crawled vs Indexed</h3><div class="chart-container"><canvas id="crawl-vs-indexed-chart"></canvas></div></div>
       <div class="section"><h3>Queue Depth Over Time</h3><div class="chart-container"><canvas id="queue-depth-chart"></canvas></div></div>
-      <div class="section"><h3>Cumulative Crawl Progress</h3><div class="chart-container"><canvas id="crawl-cumulative-chart"></canvas></div></div>
     `;
 
     if (crawlHistory.length > 1) {
@@ -699,14 +518,6 @@ async function renderAnalytics(el) {
       renderLineChart('queue-depth-chart', [{ label: 'Queue depth', color: getCSS('--amber'), data: queueData }], { height: 200 });
     } else {
       renderLineChart('queue-depth-chart', [], { height: 200 });
-    }
-
-    // Cumulative crawl progress chart
-    if (crawlHistory.length > 1) {
-      const cumulativeData = crawlHistory.map(h => ({ label: formatTime(h.time), value: h.crawled }));
-      renderLineChart('crawl-cumulative-chart', [{ label: 'Total crawled', color: getCSS('--green'), data: cumulativeData }], { height: 200 });
-    } else {
-      renderLineChart('crawl-cumulative-chart', [], { height: 200 });
     }
   } catch (err) {
     el.innerHTML = `<div class="empty-state"><p>Failed to load analytics: ${err.message}</p></div>`;
@@ -790,7 +601,6 @@ function renderFeatures(el) {
       <h3>Crawler Features</h3>
       <div class="card-grid">
         ${feature('Distributed Crawling', 'URLs broadcast via GossipSub to the P2P network. Nodes claim URLs by consistent hash.', true)}
-        ${feature('Domain-Aware Task Routing', 'Before crawling, each URL is checked against the shard ring. Non-owners forward tasks to the responsible peer via /doogle/crawl/1.0.0. Falls back to local crawl if the owner is offline.', true)}
         ${feature('robots.txt Compliance', 'Respects robots.txt directives per domain with 24h TTL cache.', true)}
         ${feature('Per-Domain Rate Limiting', 'Sliding window rate limiter prevents overloading any single domain.', true)}
         ${feature('Depth Control', 'Configurable max crawl depth to prevent endless recursion.', true)}

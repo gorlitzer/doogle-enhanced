@@ -290,7 +290,7 @@ make setup`, 'bash')}
 const archCardDetails = [
   // Application layer
   { title: 'Crawler', html: `<p>Goroutine worker pool (default 4 workers) fetches pages via HTTP. Per-domain rate limiting (10 req/min), robots.txt compliance, and redirect following (up to 10 hops). Falls back to headless Chromium via <a href="https://github.com/go-rod/rod" target="_blank">go-rod</a> for JS-heavy SPAs.</p>` },
-  { title: 'Indexer', html: `<p>28-feature scoring pipeline (12 base signals + performance/mobile/CTR): language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, domain authority, URL quality analysis, readability extraction (Arc90 algorithm), PageRank, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
+  { title: 'Indexer', html: `<p>12-signal scoring pipeline: language detection (15 languages), keyword extraction (TF-IDF), E-E-A-T scoring, domain authority, URL quality analysis, readability extraction (Arc90 algorithm), PageRank, spam detection, and content deduplication (4-gram shingling). Documents are batch-indexed into <a href="https://blevesearch.com/" target="_blank">Bleve</a> with pre-computed StaticScore.</p>` },
   { title: 'Search', html: `<p>BM25 full-text search via <a href="https://blevesearch.com/" target="_blank">Bleve</a>. Intent classification, synonym expansion (100+ pairs), spelling correction ("Did you mean?"), phrases, fuzzy matching, boolean operators, and site: filters. Domain diversity (max 2 per domain in top 10) and passage-based snippets with highlights. Results ranked by <code>BM25 * StaticScore * freshnessDecay * intentMultiplier</code>. Shard-aware distributed fan-out to peers.</p>` },
   { title: 'HTTP API', html: `<p>REST endpoints served by <a href="https://github.com/go-chi/chi" target="_blank">Chi router</a>. Embedded SPA with search UI, admin dashboard, crawler/indexer/network monitoring, docs, and 6 switchable themes.</p>` },
   // P2P layer
@@ -390,14 +390,14 @@ function renderArchitecture(el) {
               ${icon('cpu', 18, 'var(--accent)')}
               <div>
                 <strong>Indexer</strong>
-                <p>12 base signals + performance/mobile scoring, behavioral domain authority, URL quality, readability extraction (Arc90), PageRank, spam filter, batch indexing.</p>
+                <p>12-signal scoring, domain authority, URL quality, readability extraction (Arc90), PageRank, spam filter, batch indexing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="2" style="cursor:pointer">
               ${icon('search', 18, 'var(--accent)')}
               <div>
                 <strong>Search</strong>
-                <p>Hybrid BM25+vector (RRF). 28-feature neural-style LTR with CTR/dwell/interaction signals. Entity cards, intent classification, multilingual semantic search. Shard-aware routing.</p>
+                <p>BM25 full-text. Intent classification, synonym expansion, spelling correction, domain diversity, passage snippets. Shard-aware routing.</p>
               </div>
             </div>
             <div class="docs-arch-card" data-arch-idx="3" style="cursor:pointer">
@@ -704,25 +704,14 @@ function renderAPI(el) {
       "quality_score": 0.78,
       "spam_score": 0.02,
       "pagerank_score": 0.89,
-      "peer_id": "12D3KooW...",
-      "vector_similarity": 0.82
+      "peer_id": "12D3KooW..."
     }
   ],
   "total": 42,
   "page": 1,
   "page_size": 10,
   "took_ms": 23,
-  "peers_asked": 2,
-  "suggestion": "",
-  "intent": "informational",
-  "search_mode": "hybrid",
-  "entity_card": {
-    "name": "Go (programming language)",
-    "type": "technology",
-    "description": "Statically typed, compiled language...",
-    "doc_count": 15
-  },
-  "related_topics": ["go concurrency", "go web framework"]
+  "peers_asked": 2
 }`, 'json')}
         `)}
         ${endpoint('GET', '/api/status', 'Node health and statistics', `
@@ -830,51 +819,6 @@ function renderAPI(el) {
           <h4>Response</h4>
           ${codeBlock(`{"status": "deleted"}`, 'json')}
           <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Caution: this permanently removes all indexed documents and crawl data. The node identity key is preserved.</p>
-        `)}
-        ${endpoint('GET', '/api/trends', 'Trending queries and domains (Intelligence)', `
-          ${codeBlock(`curl http://localhost:7002/api/trends`, 'bash')}
-          <h4>Response</h4>
-          ${codeBlock(`{
-  "trending_queries": [
-    { "name": "golang", "current_rate": 5.2, "average_rate": 1.1, "velocity_ratio": 4.7, "volume": 42 }
-  ],
-  "trending_domains": [
-    { "name": "go.dev", "current_rate": 3.1, "average_rate": 0.8, "velocity_ratio": 3.9, "volume": 28 }
-  ],
-  "computed_at": "2026-03-05T12:00:00Z"
-}`, 'json')}
-        `)}
-        ${endpoint('POST', '/api/click', 'Record a search result click (used for learn-to-rank training)', `
-          ${codeBlock(`curl -X POST http://localhost:7002/api/click \\
-  -H 'Content-Type: application/json' \\
-  -d '{"query":"golang tutorial","url":"https://go.dev/tour/","position":1}'`, 'bash')}
-          <h4>Response</h4>
-          ${codeBlock(`{"status": "recorded"}`, 'json')}
-          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Click data is stored locally and used to train the learn-to-rank model. Training auto-triggers every 6 hours when 200+ click pairs are available.</p>
-        `)}
-        ${endpoint('POST', '/api/impression', 'Record a search result impression (used for position-debiased CTR)', `
-          ${codeBlock(`curl -X POST http://localhost:7002/api/impression \\
-  -H 'Content-Type: application/json' \\
-  -d '{"query":"golang tutorial","url":"https://go.dev/tour/","position":1}'`, 'bash')}
-          <h4>Response</h4>
-          ${codeBlock(`{"status": "recorded"}`, 'json')}
-          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Impressions are recorded automatically by the search UI for each displayed result. Used to compute position-debiased click-through rates.</p>
-        `)}
-        ${endpoint('POST', '/api/dwell', 'Record dwell time on a clicked result', `
-          ${codeBlock(`curl -X POST http://localhost:7002/api/dwell \\
-  -H 'Content-Type: application/json' \\
-  -d '{"query":"golang tutorial","url":"https://go.dev/tour/","dwell_ms":45000}'`, 'bash')}
-          <h4>Response</h4>
-          ${codeBlock(`{"status": "recorded"}`, 'json')}
-          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Dwell time is measured when the user returns to the search tab after clicking a result. Longer dwell times indicate higher-quality results.</p>
-        `)}
-        ${endpoint('POST', '/api/pogo', 'Record a pogo-stick event (user returned within 10 seconds)', `
-          ${codeBlock(`curl -X POST http://localhost:7002/api/pogo \\
-  -H 'Content-Type: application/json' \\
-  -d '{"query":"golang tutorial","url":"https://go.dev/tour/"}'`, 'bash')}
-          <h4>Response</h4>
-          ${codeBlock(`{"status": "recorded"}`, 'json')}
-          <p style="margin-top:8px;color:var(--text-muted);font-size:0.9em">Pogo-stick events are recorded when the user returns to search results within 10 seconds of clicking — a signal that the result didn't satisfy the query.</p>
         `)}
       </div>
     </div>
@@ -1493,14 +1437,6 @@ const testedPlatforms = [
       { device: 'Windows (native)', os: 'Windows 10/11', arch: 'amd64', status: 'untested', notes: 'Go supports Windows. Needs testing — help wanted!' },
     ],
   },
-  {
-    os: 'Android',
-    icon: 'radio',
-    color: 'var(--amber)',
-    devices: [
-      { device: 'Termux', os: 'Android 10+', arch: 'arm64', status: 'untested', notes: 'Binary available via make release. Not yet tested on a device — help wanted!' },
-    ],
-  },
 ];
 
 function renderPlatforms(el) {
@@ -1571,7 +1507,6 @@ function renderPlatforms(el) {
             <tr><td>linux</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Most common server/desktop target</td></tr>
             <tr><td>linux</td><td>arm64</td><td><span class="badge badge-amber">untested</span></td><td>Raspberry Pi 4/5, ARM servers</td></tr>
             <tr><td>windows</td><td>amd64</td><td><span class="badge badge-amber">untested</span></td><td>Native Windows build</td></tr>
-            <tr><td>android</td><td>arm64</td><td><span class="badge badge-amber">untested</span></td><td>Termux on Android — binary available, not yet tested</td></tr>
           </tbody>
         </table>
       </div>
@@ -1681,7 +1616,7 @@ class DHTDiscoveryViz {
 
   _initNodes() {
     const cx = this.cx, cy = this.cy;
-    this.selfNode = { x: cx, y: cy, r: 22, label: 'Anonymous Node', type: 'self' };
+    this.selfNode = { x: cx, y: cy, r: 22, label: 'You', type: 'self' };
 
     const bootstrapNames = ['IPFS-1', 'IPFS-2', 'IPFS-3', 'IPFS-4', 'IPFS-5'];
     const innerR = 100;
@@ -1951,7 +1886,7 @@ class DHTDiscoveryViz {
     ctx.font = 'bold 11px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Anon', this.selfNode.x, this.selfNode.y);
+    ctx.fillText('You', this.selfNode.x, this.selfNode.y);
     ctx.textBaseline = 'alphabetic';
 
     const phaseLabels = [

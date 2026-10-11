@@ -11,7 +11,7 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 - [Starting a Node](#starting-a-node)
 - [Joining a Network](#joining-a-network)
 - [Configuration](#configuration)
-- [Configuring SearXNG](#configuring-searxng)
+- [Configuration File](#configuration-file)
 - [Network Topologies](#network-topologies)
 - [Monitoring](#monitoring)
 - [Data Management](#data-management)
@@ -22,7 +22,7 @@ This guide covers everything you need to run a Doogle v2 node — from installat
 ## Requirements
 
 - **Go 1.22+** (for building from source)
-- **OS:** Linux, macOS, Windows, or Android (via Termux)
+- **OS:** Linux, macOS, or Windows
 - **Ports:** One port for libp2p (default `7001` TCP+UDP), one for the HTTP API (default `7002`)
 - **Disk:** ~100MB minimum; grows with the number of indexed pages
 - **RAM:** ~128MB minimum; scales with crawl worker count and index size
@@ -85,14 +85,6 @@ Multiple seeds:
 ```bash
 ./bin/doogle --port 5001 --api-port 9090
 ```
-
-### Light Node
-
-```bash
-./bin/doogle --light
-```
-
-A light node connects to the P2P network and relays search queries to full nodes, but does not crawl or index content. This keeps resource usage low (~50 MB RAM) — ideal for edge devices or when you only need search access.
 
 ### Custom Data Directory
 
@@ -208,187 +200,139 @@ make run ARGS='--port 7003 --api-port 7004 --data-dir ./data/node2 --bootstrap /
 | `--name` | — | Human-readable node name shown in UI and to peers |
 | `--port` | `7001` | libp2p listen port (TCP and QUIC) |
 | `--api-port` | `7002` | HTTP API and web UI port |
-| `--bind` | `127.0.0.1` | API server bind address. Loopback-only by default — see the security warning below before changing it |
+| `--bind` | `0.0.0.0` | API server bind address (LAN-accessible by default) |
 | `--data-dir` | `./data/doogle` | Where to store all persistent data |
 | `--bootstrap` | — | Multiaddr of a bootstrap peer |
 | `--seed` | — | Comma-separated seed URLs to crawl |
 | `--workers` | `4` | Number of concurrent crawl workers |
 | `--mdns` | `true` | Enable mDNS for LAN peer discovery |
 | `--dht-discovery` | `true` | Enable automatic peer discovery via IPFS public DHT |
-| `--dht-client-mode` | `false` | Run the DHT in client-only mode to reduce how widely your node's IP is advertised (see Privacy below) |
 | `--headless` | `false` | Enable headless browser rendering for JS-heavy pages |
-| `--light` | `false` | Light node mode: search + relay only, no crawling or indexing |
 | `--log-level` | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `--fleet-role` | `coordinator` | Fleet mode: `coordinator` (fleet-ready), `worker`, `standalone` |
+| `--fleet-role` | `standalone` | Fleet mode: `standalone`, `coordinator`, `worker` |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Shared fleet secret hex (auto-generated on coordinator) |
-| `--searxng-url` | — | Custom SearXNG instance URL (overrides auto public instances) |
-| `--ollama` | `false` | Enable neural embeddings via Ollama (auto-detects localhost:11434) |
-| `--ollama-url` | — | Custom Ollama server URL (default http://localhost:11434) |
-| `--ollama-model` | `nomic-embed-text` | Ollama embedding model name (use `all-minilm` for a smaller/faster model) |
-| `--embedding-url` | — | Generic neural embedding server URL (for non-Ollama servers) |
 
-All settings are controlled via CLI flags. Run `./bin/doogle --help` for the full list.
+### Precedence
 
-### 🔒 Privacy: your node reveals its IP address to peers
-
-**Running a node on the public peer-to-peer network exposes your IP address. This is inherent to how P2P works and cannot be fully eliminated while you participate in the public network.** Be transparent with yourself about this before running a public node:
-
-- **Peers you exchange data with see your IP.** To send you search results or receive crawl work, a peer must connect to your node — which reveals your IP address to that peer, by definition.
-- **The DHT can publish your address.** By default the node runs as a DHT *server* (`ModeAutoServer`) when it's publicly reachable, which advertises your address into the shared IPFS DHT so other peers can find you.
-- **UPnP/NAT-PMP may open a public port.** The node attempts to make itself directly reachable, which can map a port on your router to your machine.
-
-**What you can do to reduce (not remove) exposure:**
-
-- `--dht-client-mode` — run the DHT in client-only mode. Your node still finds peers, but it won't answer DHT queries or advertise itself as a server in other peers' routing tables, so its address is published less widely. Peers you actually exchange data with still learn your IP.
-- Run behind a VPN or from a host whose IP you don't mind revealing.
-- Don't run a public node from an IP you consider sensitive.
-
-**What is *not* yet available:** onion routing (Tor) transport is a design goal (see the roadmap) but is **not implemented** — do not assume any anonymity today.
-
-If you only want to search and never expose a node, you can run in a more limited mode, but any participation in the public network involves the trade-offs above. We'd rather state this plainly than let the "no tracking" framing imply network-level anonymity it doesn't provide.
-
-### ⚠️ Security: exposing the API (`--bind`)
-
-The API binds to `127.0.0.1` (loopback) by default. **Do not change this unless you understand the exposure.** The API server:
-
-- Serves an **admin surface** (`/api/admin/*`) with **destructive, unauthenticated** operations — `DELETE /api/admin/data` wipes your index, `/api/admin/restore` writes arbitrary data, `/api/admin/update` swaps the running binary. These are gated to loopback + a Host-header allowlist only.
-- Exposes **unauthenticated write endpoints** on `/api` (e.g. `/api/crawl`) over **plaintext HTTP**.
-
-Binding to `0.0.0.0` (or a LAN IP) exposes all of this to every host that can reach the port. If you need remote access, put Doogle **behind a reverse proxy that terminates TLS and authenticates requests**, and firewall the raw port. The node logs a loud warning at startup when bound to a non-loopback address.
+1. Hardcoded defaults
+2. YAML config file (if `--config` is set)
+3. CLI flags (highest priority — override everything)
 
 ---
 
-## Neural Semantic Search
+## Configuration File
 
-By default, Doogle uses TF-IDF embeddings for vector search — good for keyword matching but lacks semantic understanding. For true semantic search ("automobile" finds "car"), connect a neural embedding model.
-
-### Ollama (recommended)
-
-If you have [Ollama](https://ollama.com) installed:
-
-```bash
-ollama pull nomic-embed-text  # ~274MB one-time download (better quality, default)
-./bin/doogle --ollama         # auto-connects to localhost:11434
-```
-
-Prefer a smaller/faster model? Use `ollama pull all-minilm` (~23MB) and `--ollama-model all-minilm`. The vector store adapts to whichever model's dimension you choose.
-
-### Optional: second-stage reranker (experimental)
-
-For higher result quality you can enable an LLM-based reranker that re-scores the top candidates for each query:
-
-```bash
-ollama pull qwen2.5:0.5b-instruct
-./bin/doogle --ollama --rerank
-```
-
-This is **off by default** and **experimental**. Note the trade-off: Ollama has no native cross-encoder rerank API, so this uses a small instruct model as a relevance judge over the top ~20 results — it improves ordering but **adds latency per query**. It fails open: if the model is slow or unavailable, search falls back to the first-stage ranking. Pick the model with `--rerank-model`.
-
-Custom Ollama setup:
-
-```bash
-./bin/doogle --ollama-url http://remote:11434 --ollama-model nomic-embed-text
-```
-
-### Generic embedding server
-
-For non-Ollama servers (sentence-transformers, TEI, etc.):
-
-```bash
-./bin/doogle --embedding-url http://localhost:11411/embed
-```
-
-The server must accept `POST {"texts": ["..."]}` and return `{"embeddings": [[...]]}` with 384-dim vectors.
-
-A reference Python server is included:
-
-```bash
-python scripts/embedding-server.py    # requires: pip install sentence-transformers flask
-```
-
-### Fallback behavior
-
-If the embedding server is unreachable at startup, Doogle falls back to TF-IDF silently. If the connection drops mid-run, it switches to TF-IDF and retries in the background every 30 seconds.
-
----
-
-## Configuring SearXNG
-
-SearXNG is an open-source metasearch engine. Doogle uses it as a fallback when the native peer index has too few results, giving users immediate coverage even when the node is newly started or lightly seeded.
-
-### Out-of-the-Box (No Setup Required)
-
-SearXNG is **enabled by default** and uses curated public instances with automatic failover. Just start Doogle — external search results will appear alongside native P2P results without any configuration:
-
-```bash
-./bin/doogle
-# SearXNG is already working via public instances
-```
-
-If a public instance is slow or rate-limited, Doogle automatically rotates to the next one.
-
-### Custom Instance (Optional)
-
-For more control or privacy, you can point Doogle at your own self-hosted SearXNG instance:
-
-```bash
-./bin/doogle --searxng-url http://localhost:8080
-```
-
-#### Running a Local SearXNG Instance
-
-The quickest way is Docker:
-
-```bash
-docker run -d \
-  --name searxng \
-  -p 8080:8080 \
-  -e SEARXNG_BASE_URL=http://localhost:8080 \
-  searxng/searxng:latest
-```
-
-Verify it works:
-
-```bash
-curl "http://localhost:8080/search?q=test&format=json"
-```
-
-SearXNG must have JSON output enabled. In `searxng/settings.yml`, ensure:
+Create a YAML config for persistent settings:
 
 ```yaml
+# my-config.yaml
+log_level: "info"              # debug, info, warn, error
+
+p2p:
+  port: 7001
+  bootstrap_peers:
+    - /ip4/203.0.113.10/tcp/7001/p2p/12D3KooWAbc...
+    - /ip4/198.51.100.5/tcp/7001/p2p/12D3KooWDef...
+  mdns: true
+  dht_discovery: true
+  dht_rendezvous: "doogle/network/v2"
+  dht_discovery_interval: 30s
+  dht_max_peers: 50
+
+api:
+  port: 7002
+  bind: "0.0.0.0"
+
+crawler:
+  workers: 8
+  user_agent: "DoogleBot/2.0 (+https://github.com/doogle/doogle-v2)"
+  request_timeout: 30s
+  rate_limit: 10          # Requests per minute per domain
+  max_depth: 3
+  respect_robots: true
+
+storage:
+  data_dir: "/var/lib/doogle"
+  badger_dir: "badger"
+
+index:
+  bleve_dir: "bleve"
+
 search:
-  formats:
-    - html
-    - json
+  max_results: 50
+  default_page_size: 10
+  peer_timeout: 5s
+  max_peers: 10
 ```
 
-### Runtime Toggle
-
-You can toggle SearXNG on or off at runtime without restarting the node:
+Run with it:
 
 ```bash
-# Switch to custom instance
-curl -X POST http://localhost:7002/api/admin/searxng \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true, "url": "http://localhost:8080"}'
-
-# Switch back to auto (public instances)
-curl -X POST http://localhost:7002/api/admin/searxng \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": true, "url": ""}'
-
-# Disable entirely
-curl -X POST http://localhost:7002/api/admin/searxng \
-  -H "Content-Type: application/json" \
-  -d '{"enabled": false, "url": ""}'
+./bin/doogle --config my-config.yaml
 ```
 
-The Settings toggle in Admin > Actions shows the current mode (Auto/Custom) and the active instance URL.
+CLI flags can still override individual settings:
 
-### SearXNG Result Provenance
+```bash
+./bin/doogle --config my-config.yaml --workers 16 --api-port 9090
+```
 
-Results sourced from SearXNG are visually distinguished in the search UI with an amber provenance pill. The search meta row shows a SearXNG badge indicating how many external results were included. Native peer results always rank above SearXNG results with comparable scores due to the configurable `score_penalty`.
+### Configuration Reference
+
+#### `p2p`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `port` | int | `7001` | libp2p listen port |
+| `bootstrap_peers` | []string | `[]` | Multiaddr list of known peers |
+| `mdns` | bool | `true` | Enable mDNS LAN discovery |
+| `dht_discovery` | bool | `true` | Enable automatic peer discovery via IPFS public DHT |
+| `dht_rendezvous` | string | `"doogle/network/v2"` | DHT rendezvous namespace for finding Doogle nodes |
+| `dht_discovery_interval` | duration | `30s` | How often to search the DHT for new peers |
+| `dht_max_peers` | int | `50` | Skip DHT discovery rounds when this many peers are connected |
+
+#### `api`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `port` | int | `7002` | HTTP API port |
+| `bind` | string | `"0.0.0.0"` | Bind address |
+
+#### `crawler`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `workers` | int | `4` | Concurrent crawl goroutines |
+| `user_agent` | string | `"DoogleBot/2.0 (...)"` | HTTP User-Agent header |
+| `request_timeout` | duration | `30s` | Per-request timeout |
+| `rate_limit` | int | `10` | Max requests per minute per domain |
+| `max_depth` | int | `3` | Max link-follow depth from seed |
+| `respect_robots` | bool | `true` | Obey robots.txt |
+
+#### `storage`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `data_dir` | string | `"./data/doogle"` | Base directory for all persistent data |
+| `badger_dir` | string | `"badger"` | BadgerDB subdirectory (relative to data_dir) |
+
+#### `index`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `bleve_dir` | string | `"bleve"` | Bleve index subdirectory (relative to data_dir) |
+
+#### `search`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `max_results` | int | `50` | Absolute max results per query |
+| `default_page_size` | int | `10` | Default results per page |
+| `peer_timeout` | duration | `5s` | How long to wait for each peer's response |
+| `max_peers` | int | `10` | Max peers to query per search |
+| `cache_size` | int | `1000` | LRU cache entries for search results (0 = disabled) |
+| `cache_ttl` | duration | `5m` | How long cached results stay valid |
 
 ---
 
@@ -451,14 +395,6 @@ With mDNS enabled, nodes on the same network find each other automatically:
 
 ## Monitoring
 
-### Quick Check (Terminal)
-
-```bash
-make status
-```
-
-This checks whether the Doogle node process is running and shows the PID, version, and helpful commands.
-
 ### Status Endpoint
 
 ```bash
@@ -470,9 +406,6 @@ Response:
 ```json
 {
   "peer_id": "12D3KooWPjce...",
-  "version": "v0.2.0",
-  "commit": "a1b2c3d",
-  "build_date": "2026-03-01T12:00:00Z",
   "addrs": [
     "/ip4/192.168.1.100/tcp/7001/p2p/12D3KooWPjce...",
     "/ip4/192.168.1.100/udp/7001/quic-v1/p2p/12D3KooWPjce..."
@@ -495,19 +428,6 @@ Open `http://localhost:7002` in a browser. The bottom status bar shows real-time
 - Number of indexed documents
 - Number of crawled URLs
 - Connected peer count
-
-### Trust & Safety Dashboard
-
-The **Trust** page (`#/trust`) provides full admin controls:
-
-- **Overview:** Recent reports with dismiss/confirm actions, status badges
-- **Peers:** All tracked peers with trust tier badges (trusted/warning/throttled/quarantined/banned)
-- **Quarantined:** Quarantined peers with unquarantine button (disabled for permanently banned peers)
-- **Domains:** Flagged and blocked domains with unblock button
-- **Audit Trail:** Hash-chained, Ed25519-signed log of all trust actions with verification badges
-- **Submit Report:** Report URLs as spam/malware/phishing
-
-The **Network** page shows trust tiers per connected peer in both the peer table and the topology graph.
 
 ### Logs
 
@@ -610,6 +530,18 @@ From the dashboard you can see all workers, their stats, and open each worker's 
 | `--fleet-role` | `coordinator` | `coordinator` (fleet-ready), `worker`, or `standalone` (disables fleet) |
 | `--fleet-coordinator` | — | Coordinator multiaddr (required for workers) |
 | `--fleet-secret` | — | Hex fleet secret (auto-generated on coordinator if omitted) |
+
+### Fleet Configuration (YAML)
+
+```yaml
+fleet:
+  role: "coordinator"            # coordinator (default), worker, standalone
+  coordinator_peer: ""           # multiaddr (workers only)
+  fleet_secret: ""               # hex override
+  heartbeat_interval: 15s
+  node_timeout: 60s
+  allowlist: []                  # peer IDs (empty = accept all with valid secret)
+```
 
 ---
 

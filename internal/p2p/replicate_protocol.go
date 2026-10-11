@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -54,7 +53,6 @@ type ReplicateHandler func(senderPeerID string, req *ReplicateRequest) (*Replica
 func RegisterReplicateProtocol(h host.Host, handler ReplicateHandler) {
 	h.SetStreamHandler(ReplicateProtocol, func(s network.Stream) {
 		defer s.Close()
-		s.SetDeadline(time.Now().Add(60 * time.Second))
 
 		senderPeerID := s.Conn().RemotePeer().String()
 
@@ -121,27 +119,7 @@ func ReplicateDocuments(ctx context.Context, h host.Host, peerID peer.ID, req *R
 	return &resp, nil
 }
 
-// fpSep separates a doc ID from its content hash inside an anti-entropy
-// fingerprint. It is a unit-separator control char that can't appear in an ID.
-const fpSep = "\x1f"
-
-// Fingerprint combines a document ID with its content hash so anti-entropy can
-// detect content divergence (same ID, different content), not just missing IDs.
-func Fingerprint(id, contentHash string) string {
-	return id + fpSep + contentHash
-}
-
-// FingerprintID extracts the document ID from a fingerprint produced by
-// Fingerprint (or returns the input unchanged if it has no separator).
-func FingerprintID(fp string) string {
-	if i := strings.Index(fp, fpSep); i >= 0 {
-		return fp[:i]
-	}
-	return fp
-}
-
-// ComputeMerkleRoot computes a simple Merkle root hash from a sorted list of
-// items (document IDs, or id+hash fingerprints).
+// ComputeMerkleRoot computes a simple Merkle root hash from a sorted list of document IDs.
 func ComputeMerkleRoot(docIDs []string) string {
 	if len(docIDs) == 0 {
 		return ""

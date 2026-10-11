@@ -1,6 +1,5 @@
 # Binaries
 bin/
-/doogle
 *.exe
 *.dll
 *.so
@@ -13,7 +12,6 @@ vendor/
 data/
 *.db
 *.bolt
-*.mmdb
 
 # IDE
 .vscode/
@@ -35,12 +33,6 @@ node_modules/
 # Test
 coverage.out
 *.test
-
-# Runtime
-doogle.log
-embeddings.log
-.doogle.pid
-.embeddings.pid
 
 # Build
 dist/

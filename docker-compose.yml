@@ -1,5 +1,7 @@
+version: "3.9"
+
 services:
-  # ---- Single node (default) ----
+  # ---- Bootstrap node (first node in the network) ----
   node1:
     build: .
     container_name: doogle-node1
@@ -9,19 +11,14 @@ services:
       - --api-port=7002
       - --bind=0.0.0.0
       - --data-dir=/data
-      - --headless
     ports:
-      - "7001:7001"      # P2P
-      - "7001:7001/udp"  # QUIC
-      # API + Web UI — published to the host loopback only. The admin API is
-      # unauthenticated over HTTP; front it with a TLS-terminating auth proxy
-      # before exposing it beyond localhost.
-      - "127.0.0.1:7002:7002"
+      - "7001:7001"   # P2P
+      - "7002:7002"   # API + Web UI
     volumes:
       - node1-data:/data
     restart: unless-stopped
 
-  # ---- Second node (connects to node1 via mDNS/DHT) ----
+  # ---- Second node (connects to node1) ----
   node2:
     build: .
     container_name: doogle-node2
@@ -33,16 +30,15 @@ services:
       - --api-port=7002
       - --bind=0.0.0.0
       - --data-dir=/data
-      - --headless
       - --bootstrap=/ip4/node1/tcp/7001
     ports:
-      - "7003:7001"                # P2P
-      - "127.0.0.1:7004:7002"      # API + Web UI (loopback-only)
+      - "7003:7001"   # P2P (mapped to host 7003)
+      - "7004:7002"   # API + Web UI
     volumes:
       - node2-data:/data
     restart: unless-stopped
 
-  # ---- Third node ----
+  # ---- Third node (connects to node1) ----
   node3:
     build: .
     container_name: doogle-node3
@@ -54,53 +50,15 @@ services:
       - --api-port=7002
       - --bind=0.0.0.0
       - --data-dir=/data
-      - --headless
       - --bootstrap=/ip4/node1/tcp/7001
     ports:
       - "7005:7001"
-      - "127.0.0.1:7006:7002"      # API + Web UI (loopback-only)
+      - "7006:7002"
     volumes:
       - node3-data:/data
-    restart: unless-stopped
-
-  # ---- Neural embeddings via Ollama (optional) ----
-  # Usage: docker compose up -d node1 ollama
-  # Then: docker compose up -d node1-neural  (or add --ollama-url to any node)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: doogle-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    restart: unless-stopped
-    # Pull the embedding model on first start:
-    #   docker exec doogle-ollama ollama pull nomic-embed-text
-
-  # ---- Node with neural search (connects to Ollama) ----
-  node1-neural:
-    build: .
-    container_name: doogle-node1-neural
-    depends_on:
-      - ollama
-    command:
-      - doogle
-      - --port=7001
-      - --api-port=7002
-      - --bind=0.0.0.0
-      - --data-dir=/data
-      - --headless
-      - --ollama-url=http://ollama:11434
-    ports:
-      - "7001:7001"
-      - "7001:7001/udp"
-      - "127.0.0.1:7002:7002"      # API + Web UI (loopback-only)
-    volumes:
-      - node1-data:/data
     restart: unless-stopped
 
 volumes:
   node1-data:
   node2-data:
   node3-data:
-  ollama-data:
