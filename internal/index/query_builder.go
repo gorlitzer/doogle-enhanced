@@ -1,0 +1,331 @@
+package index
+
+import (
+	"strings"
+	"time"
+
+	"github.com/blevesearch/bleve/v2"
+	"github.com/blevesearch/bleve/v2/search/query"
+
+	"github.com/doogle/doogle-v2/internal/models"
+)
+
+// newAndMatchQuery creates a MatchQuery that requires ALL terms to match (AND).
+func newAndMatchQuery(terms string, field string, boost float64) *query.MatchQuery {
+	q := bleve.NewMatchQuery(terms)
+	q.SetField(field)
+	q.SetBoost(boost)
+	q.SetOperator(query.MatchQueryOperatorAnd)
+	return q
+}
+
+// newAndMatchQueryWithAnalyzer creates an AND MatchQuery with a specific analyzer.
+func newAndMatchQueryWithAnalyzer(terms string, field string, boost float64, analyzer string) *query.MatchQuery {
+	q := newAndMatchQuery(terms, field, boost)
+	q.Analyzer = analyzer
+	return q
+}
+
+// newOrMatchQuery creates a MatchQuery where ANY term can match (OR).
+// Used as a relaxation fallback when AND returns no results.
+func newOrMatchQuery(terms string, field string, boost float64) *query.MatchQuery {
+	q := bleve.NewMatchQuery(terms)
+	q.SetField(field)
+	q.SetBoost(boost)
+	q.SetOperator(query.MatchQueryOperatorOr)
+	return q
+}
+
+// newOrMatchQueryWithAnalyzer creates an OR MatchQuery with a specific analyzer.
+func newOrMatchQueryWithAnalyzer(terms string, field string, boost float64, analyzer string) *query.MatchQuery {
+	q := newOrMatchQuery(terms, field, boost)
+	q.Analyzer = analyzer
+	return q
+}
+
+// BuildQuery translates a ParsedQuery into a Bleve query tree.
+//
+// Architecture: BooleanQuery with two tiers:
+//   - Must: primary AND matches across fields + phrase matches.
+//     A doc MUST match at least one field with ALL query terms.
+//   - Should: fuzzy + synonym queries that BOOST matching docs
+//     but cannot produce results on their own.
+func BuildQuery(pq *models.ParsedQuery) query.Query {
+	var primaryClauses []query.Query
+	var boostClauses []query.Query
+
+	// Resolve language-specific analyzer
+	langAnalyzer := LangAnalyzer(pq.Language)
+
+	// ── Primary tier: AND match across fields (OR if relaxed) ──
+	termStr := strings.Join(pq.Terms, " ")
+	if termStr != "" {
+		newMatchFn := newAndMatchQuery
+		newMatchWithAnalyzerFn := newAndMatchQueryWithAnalyzer
+		if pq.UseOR {
+			newMatchFn = newOrMatchQuery
+			newMatchWithAnalyzerFn = newOrMatchQueryWithAnalyzer
+		}
+
+		if langAnalyzer != "" {
+			primaryClauses = append(primaryClauses,
+				newMatchWithAnalyzerFn(termStr, "title", 5.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "url_text", 3.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "headings_text", 2.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "description", 1.5, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "content", 1.0, langAnalyzer),
+				newMatchWithAnalyzerFn(termStr, "anchor_text", 2.0, langAnalyzer),
+			)
+		} else {
+			primaryClauses = append(primaryClauses,
+				newMatchFn(termStr, "title", 5.0),
+				newMatchFn(termStr, "url_text", 3.0),
+				newMatchFn(termStr, "headings_text", 2.0),
+				newMatchFn(termStr, "description", 1.5),
+				newMatchFn(termStr, "content", 1.0),
+				newMatchFn(termStr, "anchor_text", 2.0),
+			)
+		}
+
+		// Cross-field recall: the per-field clauses above only match a document
+		// when a SINGLE field contains all terms, so a multi-term query whose
+		// terms are naturally split across fields (title + body) failed the
+		// primary tier and survived only via the low-precision full-OR relaxation.
+		// Add a clause requiring every term to appear in AT LEAST ONE field
+		// (cross-field AND), boosted below single-field matches so exact
+		// single-field hits still rank first.
+		if len(pq.Terms) >= 2 && !pq.UseOR {
+			fields := []string{"title", "url_text", "headings_text", "description", "content", "anchor_text"}
+			var termConjuncts []query.Query
+			for _, t := range pq.Terms {
+				perTerm := make([]query.Query, 0, len(fields))
+				for _, f := range fields {
+					mq := bleve.NewMatchQuery(t)
+					mq.SetField(f)
+					if langAnalyzer != "" {
+						mq.Analyzer = langAnalyzer
+					}
+					perTerm = append(perTerm, mq)
+				}
+				termConjuncts = append(termConjuncts, bleve.NewDisjunctionQuery(perTerm...))
+			}
+			crossField := bleve.NewConjunctionQuery(termConjuncts...)
+			crossField.SetBoost(0.8)
+			primaryClauses = append(primaryClauses, crossField)
+		}
+
+		// Auto phrase boost: when query has 2+ terms, add a phrase match
+		// so pages where terms appear together rank much higher.
+		if len(pq.Terms) >= 2 {
+			titlePhrase := bleve.NewMatchPhraseQuery(termStr)
+			titlePhrase.SetField("title")
+			titlePhrase.SetBoost(8.0)
+
+			descPhrase := bleve.NewMatchPhraseQuery(termStr)
+			descPhrase.SetField("description")
+			descPhrase.SetBoost(4.0)
+
+			contentPhrase := bleve.NewMatchPhraseQuery(termStr)
+			contentPhrase.SetField("content")
+			contentPhrase.SetBoost(3.0)
+
+			boostClauses = append(boostClauses, titlePhrase, descPhrase, contentPhrase)
+		}
+	}
+
+	// Explicit quoted phrases — also primary (high signal)
+	for _, phrase := range pq.Phrases {
+		titlePQ := bleve.NewMatchPhraseQuery(phrase)
+		titlePQ.SetField("title")
+		titlePQ.SetBoost(10.0)
+
+		contentPQ := bleve.NewMatchPhraseQuery(phrase)
+		contentPQ.SetField("content")
+		contentPQ.SetBoost(6.0)
+
+		primaryClauses = append(primaryClauses, titlePQ, contentPQ)
+	}
+
+	// ── Boost tier: fuzzy + synonyms (cannot produce results alone) ──
+	if pq.UseFuzzy {
+		for _, term := range pq.Terms {
+			if len(term) < 4 {
+				continue
+			}
+			fuzziness := 1
+			if len(term) >= 6 {
+				fuzziness = 2
+			}
+			fq := bleve.NewFuzzyQuery(term)
+			fq.SetField("content")
+			fq.SetBoost(0.5)
+			fq.SetFuzziness(fuzziness)
+			boostClauses = append(boostClauses, fq)
+		}
+	}
+
+	// Synonym expansion: add as low-boost disjunction queries
+	if pq.Synonyms != nil {
+		for _, syn := range pq.Synonyms {
+			synTitle := bleve.NewMatchQuery(syn)
+			synTitle.SetField("title")
+			synTitle.SetBoost(0.3)
+			synContent := bleve.NewMatchQuery(syn)
+			synContent.SetField("content")
+			synContent.SetBoost(0.2)
+			boostClauses = append(boostClauses, synTitle, synContent)
+		}
+	}
+
+	// If no primary clauses, fall back to a simple query
+	if len(primaryClauses) == 0 {
+		if pq.CleanedQuery != "" {
+			return bleve.NewMatchQuery(pq.CleanedQuery)
+		}
+		return bleve.NewMatchAllQuery()
+	}
+
+	// Primary clauses as a disjunction (match on ANY field, but each field requires AND)
+	primaryQ := bleve.NewDisjunctionQuery(primaryClauses...)
+
+	// Build the final query
+	boolQ := bleve.NewBooleanQuery()
+	boolQ.AddMust(primaryQ)
+
+	// Add boost clauses as Should (only boost score, can't produce results alone)
+	for _, bc := range boostClauses {
+		boolQ.AddShould(bc)
+	}
+
+	// Exclude terms (NOT / -term): MustNot across all text fields
+	for _, term := range pq.ExcludeTerms {
+		excludeTitle := bleve.NewMatchQuery(term)
+		excludeTitle.SetField("title")
+		excludeDesc := bleve.NewMatchQuery(term)
+		excludeDesc.SetField("description")
+		excludeContent := bleve.NewMatchQuery(term)
+		excludeContent.SetField("content")
+		excludeQ := bleve.NewDisjunctionQuery(excludeTitle, excludeDesc, excludeContent)
+		boolQ.AddMustNot(excludeQ)
+	}
+
+	// OR groups: each group becomes a Must(Disjunction min=1)
+	for _, group := range pq.OrGroups {
+		var orClauses []query.Query
+		for _, term := range group {
+			titleQ := bleve.NewMatchQuery(term)
+			titleQ.SetField("title")
+			titleQ.SetBoost(3.0)
+			contentQ := bleve.NewMatchQuery(term)
+			contentQ.SetField("content")
+			descQ := bleve.NewMatchQuery(term)
+			descQ.SetField("description")
+			descQ.SetBoost(1.5)
+			orClauses = append(orClauses, titleQ, contentQ, descQ)
+		}
+		orQ := bleve.NewDisjunctionQuery(orClauses...)
+		orQ.SetMin(1)
+		boolQ.AddMust(orQ)
+	}
+
+	// Site filter: add domain as an additional Must
+	if pq.SiteDomain != "" {
+		siteQ := bleve.NewTermQuery(pq.SiteDomain)
+		siteQ.SetField("domain")
+		boolQ.AddMust(siteQ)
+	}
+
+	// Language filter: restrict to specific language
+	if pq.Language != "" {
+		langQ := bleve.NewTermQuery(pq.Language)
+		langQ.SetField("language")
+		boolQ.AddMust(langQ)
+	}
+
+	// Country filter: restrict to specific country code
+	if pq.Country != "" {
+		countryQ := bleve.NewTermQuery(pq.Country)
+		countryQ.SetField("country")
+		boolQ.AddMust(countryQ)
+	}
+
+	// ── Search dorks ──
+
+	// intitle: restrict to title field
+	if pq.InTitle != "" {
+		q := newAndMatchQuery(pq.InTitle, "title", 5.0)
+		boolQ.AddMust(q)
+	}
+
+	// inurl: wildcard match on URL
+	if pq.InURL != "" {
+		q := bleve.NewWildcardQuery("*" + pq.InURL + "*")
+		q.SetField("url")
+		boolQ.AddMust(q)
+	}
+
+	// intext: restrict to content/body field
+	if pq.InText != "" {
+		q := newAndMatchQuery(pq.InText, "content", 2.0)
+		boolQ.AddMust(q)
+	}
+
+	// filetype: wildcard match on URL for file extension
+	if len(pq.FileTypes) > 0 {
+		var ftClauses []query.Query
+		for _, ext := range pq.FileTypes {
+			q := bleve.NewWildcardQuery("*." + ext)
+			q.SetField("url")
+			ftClauses = append(ftClauses, q)
+		}
+		ftQ := bleve.NewDisjunctionQuery(ftClauses...)
+		ftQ.SetMin(1)
+		boolQ.AddMust(ftQ)
+	}
+
+	// before:/after: date range on crawled_at. crawled_at is indexed as a Bleve
+	// DateTime field, so it must be queried with a date-range query — the old
+	// numeric-range query on a datetime field matched nothing.
+	if pq.Before != "" || pq.After != "" {
+		after := time.Time{}                                   // open lower bound
+		before := time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC) // open upper bound
+		parsed := false
+		if t, err := time.Parse("2006-01-02", pq.After); err == nil {
+			after = t
+			parsed = true
+		}
+		if t, err := time.Parse("2006-01-02", pq.Before); err == nil {
+			before = t
+			parsed = true
+		}
+		if parsed {
+			inclusive := true
+			dateQ := bleve.NewDateRangeInclusiveQuery(after, before, &inclusive, &inclusive)
+			dateQ.SetField("crawled_at")
+			boolQ.AddMust(dateQ)
+		}
+	}
+
+	// has:https — restrict to HTTPS pages
+	if pq.HasHTTPS {
+		httpsQ := bleve.NewBoolFieldQuery(true)
+		httpsQ.SetField("is_https")
+		boolQ.AddMust(httpsQ)
+	}
+
+	// Peer filter: restrict to specific origin peer
+	if pq.PeerFilter != "" {
+		peerQ := bleve.NewTermQuery(pq.PeerFilter)
+		peerQ.SetField("origin_peer_id")
+		boolQ.AddMust(peerQ)
+	}
+
+	// Exclude peers: exclude specific origin peers
+	for _, pid := range pq.ExcludePeers {
+		exPeerQ := bleve.NewTermQuery(pid)
+		exPeerQ.SetField("origin_peer_id")
+		boolQ.AddMustNot(exPeerQ)
+	}
+
+	return boolQ
+}

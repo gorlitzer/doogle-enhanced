@@ -1,0 +1,398 @@
+package node
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config holds all node configuration.
+type Config struct {
+	NodeName    string        `yaml:"node_name"`
+	LogLevel    string        `yaml:"log_level"`
+	LowResource bool          `yaml:"low_resource"`
+	LightNode   bool          `yaml:"light_node"`
+	P2P         P2PConfig     `yaml:"p2p"`
+	API         APIConfig     `yaml:"api"`
+	Crawler     CrawlerConfig `yaml:"crawler"`
+	Index       IndexConfig   `yaml:"index"`
+	Storage     StorageConfig `yaml:"storage"`
+	Search      SearchConfig  `yaml:"search"`
+
+	Fleet FleetConfig `yaml:"fleet"`
+	Trust TrustConfig `yaml:"trust"`
+
+	// Seed URLs provided via CLI
+	SeedURLs []string `yaml:"-"`
+
+	// Build info (set by main, not persisted)
+	Version   string `yaml:"-"`
+	Commit    string `yaml:"-"`
+	BuildDate string `yaml:"-"`
+}
+
+type FleetConfig struct {
+	Role              string        `yaml:"role"`               // "standalone", "coordinator", "worker"
+	CoordinatorPeer   string        `yaml:"coordinator_peer"`   // multiaddr (workers only)
+	FleetSecret       string        `yaml:"fleet_secret"`       // hex override
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"` // default 15s
+	NodeTimeout       time.Duration `yaml:"node_timeout"`       // default 60s
+	Allowlist         []string      `yaml:"allowlist"`          // coordinator only
+}
+
+type P2PConfig struct {
+	Port                 int           `yaml:"port"`
+	BootstrapPeers       []string      `yaml:"bootstrap_peers"`
+	MDNS                 bool          `yaml:"mdns"`
+	DHTDiscovery         bool          `yaml:"dht_discovery"`
+	DHTRendezvous        string        `yaml:"dht_rendezvous"`
+	DHTDiscoveryInterval time.Duration `yaml:"dht_discovery_interval"`
+	DHTMaxPeers          int           `yaml:"dht_max_peers"`
+	// DHTClientMode runs the DHT in client-only mode to reduce how widely this
+	// node's network address is advertised. See docs/running-a-node.md#privacy.
+	DHTClientMode        bool          `yaml:"dht_client_mode"`
+}
+
+type APIConfig struct {
+	Port int    `yaml:"port"`
+	Bind string `yaml:"bind"`
+}
+
+type CrawlerConfig struct {
+	Workers           int           `yaml:"workers"`
+	UserAgent         string        `yaml:"user_agent"`
+	RequestTimeout    time.Duration `yaml:"request_timeout"`
+	RateLimit         int           `yaml:"rate_limit"`
+	MaxDepth          int           `yaml:"max_depth"`
+	RespectRobots     bool          `yaml:"respect_robots"`
+	EnableHeadless    bool          `yaml:"enable_headless"`
+	HeadlessThreshold int           `yaml:"headless_threshold"`
+	HeadlessTimeout   time.Duration `yaml:"headless_timeout"`
+	MaxBodyBytes      int           `yaml:"max_body_bytes"`
+}
+
+// TrustConfig holds trust & safety settings, including per-node allowlist/denylist.
+type TrustConfig struct {
+	// DomainAllowlist: if non-empty, ONLY these domains are crawled/indexed.
+	DomainAllowlist []string `yaml:"domain_allowlist,omitempty"`
+	// DomainDenylist: these domains are never crawled/indexed.
+	DomainDenylist []string `yaml:"domain_denylist,omitempty"`
+	// URLAllowlist: if non-empty, ONLY URLs matching these prefixes are allowed.
+	URLAllowlist []string `yaml:"url_allowlist,omitempty"`
+	// URLDenylist: URLs matching these prefixes are blocked.
+	URLDenylist []string `yaml:"url_denylist,omitempty"`
+}
+
+type IndexConfig struct {
+	BleveDir             string        `yaml:"bleve_dir"`
+	PageRankInterval     time.Duration `yaml:"pagerank_interval"`
+	BatchSize            int           `yaml:"batch_size"`
+	BatchFlushInterval   time.Duration `yaml:"batch_flush_interval"`
+	IncrementalInterval  time.Duration `yaml:"incremental_interval"`
+	ReplicationFactor    int           `yaml:"replication_factor"`
+	AntiEntropyInterval  time.Duration `yaml:"anti_entropy_interval"`
+
+	// Semantic search (Phase 4)
+	EnableSemantic bool    `yaml:"enable_semantic"`
+	SemanticWeight float64 `yaml:"semantic_weight"`
+	EmbeddingURL   string  `yaml:"embedding_url"`   // generic embedding server URL (empty = TF-IDF)
+	OllamaURL      string  `yaml:"ollama_url"`      // Ollama server URL (default http://localhost:11434)
+	OllamaModel    string  `yaml:"ollama_model"`    // Ollama embedding model (default nomic-embed-text)
+	ClusterInterval time.Duration `yaml:"cluster_interval"`
+	ClusterCount    int           `yaml:"cluster_count"`
+}
+
+type StorageConfig struct {
+	DataDir        string        `yaml:"data_dir"`
+	BadgerDir      string        `yaml:"badger_dir"`
+	GCInterval     time.Duration `yaml:"gc_interval"`
+	SeenTTL        time.Duration `yaml:"seen_ttl"`
+	ContentMaxAge  time.Duration `yaml:"content_max_age"`
+	TrendRetention time.Duration `yaml:"trend_retention"`
+
+	// Resource limits (0 = unlimited)
+	MaxStorageBytes int64 `yaml:"max_storage_bytes"`
+	MaxDocuments    int64 `yaml:"max_documents"`
+	MaxQueueSize    int64 `yaml:"max_queue_size"`
+}
+
+type SearchConfig struct {
+	MaxResults      int           `yaml:"max_results"`
+	DefaultPageSize int           `yaml:"default_page_size"`
+	PeerTimeout     time.Duration `yaml:"peer_timeout"`
+	MaxPeers        int           `yaml:"max_peers"`
+	CacheSize       int           `yaml:"cache_size"`
+	CacheTTL        time.Duration `yaml:"cache_ttl"`
+
+	// Hybrid search weights (Phase 4)
+	HybridBM25Weight     float64       `yaml:"hybrid_bm25_weight"`
+	HybridVecWeight      float64       `yaml:"hybrid_vec_weight"`
+	LTRRetrainInterval   time.Duration `yaml:"ltr_retrain_interval"`
+	LTRMinSignals        int           `yaml:"ltr_min_signals"`
+
+	// Optional second-stage LLM reranker (off by default). Requires Ollama.
+	RerankEnabled bool   `yaml:"rerank_enabled"`
+	RerankModel   string `yaml:"rerank_model"` // Ollama instruct model, e.g. qwen2.5:0.5b-instruct
+	RerankTopN    int    `yaml:"rerank_top_n"` // number of head candidates to rerank (default 20)
+
+	// SearXNG metasearch fallback
+	SearXNG SearXNGConfig `yaml:"searxng"`
+}
+
+// SearXNGConfig holds settings for the optional SearXNG metasearch integration.
+type SearXNGConfig struct {
+	Enabled      bool          `yaml:"enabled"`
+	URL          string        `yaml:"url"`            // e.g. "http://localhost:8888"
+	Timeout      time.Duration `yaml:"timeout"`
+	MaxResults   int           `yaml:"max_results"`
+	FallbackOnly bool          `yaml:"fallback_only"`  // only query when native results < Threshold
+	Threshold    int           `yaml:"threshold"`      // min native results before skipping SearXNG
+	ScorePenalty float64       `yaml:"score_penalty"`  // multiplier for external results (0.0-1.0)
+	Categories   string        `yaml:"categories"`     // SearXNG categories (default "general")
+}
+
+// DefaultConfig returns sensible defaults.
+func DefaultConfig() *Config {
+	return &Config{
+		LogLevel: "info",
+		P2P: P2PConfig{
+			Port:                 7001,
+			MDNS:                 true,
+			DHTDiscovery:         true,
+			DHTRendezvous:        "doogle/network/v2",
+			DHTDiscoveryInterval: 30 * time.Second,
+			DHTMaxPeers:          50,
+		},
+		API: APIConfig{
+			Port: 7002,
+			// Bind to loopback by default. The API exposes unauthenticated
+			// write endpoints (crawl, config) and a localhost-gated admin
+			// surface with destructive operations; binding to 0.0.0.0 exposes
+			// them to the whole network. Operators must opt in explicitly.
+			Bind: "127.0.0.1",
+		},
+		Crawler: CrawlerConfig{
+			Workers:           4,
+			UserAgent:         "DoogleBot/2.0 (+https://github.com/doogle/doogle-v2)",
+			RequestTimeout:    30 * time.Second,
+			RateLimit:         10,
+			MaxDepth:          3,
+			RespectRobots:     true,
+			EnableHeadless:    false,
+			HeadlessThreshold: 500,
+			HeadlessTimeout:   30 * time.Second,
+			MaxBodyBytes:      10 * 1024 * 1024, // 10MB
+		},
+		Index: IndexConfig{
+			BleveDir:            "bleve",
+			PageRankInterval:    5 * time.Minute,
+			BatchSize:           100,
+			BatchFlushInterval:  5 * time.Second,
+			IncrementalInterval: 10 * time.Minute,
+			ReplicationFactor:   3,
+			AntiEntropyInterval: 2 * time.Minute,
+			EnableSemantic:      true,
+			SemanticWeight:      0.3,
+			ClusterInterval:     30 * time.Minute,
+			ClusterCount:        20,
+		},
+		Storage: StorageConfig{
+			DataDir:         "./data/doogle",
+			BadgerDir:       "badger",
+			GCInterval:      5 * time.Minute,
+			SeenTTL:         7 * 24 * time.Hour,
+			ContentMaxAge:   30 * 24 * time.Hour,
+			TrendRetention:  168 * time.Hour,
+			MaxStorageBytes: 2 * 1024 * 1024 * 1024, // 2 GB
+			MaxDocuments:    50000,
+			MaxQueueSize:    100000,
+		},
+		Search: SearchConfig{
+			MaxResults:         50,
+			DefaultPageSize:    10,
+			PeerTimeout:        2 * time.Second,
+			MaxPeers:           10,
+			CacheSize:          1000,
+			CacheTTL:           5 * time.Minute,
+			HybridBM25Weight:   0.7,
+			HybridVecWeight:    0.3,
+			LTRRetrainInterval: 1 * time.Hour,
+			LTRMinSignals:      100,
+			SearXNG: SearXNGConfig{
+				Enabled:      true,
+				URL:          "", // empty = auto (public instances)
+				Timeout:      3 * time.Second,
+				MaxResults:   10,
+				FallbackOnly: true,
+				Threshold:    5,
+				ScorePenalty: 0.7,
+				Categories:   "general",
+			},
+		},
+		Fleet: FleetConfig{
+			Role:              "coordinator",
+			HeartbeatInterval: 15 * time.Second,
+			NodeTimeout:       60 * time.Second,
+		},
+	}
+}
+
+// LoadConfig loads config from a YAML file, then applies CLI flag overrides.
+func LoadConfig(configPath string) (*Config, error) {
+	cfg := DefaultConfig()
+
+	if configPath != "" {
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("parse config: %w", err)
+		}
+	}
+
+	return cfg, nil
+}
+
+// ParseFlags applies CLI flags on top of the config.
+func ParseFlags(cfg *Config) {
+	var (
+		configFile string
+		bootstrap  string
+		seed       string
+	)
+
+	flag.StringVar(&configFile, "config", "", "Path to config YAML file")
+	flag.StringVar(&cfg.NodeName, "name", cfg.NodeName, "Human-readable node name")
+	flag.IntVar(&cfg.P2P.Port, "port", cfg.P2P.Port, "libp2p listen port")
+	flag.IntVar(&cfg.API.Port, "api-port", cfg.API.Port, "HTTP API port")
+	flag.StringVar(&cfg.API.Bind, "bind", cfg.API.Bind, "API server bind address (default 127.0.0.1; use 0.0.0.0 to expose to the network — see docs, exposes admin API)")
+	flag.StringVar(&cfg.Storage.DataDir, "data-dir", cfg.Storage.DataDir, "Data directory")
+	flag.StringVar(&bootstrap, "bootstrap", "", "Bootstrap peer multiaddr")
+	flag.StringVar(&seed, "seed", "", "Seed URL(s) to crawl (comma-separated)")
+	flag.IntVar(&cfg.Crawler.Workers, "workers", cfg.Crawler.Workers, "Crawler worker count")
+	flag.BoolVar(&cfg.P2P.MDNS, "mdns", cfg.P2P.MDNS, "Enable mDNS discovery")
+	flag.BoolVar(&cfg.P2P.DHTDiscovery, "dht-discovery", cfg.P2P.DHTDiscovery, "Enable DHT-based peer discovery via IPFS bootstrap nodes")
+	flag.BoolVar(&cfg.P2P.DHTClientMode, "dht-client-mode", cfg.P2P.DHTClientMode, "Run the DHT in client-only mode to reduce how widely this node's IP/address is advertised (privacy)")
+	flag.BoolVar(&cfg.Crawler.EnableHeadless, "headless", cfg.Crawler.EnableHeadless, "Enable headless browser rendering for JS-heavy pages")
+	flag.StringVar(&cfg.LogLevel, "log-level", cfg.LogLevel, "Log level: debug, info, warn, error")
+	flag.StringVar(&cfg.Fleet.Role, "fleet-role", cfg.Fleet.Role, "Fleet role: coordinator (default), worker, standalone")
+	flag.StringVar(&cfg.Fleet.CoordinatorPeer, "fleet-coordinator", cfg.Fleet.CoordinatorPeer, "Coordinator multiaddr (worker mode)")
+	flag.StringVar(&cfg.Fleet.FleetSecret, "fleet-secret", cfg.Fleet.FleetSecret, "Fleet secret (hex, 64 chars)")
+	flag.Int64Var(&cfg.Storage.MaxStorageBytes, "max-storage", cfg.Storage.MaxStorageBytes, "Max storage in bytes (0 = unlimited)")
+	flag.Int64Var(&cfg.Storage.MaxDocuments, "max-docs", cfg.Storage.MaxDocuments, "Max documents (0 = unlimited)")
+	flag.Int64Var(&cfg.Storage.MaxQueueSize, "max-queue", cfg.Storage.MaxQueueSize, "Max queue size (0 = unlimited)")
+	flag.BoolVar(&cfg.LowResource, "low-resource", cfg.LowResource, "Enable low-resource (Eco) mode for reduced memory/CPU usage")
+	flag.BoolVar(&cfg.LightNode, "light", cfg.LightNode, "Enable light node mode (search + relay only, no crawling)")
+
+	var searxngURL string
+	flag.StringVar(&searxngURL, "searxng-url", "", "SearXNG instance URL (enables metasearch fallback)")
+	flag.StringVar(&cfg.Index.EmbeddingURL, "embedding-url", cfg.Index.EmbeddingURL, "Neural embedding server URL (e.g. http://localhost:11411/embed)")
+	var ollamaFlag bool
+	flag.BoolVar(&ollamaFlag, "ollama", false, "Enable neural embeddings via Ollama (auto-detects on localhost:11434)")
+	flag.StringVar(&cfg.Index.OllamaURL, "ollama-url", cfg.Index.OllamaURL, "Ollama server URL (default http://localhost:11434)")
+	flag.StringVar(&cfg.Index.OllamaModel, "ollama-model", cfg.Index.OllamaModel, "Ollama embedding model (default nomic-embed-text; use all-minilm for a smaller/faster model)")
+	flag.BoolVar(&cfg.Search.RerankEnabled, "rerank", cfg.Search.RerankEnabled, "Enable optional second-stage LLM reranker via Ollama (experimental, adds latency)")
+	flag.StringVar(&cfg.Search.RerankModel, "rerank-model", cfg.Search.RerankModel, "Ollama instruct model for reranking (default qwen2.5:0.5b-instruct)")
+	flag.Parse()
+
+	// --ollama flag sets defaults
+	if ollamaFlag && cfg.Index.OllamaURL == "" {
+		cfg.Index.OllamaURL = "http://localhost:11434"
+	}
+
+	// Apply SearXNG URL from CLI flag (auto-enables)
+	if searxngURL != "" {
+		cfg.Search.SearXNG.URL = searxngURL
+		cfg.Search.SearXNG.Enabled = true
+	}
+
+	// Snapshot CLI-only flags before config file may overwrite them.
+	cliLowResource := cfg.LowResource
+	cliLightNode := cfg.LightNode
+
+	// If a config file was specified, reload
+	if configFile != "" {
+		if loaded, err := LoadConfig(configFile); err == nil {
+			*cfg = *loaded
+		}
+	}
+
+	// Re-apply CLI flags if they were explicitly set
+	if cliLowResource {
+		cfg.LowResource = true
+	}
+	if cliLightNode {
+		cfg.LightNode = true
+	}
+
+	if bootstrap != "" {
+		cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, bootstrap)
+	}
+
+	if seed != "" {
+		for _, s := range splitAndTrim(seed) {
+			if s != "" {
+				cfg.SeedURLs = append(cfg.SeedURLs, s)
+			}
+		}
+	}
+}
+
+func splitAndTrim(s string) []string {
+	var result []string
+	for _, part := range splitString(s, ',') {
+		trimmed := trimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func splitString(s string, sep byte) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == sep {
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
+}
+
+func trimSpace(s string) string {
+	start, end := 0, len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t') {
+		end--
+	}
+	return s[start:end]
+}
+
+// ApplyLightNodeDefaults sets light-node-appropriate limits (no crawling).
+func ApplyLightNodeDefaults(cfg *Config) {
+	cfg.Crawler.Workers = 0
+	cfg.Storage.MaxQueueSize = 0
+	if cfg.Storage.MaxStorageBytes == 0 || cfg.Storage.MaxStorageBytes > 500*1024*1024 {
+		cfg.Storage.MaxStorageBytes = 500 * 1024 * 1024 // 500 MB
+	}
+	if cfg.Storage.MaxDocuments == 0 || cfg.Storage.MaxDocuments > 10000 {
+		cfg.Storage.MaxDocuments = 10000
+	}
+}
+
+// ApplyLowResourceDefaults caps resource-heavy settings for low-spec devices.
+func ApplyLowResourceDefaults(cfg *Config) {
+	if cfg.Crawler.Workers > 2 {
+		cfg.Crawler.Workers = 2
+	}
+	cfg.Crawler.MaxBodyBytes = 2 * 1024 * 1024 // 2MB
+}

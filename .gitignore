@@ -1,0 +1,50 @@
+# Binaries
+bin/
+/doogle
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+
+# Data directories
+data/
+*.db
+*.bolt
+*.mmdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-data/
+
+# Node modules (dev server)
+node_modules/
+
+# Test
+coverage.out
+*.test
+
+# Runtime
+doogle.log
+embeddings.log
+.doogle.pid
+.embeddings.pid
+
+# Build
+dist/
+web/embed_hash.go
+
+# Local Go install (make setup)
+.go/

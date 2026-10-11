@@ -1,0 +1,145 @@
+package models
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
+
+// Document represents a crawled and indexed web page.
+type Document struct {
+	ID          string    `json:"id"`
+	URL         string    `json:"url"`
+	Domain      string    `json:"domain"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Content     string    `json:"content"`
+	ContentHash string    `json:"content_hash"`
+	ContentSize int       `json:"content_size"`
+	Links       []Link    `json:"links,omitempty"`
+	Images      []Image   `json:"images,omitempty"`
+	Headings    []Heading `json:"headings,omitempty"`
+	StatusCode  int       `json:"status_code"`
+	Depth       int       `json:"depth"`
+	WordCount   int       `json:"word_count"`
+	CrawledAt   time.Time `json:"crawled_at"`
+	IndexedAt   time.Time `json:"indexed_at"`
+
+	// Metadata
+	Language    string   `json:"language,omitempty"`
+	Country     string   `json:"country,omitempty"` // ISO 3166-1 alpha-2 (e.g. "US", "DE")
+	Categories  []string `json:"categories,omitempty"`
+	Keywords    []string `json:"keywords,omitempty"`
+	OGTitle     string   `json:"og_title,omitempty"`
+	OGDesc      string   `json:"og_description,omitempty"`
+	Canonical   string   `json:"canonical,omitempty"`
+	NoIndex     bool     `json:"noindex,omitempty"`
+	NoFollow    bool     `json:"nofollow,omitempty"`
+	RobotsMeta  string   `json:"robots_meta,omitempty"`
+	XRobotsTag  string   `json:"x_robots_tag,omitempty"`
+	IsHTTPS     bool     `json:"is_https"`
+
+	// Quality scores (set by indexer)
+	EEATScore    float64 `json:"eeat_score"`
+	QualityScore float64 `json:"quality_score"`
+	SpamScore    float64 `json:"spam_score"`
+	LinkScore    float64 `json:"link_score"`
+	SEOScore     float64 `json:"seo_score"`
+
+	// Readability (set by indexer)
+	ReadabilityScore    float64 `json:"readability_score"`
+	FleschReadingEase   float64 `json:"flesch_reading_ease"`
+	FleschKincaidGrade  float64 `json:"flesch_kincaid_grade"`
+	CitationScore       float64 `json:"citation_score"`
+	AuthorCredibility   float64 `json:"author_credibility"`
+
+	// Freshness (set by indexer)
+	FreshnessScore  float64 `json:"freshness_score"`
+	IsTimeSensitive bool    `json:"is_time_sensitive"`
+	IsEvergreen     bool    `json:"is_evergreen"`
+
+	// Summarization (set by indexer)
+	Summary string `json:"summary,omitempty"`
+
+	// PageRank (set by PageRank computer)
+	PageRankScore float64 `json:"pagerank_score"`
+
+	// Provenance — which peer originally indexed this document
+	OriginPeerID string `json:"origin_peer_id,omitempty"`
+
+	// URL quality (set by indexer)
+	URLQualityScore float64 `json:"url_quality_score"`
+
+	// Composite
+	RelevanceScore float64 `json:"relevance_score"`
+
+	// Structured data (Schema.org, JSON-LD, microdata)
+	StructuredData []StructuredItem `json:"structured_data,omitempty"`
+	SchemaType     string           `json:"schema_type,omitempty"`
+
+	// Performance (set by crawler + indexer)
+	TTFB            int     `json:"ttfb_ms,omitempty"`
+	PageSizeBytes   int     `json:"page_size_bytes,omitempty"`
+	ResourceCount   int     `json:"resource_count,omitempty"`
+	ScriptCount     int     `json:"script_count,omitempty"`
+	StylesheetCount int     `json:"stylesheet_count,omitempty"`
+	HasLazyImages   bool    `json:"has_lazy_images,omitempty"`
+	HasAsyncScripts bool    `json:"has_async_scripts,omitempty"`
+	PerfScore       float64 `json:"perf_score,omitempty"`
+
+	// Mobile (set by crawler + indexer)
+	HasViewportMeta bool    `json:"has_viewport_meta,omitempty"`
+	ViewportContent string  `json:"viewport_content,omitempty"`
+	HasMediaQueries bool    `json:"has_media_queries,omitempty"`
+	HasFlexboxGrid  bool    `json:"has_flexbox_grid,omitempty"`
+	HasTouchIcons   bool    `json:"has_touch_icons,omitempty"`
+	SmallFontCount  int     `json:"small_font_count,omitempty"`
+	SmallTapTargets int     `json:"small_tap_targets,omitempty"`
+	MobileScore     float64 `json:"mobile_score,omitempty"`
+
+	// Content verification (Ed25519 signature of content hash)
+	ContentSig    string `json:"content_sig,omitempty"`    // hex-encoded Ed25519 signature
+	ContentSigner string `json:"content_signer,omitempty"` // hex-encoded public key
+}
+
+// Link represents a discovered hyperlink.
+type Link struct {
+	URL        string `json:"url"`
+	Text       string `json:"text"`
+	IsExternal bool   `json:"is_external"`
+	NoFollow   bool   `json:"nofollow,omitempty"`
+}
+
+// Image represents an extracted image.
+type Image struct {
+	URL     string `json:"url"`
+	Alt     string `json:"alt"`
+	Title   string `json:"title,omitempty"`
+	Width   int    `json:"width,omitempty"`
+	Height  int    `json:"height,omitempty"`
+	Context string `json:"context,omitempty"` // surrounding text for image search
+}
+
+// StructuredItem represents extracted Schema.org/JSON-LD/microdata.
+type StructuredItem struct {
+	Type       string            `json:"type"`                 // e.g. "Article", "Product", "Recipe"
+	Properties map[string]string `json:"properties,omitempty"` // key-value pairs
+}
+
+// Heading represents an HTML heading element.
+type Heading struct {
+	Level int    `json:"level"` // 1-6
+	Text  string `json:"text"`
+}
+
+// ComputeHash computes a SHA-256 hash of the document content.
+func (d *Document) ComputeHash() {
+	h := sha256.Sum256([]byte(d.Content))
+	d.ContentHash = hex.EncodeToString(h[:])
+}
+
+// DocumentID generates a deterministic document ID from its URL.
+func DocumentID(url string) string {
+	h := sha256.Sum256([]byte(url))
+	return hex.EncodeToString(h[:16])
+}

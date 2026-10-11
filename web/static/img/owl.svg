@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#12121a"/>
+      <stop offset="100%" stop-color="#0a0a0f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Coin background -->
+  <circle cx="256" cy="256" r="248" fill="url(#bg)" stroke="#00d4ff" stroke-width="4" opacity="0.8"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.15"/>
+
+  <!-- Greek meander border ring -->
+  <circle cx="256" cy="256" r="222" fill="none" stroke="#00d4ff" stroke-width="0.5" opacity="0.1"
+          stroke-dasharray="8,4"/>
+
+  <!-- Ear tufts — sharp geometric -->
+  <path d="M180 160 L158 72 L206 135" fill="none" stroke="#00d4ff" stroke-width="3.5" stroke-linejoin="round" opacity="0.7"/>
+  <path d="M332 160 L354 72 L306 135" fill="none" stroke="#00d4ff" stroke-width="3.5" stroke-linejoin="round" opacity="0.7"/>
+
+  <!-- Owl face outline -->
+  <path d="M256 410 C175 410 128 350 128 275 L128 215 C128 138 180 95 256 78 C332 95 384 138 384 215 L384 275 C384 350 337 410 256 410Z"
+        fill="none" stroke="#00d4ff" stroke-width="2.5" opacity="0.25"/>
+
+  <!-- Left eye — concentric geometric rings -->
+  <circle cx="198" cy="228" r="64" fill="none" stroke="#00d4ff" stroke-width="3" opacity="0.6"/>
+  <circle cx="198" cy="228" r="50" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.3"/>
+  <!-- Left iris -->
+  <circle cx="198" cy="228" r="36" fill="#00d4ff" opacity="0.08"/>
+  <circle cx="198" cy="228" r="28" fill="#00d4ff" opacity="0.15"/>
+  <!-- Left pupil -->
+  <circle cx="198" cy="228" r="16" fill="#00d4ff" opacity="0.6"/>
+  <circle cx="198" cy="228" r="8" fill="#0a0a0f"/>
+  <!-- Left highlight -->
+  <circle cx="188" cy="218" r="5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="206" cy="234" r="2.5" fill="#ffffff" opacity="0.25"/>
+
+  <!-- Right eye — concentric geometric rings -->
+  <circle cx="314" cy="228" r="64" fill="none" stroke="#00d4ff" stroke-width="3" opacity="0.6"/>
+  <circle cx="314" cy="228" r="50" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.3"/>
+  <!-- Right iris -->
+  <circle cx="314" cy="228" r="36" fill="#00d4ff" opacity="0.08"/>
+  <circle cx="314" cy="228" r="28" fill="#00d4ff" opacity="0.15"/>
+  <!-- Right pupil -->
+  <circle cx="314" cy="228" r="16" fill="#00d4ff" opacity="0.6"/>
+  <circle cx="314" cy="228" r="8" fill="#0a0a0f"/>
+  <!-- Right highlight -->
+  <circle cx="304" cy="218" r="5" fill="#ffffff" opacity="0.5"/>
+  <circle cx="322" cy="234" r="2.5" fill="#ffffff" opacity="0.25"/>
+
+  <!-- Eye bridge -->
+  <path d="M234 245 Q256 272 278 245" fill="none" stroke="#00d4ff" stroke-width="2" opacity="0.4"/>
+
+  <!-- Beak — sharp geometric -->
+  <path d="M245 280 L256 312 L267 280Z" fill="#00d4ff" opacity="0.5"/>
+  <path d="M249 285 L256 306 L263 285" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.25"/>
+
+  <!-- Chest feather chevrons -->
+  <path d="M215 340 L256 362 L297 340" fill="none" stroke="#00d4ff" stroke-width="2" opacity="0.3"/>
+  <path d="M208 358 L256 380 L304 358" fill="none" stroke="#00d4ff" stroke-width="1.5" opacity="0.2"/>
+  <path d="M203 375 L256 396 L309 375" fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.12"/>
+
+  <!-- Talons -->
+  <path d="M218 405 L208 425 M228 407 L222 427 M238 408 L234 427" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" opacity="0.25"/>
+  <path d="M294 405 L304 425 M284 407 L290 427 M274 408 L278 427" stroke="#00d4ff" stroke-width="2" stroke-linecap="round" opacity="0.25"/>
+
+  <!-- Greek key fragments at bottom -->
+  <path d="M150 450 h12 v-8 h8 v8 h12 v-8 h8 v8 h12 v-8 h8 v8 h12 v-8 h8 v8 h12 v-8 h8 v8 h12 v-8 h8 v8 h12 v-8 h8 v8 h12 v-8 h8 v8 h12"
+        fill="none" stroke="#00d4ff" stroke-width="1" opacity="0.1"/>
+</svg>
